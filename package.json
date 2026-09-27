@@ -1,0 +1,11 @@
+{
+  "name": "checkyourmorpho",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Risk audit, curator track record, and Monte Carlo forecasting platform for MetaMorpho Vaults",
+  "private": true,
+  "scripts": {
+    "sync": "node server/services/syncEngine.js",
+    "start": "node server/index.js"
+  }
+}

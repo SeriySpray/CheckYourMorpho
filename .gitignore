@@ -1,0 +1,17 @@
+# SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Environment and OS
+.env
+.env.local
+.DS_Store
+Thumbs.db
