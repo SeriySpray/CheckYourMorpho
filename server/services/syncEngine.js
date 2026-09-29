@@ -130,7 +130,7 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
 
   // --- STEP 1: Sync MetaMorpho V1 Vaults ---
   console.log('[SyncEngine] Fetching MetaMorpho V1 vaults...');
-  const rawVaultsV1 = await fetchAllVaults([1, 8453]);
+  const rawVaultsV1 = await fetchAllVaults(options.chainIds ?? null);
   console.log(`[SyncEngine] Fetched ${rawVaultsV1.length} V1 vaults from Morpho GraphQL.`);
 
   let v1Count = 0;
@@ -190,7 +190,7 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
 
   // --- STEP 2: Sync Morpho Vaults V2 ---
   console.log('[SyncEngine] Fetching Morpho Vaults V2...');
-  const rawVaultsV2 = await fetchAllVaultV2s([1, 8453]);
+  const rawVaultsV2 = await fetchAllVaultV2s(options.chainIds ?? null);
   console.log(`[SyncEngine] Fetched ${rawVaultsV2.length} V2 vaults from Morpho GraphQL.`);
 
   db.exec('BEGIN TRANSACTION;');

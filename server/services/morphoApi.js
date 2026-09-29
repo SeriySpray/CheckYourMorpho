@@ -167,9 +167,12 @@ export async function fetchAllVaults(chainIds = [1, 8453], options = {}) {
     }
   `;
 
+  const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
+  const filterActive = { totalAssetsUsd_gte: minTvl, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
+
   const [listedItems, activeItems] = await Promise.all([
-    fetchPaginatedVaults(query, 'vaults', { chainId_in: chainIds, listed: true }, 100),
-    fetchPaginatedVaults(query, 'vaults', { chainId_in: chainIds, totalAssetsUsd_gte: minTvl }, 100)
+    fetchPaginatedVaults(query, 'vaults', filterListed, 100),
+    fetchPaginatedVaults(query, 'vaults', filterActive, 100)
   ]);
 
   const vaultMap = new Map();
@@ -361,9 +364,12 @@ export async function fetchAllVaultV2s(chainIds = [1, 8453], options = {}) {
     }
   `;
 
+  const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
+  const filterActive = { totalAssetsUsd_gte: minTvl, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
+
   const [listedItems, activeItems] = await Promise.all([
-    fetchPaginatedVaults(query, 'vaultV2s', { chainId_in: chainIds, listed: true }, 25),
-    fetchPaginatedVaults(query, 'vaultV2s', { chainId_in: chainIds, totalAssetsUsd_gte: minTvl }, 25)
+    fetchPaginatedVaults(query, 'vaultV2s', filterListed, 25),
+    fetchPaginatedVaults(query, 'vaultV2s', filterActive, 25)
   ]);
 
   const vaultMap = new Map();

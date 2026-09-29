@@ -209,7 +209,7 @@ function handleGetVaults(req, res, url) {
     const db = getDatabase();
 
     // Query parameters
-    const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '300', 10)));
+    const limit = Math.min(1000, Math.max(1, parseInt(url.searchParams.get('limit') || '500', 10)));
     const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
     const chainId = url.searchParams.get('chainId') ? parseInt(url.searchParams.get('chainId'), 10) : null;
     const listedOnly = url.searchParams.get('listedOnly') === '1' || url.searchParams.get('listedOnly') === 'true';

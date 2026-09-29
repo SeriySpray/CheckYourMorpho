@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+  <!-- Background 3D Particle Sphere Canvas -->
+  <div id="sphere-wrapper" class="sphere-wrapper">
+    <canvas id="sphere-canvas"></canvas>
+    <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+  </div>
+
+  <!-- Header & Top Navigation -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <span class="brand-name">CheckYourMorpho</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Right-side Master Vault Explorer & Filter Terminal (Morpho Design) -->
+  <aside id="vault-explorer-widget" class="vault-explorer-widget">
+    <!-- Terminal Header -->
+    <div class="explorer-header">
+      <div class="explorer-tag-row">
+        <span class="explorer-tag">MORPHO VAULTS</span>
+        <div class="explorer-header-actions">
+          <span id="explorer-count" class="explorer-count">566 Vaults</span>
+          <button id="explorer-reset-btn" class="explorer-reset-btn hidden" title="Reset all filters">Reset</button>
+        </div>
+      </div>
+      <h3 class="explorer-heading">Vaults Explorer</h3>
+    </div>
+
+    <!-- Search Box -->
+    <div class="explorer-search-box">
+      <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75">
+        <circle cx="8.5" cy="8.5" r="5.5"></circle>
+        <path d="M12.5 12.5L17 17"></path>
+      </svg>
+      <input type="text" id="vault-search-input" placeholder="Search by name, symbol, curator, address..." autocomplete="off" spellcheck="false">
+      <kbd class="search-shortcut" id="search-shortcut-esc">ESC</kbd>
+    </div>
+
+    <!-- Official Morpho Filter Grid (Network, Asset, Curator, Sort By) -->
+    <div class="explorer-filters-grid">
+      <!-- 1. Network Filter -->
+      <div class="filter-group">
+        <label for="filter-network" class="filter-label">Network</label>
+        <div class="select-wrapper">
+          <select id="filter-network" class="explorer-select">
+            <option value="all">All Networks</option>
+            <option value="1">Ethereum</option>
+            <option value="8453">Base</option>
+            <option value="4663">Robinhood</option>
+            <option value="42161">Arbitrum</option>
+            <option value="10">Optimism</option>
+            <option value="137">Polygon</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 2. Asset Filter -->
+      <div class="filter-group">
+        <label for="filter-asset" class="filter-label">Asset</label>
+        <div class="select-wrapper">
+          <select id="filter-asset" class="explorer-select">
+            <option value="all">All Assets</option>
+            <option value="USDC">USDC</option>
+            <option value="USDG">USDG</option>
+            <option value="ETH">ETH / WETH</option>
+            <option value="PYUSD">PYUSD</option>
+            <option value="USDT">USDT</option>
+            <option value="USDE">USDe / sUSDe</option>
+            <option value="EURC">EURC / EURCV</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 3. Curator Filter -->
+      <div class="filter-group">
+        <label for="filter-curator" class="filter-label">Curator</label>
+        <div class="select-wrapper">
+          <select id="filter-curator" class="explorer-select">
+            <option value="all">All Curators</option>
+            <option value="steakhouse">Steakhouse Financial</option>
+            <option value="gauntlet">Gauntlet</option>
+            <option value="re7">Re7 Labs</option>
+            <option value="flagship">Morpho Flagship</option>
+            <option value="bprotocol">B.Protocol</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 4. Sort By Filter -->
+      <div class="filter-group">
+        <label for="filter-sort" class="filter-label">Sort By</label>
+        <div class="select-wrapper">
+          <select id="filter-sort" class="explorer-select">
+            <option value="tvl_desc">Deposits (TVL): High to Low</option>
+            <option value="apy_desc">Net APY: High to Low</option>
+            <option value="liq_desc">Free Liquidity: High to Low</option>
+            <option value="score_desc">Safety Score: High to Low</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Filter Chips / Badges Row (if any active) -->
+    <div id="active-filter-chips" class="active-filter-chips hidden"></div>
+
+    <!-- Vaults List -->
+    <ul id="explorer-vaults-list" class="explorer-vaults-list">
+      <!-- Populated dynamically by app.js -->
+    </ul>
+  </aside>
+
+  <!-- Canvas Tooltip for Hovering on Sphere Particles -->
+  <div id="sphere-tooltip" class="sphere-tooltip hidden">
+    <div class="tooltip-header">
+      <span class="tooltip-chain" id="tt-chain">ETH</span>
+      <span class="tooltip-title" id="tt-title">Vault Name</span>
+    </div>
+    <div class="tooltip-body">
+      <div class="tt-metric"><span class="tt-label">TVL</span><span class="tt-value" id="tt-tvl">$0.00</span></div>
+      <div class="tt-metric"><span class="tt-label">Liquidity</span><span class="tt-value" id="tt-liq">$0.00</span></div>
+      <div class="tt-metric"><span class="tt-label">Net APY</span><span class="tt-value green" id="tt-apy">0.00%</span></div>
+    </div>
+    <div class="tooltip-action">Click particle to audit</div>
+  </div>
+
+  <!-- Morphing Flying Proxy Element -->
+  <div id="morph-proxy" class="morph-proxy hidden"></div>
+
+  <!-- Audit Modal Overlay (Morphs from the particle) -->
+  <div id="audit-modal" class="audit-modal hidden">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+
+    <div class="audit-dashboard" id="audit-dashboard">
+      <!-- Close Button -->
+      <button class="close-btn" id="modal-close-btn" aria-label="Close Audit View">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+
+      <!-- Grid of 3 Information Panels according to Reference Drawing -->
+      <div class="dashboard-grid">
+
+        <!-- PANEL 1: Main Overview & Monte Carlo Fan Chart (Top Left) -->
+        <section class="panel panel-main" id="panel-main">
+          <div class="panel-header">
+            <div class="vault-identity">
+              <div class="vault-badges">
+                <span class="badge badge-chain" id="modal-chain-badge">ETHEREUM</span>
+                <span class="badge badge-version" id="modal-version-badge">V2</span>
+                <span class="badge badge-listed" id="modal-listed-badge">LISTED</span>
+              </div>
+              <h1 class="vault-name" id="modal-vault-name">Steakhouse Prime USDC</h1>
+              <div class="vault-curator">Curated by <span id="modal-curator-name">Steakhouse</span></div>
+            </div>
+
+            <div class="safety-score-pill" id="modal-score-pill">
+              <div class="score-label">SAFETY SCORE</div>
+              <div class="score-value-row">
+                <span class="score-grade" id="modal-grade">AAA</span>
+                <span class="score-number" id="modal-score">92/100</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Key Financial Highlights Row -->
+          <div class="financials-row">
+            <div class="fin-card">
+              <span class="fin-label">TOTAL VALUE LOCKED</span>
+              <span class="fin-value" id="modal-tvl">$0.00</span>
+              <span class="fin-sub" id="modal-assets-human">0.00 USDC</span>
+            </div>
+            <div class="fin-card">
+              <span class="fin-label">FREE LIQUIDITY</span>
+              <span class="fin-value" id="modal-liq">$0.00</span>
+              <span class="fin-sub highlight" id="modal-exit-cap-pct">0% Exit Cap</span>
+            </div>
+            <div class="fin-card">
+              <span class="fin-label">NET APY</span>
+              <span class="fin-value green" id="modal-net-apy">0.00%</span>
+              <span class="fin-sub" id="modal-fee">Fee: 0%</span>
+            </div>
+          </div>
+
+          <!-- Monte Carlo Interactive Simulation Chart Section -->
+          <div class="chart-section">
+            <div class="chart-header">
+              <div class="chart-title-group">
+                <span class="chart-title">Monte Carlo Deposit Forecast</span>
+                <span class="chart-desc">1,000 paths simulated (p5 stress, p50 median, p95 bull)</span>
+              </div>
+              
+              <!-- Horizon Selector Tabs -->
+              <div class="time-tabs" id="horizon-tabs">
+                <button class="tab-btn active" data-days="30">30D</button>
+                <button class="tab-btn" data-days="90">90D</button>
+                <button class="tab-btn" data-days="180">180D</button>
+                <button class="tab-btn" data-days="365">1 YEAR</button>
+              </div>
+            </div>
+
+            <!-- Deposit Amount Preset Bar -->
+            <div class="deposit-presets">
+              <span class="preset-label">Deposit:</span>
+              <button class="preset-btn" data-amount="1000">$1,000</button>
+              <button class="preset-btn active" data-amount="10000">$10,000</button>
+              <button class="preset-btn" data-amount="50000">$50,000</button>
+              <button class="preset-btn" data-amount="100000">$100,000</button>
+              <div class="chart-stats-summary" id="chart-stats-summary">
+                Expected +$0.00 (+0.00%)
+              </div>
+            </div>
+
+            <!-- HTML5 2D Canvas Chart Container -->
+            <div class="canvas-chart-wrapper">
+              <canvas id="monte-carlo-canvas"></canvas>
+              <div id="chart-crosshair-tooltip" class="chart-tooltip hidden"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PANEL 2: Risk Profile, Exit Capacity & Red Flags (Top Right) -->
+        <section class="panel panel-risk" id="panel-risk">
+          <div class="panel-section-title">RISK & LIQUIDITY AUDIT</div>
+
+          <!-- Instant Exit Capacity Meter -->
+          <div class="meter-box">
+            <div class="meter-header">
+              <span class="meter-label">Instant Exit Capacity</span>
+              <span class="meter-value" id="risk-exit-pct">0%</span>
+            </div>
+            <div class="meter-track">
+              <div class="meter-fill" id="risk-exit-bar" style="width: 0%;"></div>
+            </div>
+            <div class="meter-desc" id="risk-exit-desc">Available to withdraw without liquidity lockup</div>
+          </div>
+
+          <!-- Market Dominance Meter -->
+          <div class="meter-box">
+            <div class="meter-header">
+              <span class="meter-label">Max Market Dominance</span>
+              <span class="meter-value" id="risk-dom-pct">0%</span>
+            </div>
+            <div class="meter-track">
+              <div class="meter-fill yellow" id="risk-dom-bar" style="width: 0%;"></div>
+            </div>
+            <div class="meter-desc" id="risk-dom-desc">Portion of largest market supplied by this vault</div>
+          </div>
+
+          <!-- Time-Weighted Risk (TWR) Metrics -->
+          <div class="twr-metrics-grid">
+            <div class="twr-card">
+              <span class="twr-label">TWR 30D</span>
+              <span class="twr-val" id="risk-twr-30d">0.0</span>
+            </div>
+            <div class="twr-card">
+              <span class="twr-label">TWR 90D</span>
+              <span class="twr-val" id="risk-twr-90d">0.0</span>
+            </div>
+            <div class="twr-card">
+              <span class="twr-label">All-Time</span>
+              <span class="twr-val" id="risk-twr-all">0.0</span>
+            </div>
+          </div>
+
+          <!-- Curator Track Record & Discipline -->
+          <div class="curator-audit-box">
+            <div class="curator-audit-header">
+              <span class="curator-audit-title">Curator Track Record</span>
+              <span class="discipline-badge" id="risk-discipline-score">85/100 Score</span>
+            </div>
+            <div class="curator-meta">
+              <span id="risk-reallocs-count">0 reallocations indexed</span>
+              <span id="risk-spikes-count">0 peak spikes detected</span>
+            </div>
+          </div>
+
+          <!-- Synthesized Red Flags Warnings List -->
+          <div class="red-flags-section">
+            <div class="red-flags-header">AUDIT FLAGS</div>
+            <div class="flags-container" id="risk-flags-list">
+              <div class="flag-item clear">No critical risk flags detected for this vault.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PANEL 3: Underlying Markets & Reallocation Timeline (Bottom Full Width) -->
+        <section class="panel panel-markets" id="panel-markets">
+          <div class="sub-tabs-bar">
+            <button class="sub-tab active" data-target="tab-allocations">Underlying Markets (<span id="modal-markets-count">0</span>)</button>
+            <button class="sub-tab" data-target="tab-reallocations">Curator Reallocations (<span id="modal-reallocs-count">0</span>)</button>
+          </div>
+
+          <!-- Sub-Tab 1: Allocations Table -->
+          <div class="sub-tab-content active" id="tab-allocations">
+            <div class="table-wrapper">
+              <table class="data-table" id="allocations-table">
+                <thead>
+                  <tr>
+                    <th>Collateral</th>
+                    <th>Loan Token</th>
+                    <th>LLTV</th>
+                    <th>Weight</th>
+                    <th>Supplied</th>
+                    <th>Free Liquidity</th>
+                    <th>Utilization</th>
+                    <th>Supply APY</th>
+                  </tr>
+                </thead>
+                <tbody id="allocations-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 2: Reallocations Timeline -->
+          <div class="sub-tab-content" id="tab-reallocations">
+            <div class="table-wrapper">
+              <table class="data-table" id="reallocations-table">
+                <thead>
+                  <tr>
+                    <th>Date / Time</th>
+                    <th>Action</th>
+                    <th>Collateral</th>
+                    <th>LLTV</th>
+                    <th>Amount</th>
+                    <th>Transaction</th>
+                  </tr>
+                </thead>
+                <tbody id="reallocations-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Modules -->
+  <script type="module" src="js/chart.js"></script>
+  <script type="module" src="js/sphere.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

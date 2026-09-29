@@ -1,0 +1,393 @@
+/* CheckYourMorpho: Main CSS & Design Tokens */
+:root {
+  --bg-primary: #000000;
+  --bg-secondary: #080808;
+  --bg-card: #0d0d0d;
+  --bg-card-hover: #141414;
+  --bg-card-translucent: rgba(13, 13, 13, 0.85);
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-highlight: rgba(36, 112, 255, 0.4);
+
+  --text-primary: #ffffff;
+  --text-secondary: #8e8e93;
+  --text-muted: #55555b;
+
+  --accent-blue: #2470ff;
+  --accent-blue-hover: #3d82ff;
+  --accent-blue-glow: rgba(36, 112, 255, 0.35);
+
+  --accent-green: #30d158;
+  --accent-green-glow: rgba(48, 209, 88, 0.25);
+  --accent-yellow: #ffd60a;
+  --accent-orange: #ff9f0a;
+  --accent-red: #ff453a;
+  --accent-red-glow: rgba(255, 69, 58, 0.25);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-morph: 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Background Subtle Blueprint Grid */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: 
+    radial-gradient(circle at center, rgba(36, 112, 255, 0.04) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 3D Particle Sphere Canvas Container */
+.sphere-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 600ms cubic-bezier(0.16, 1, 0.3, 1),
+              filter 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sphere-wrapper.shrunk {
+  transform: scale(0.68) translateY(-40px);
+  opacity: 0.18;
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+#sphere-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.overlay-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Top Navigation Bar */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.header-left, .header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.header-right {
+  justify-content: flex-end;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  user-select: none;
+}
+
+.brand-name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.brand-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(36, 112, 255, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(36, 112, 255, 0.3);
+  font-family: var(--font-mono);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green-glow);
+  animation: pulse-dot 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* Sphere Hover Tooltip */
+.sphere-tooltip {
+  position: fixed;
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(13, 13, 13, 0.92);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(36, 112, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transform: translate(-50%, -120%);
+  transition: opacity 120ms ease, transform 120ms ease;
+  min-width: 190px;
+}
+
+.sphere-tooltip.hidden {
+  opacity: 0;
+  transform: translate(-50%, -110%) scale(0.95);
+  pointer-events: none;
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+}
+
+.tooltip-chain {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #fff;
+}
+
+.tooltip-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.tt-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tt-label {
+  color: var(--text-secondary);
+}
+
+.tt-value {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.tt-value.green {
+  color: var(--accent-green);
+}
+
+.tooltip-action {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 10px;
+  color: var(--accent-blue);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* Morphing Proxy Element (Flies from sphere to center - Reference photo 1 & 2) */
+.morph-proxy {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: var(--accent-blue);
+  border: 1px solid #ffffff;
+  box-shadow: 0 0 24px rgba(36, 112, 255, 0.8), 0 0 60px rgba(36, 112, 255, 0.4);
+  transition: all var(--transition-morph);
+  transform: translate(-50%, -50%);
+}
+
+.morph-proxy.hidden {
+  display: none;
+  opacity: 0;
+}
+
+/* Audit Modal Overlay */
+.audit-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+  opacity: 1;
+  transition: opacity 350ms ease;
+}
+
+.audit-modal.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 41;
+}
+
+/* Audit Dashboard Container (Center) */
+.audit-dashboard {
+  position: relative;
+  z-index: 42;
+  width: 100%;
+  max-width: 1200px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  transform: scale(1);
+  transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 300ms ease;
+}
+
+.audit-modal.hidden .audit-dashboard {
+  transform: scale(0.92);
+  opacity: 0;
+}
+
+/* Close Button */
+.close-btn {
+  position: absolute;
+  top: -16px;
+  right: -16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #141414;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.close-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.close-btn:hover {
+  background: #222222;
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+/* Utility Classes */
+.hidden {
+  display: none !important;
+}
+
+.green {
+  color: var(--accent-green) !important;
+}
+
+.red {
+  color: var(--accent-red) !important;
+}
+
+.yellow {
+  color: var(--accent-yellow) !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

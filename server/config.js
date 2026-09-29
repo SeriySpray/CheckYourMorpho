@@ -14,7 +14,19 @@ export const CONFIG = {
   },
   chains: {
     ethereum: 1,
-    base: 8453
+    base: 8453,
+    robinhood: 4663,
+    arbitrum: 42161,
+    polygon: 137,
+    optimism: 10,
+    katana: 747474,
+    hyperevm: 999,
+    unichain: 130,
+    worldchain: 480,
+    monad: 143,
+    stable: 988,
+    tempo: 4217,
+    arc: 5042
   },
   db: {
     path: path.join(rootDir, 'data', 'morpho.db')
