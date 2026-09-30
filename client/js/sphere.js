@@ -223,11 +223,13 @@ export class ParticleSphere {
 
     this.vaults = [];
     this.vaultParticles = [];
+    this.vaultMap = new Map();
 
-    // Sphere parameters
-    this.totalCount = 9000;
+    // Sphere parameters (3,600 particles for silky-smooth 60-144 FPS)
+    this.totalCount = 3600;
     this.camZ = 4.2;
     this.fov = 50.0 * Math.PI / 180.0;
+    this.isWaveActive = false;
 
     // Rotation & auto-spin (accelerated per user request)
     this.rotX = 0.18;
@@ -436,16 +438,22 @@ export class ParticleSphere {
     this.relaxArr = new Float32Array(count);
     this.aFactorArr = new Float32Array(count);
 
+    // Precomputed unit direction vectors for instantaneous zero-trig frame updates
+    this.baseXArr = new Float32Array(count);
+    this.baseYArr = new Float32Array(count);
+    this.baseZArr = new Float32Array(count);
+
     this.positions = new Float32Array(count * 3);
     const tvlData = new Float32Array(count);
     const isVaultData = new Float32Array(count);
 
     this.vaultParticles = [];
+    this.vaultMap.clear();
 
     const phi = (1 + Math.sqrt(5)) / 2;
     const stride = vaultCount > 1 ? Math.floor(vaultCount * 0.618033988749895) : 1;
 
-    // --- 1. Populate 566 Active Vault Particles ---
+    // --- 1. Populate Active Vault Particles ---
     for (let i = 0; i < vaultCount; i++) {
       const u = (i * phi) % 1.0;
       const v = 0.04 + (i / Math.max(1, vaultCount - 1)) * 0.92;
@@ -461,10 +469,16 @@ export class ParticleSphere {
       this.relaxArr[i] = rand(8, 14);
       this.aFactorArr[i] = rand(0.9, 1.1);
 
-      const latDist = 0.022 - 0.022 * Math.abs(0.5 - v) * 1.6;
-      this.freqUArr[i] = rand(1, 2) * latDist * randSign();
-      this.freqVArr[i] = rand(1, 2) * latDist * randSign();
-      this.ampArr[i] = 0.003 * rand(1, 4);
+      const theta = 2.0 * Math.PI * u;
+      const phiAngle = Math.acos(2.0 * v - 1.0);
+      const sinPhi = Math.sin(phiAngle);
+      this.baseXArr[i] = sinPhi * Math.cos(theta);
+      this.baseYArr[i] = sinPhi * Math.sin(theta);
+      this.baseZArr[i] = Math.cos(phiAngle);
+
+      this.positions[3 * i] = this.baseXArr[i];
+      this.positions[3 * i + 1] = this.baseYArr[i];
+      this.positions[3 * i + 2] = this.baseZArr[i];
 
       const vaultIdx = this.vaults.length > 0 ? ((i * stride) % this.vaults.length) : i;
       const vault = this.vaults[vaultIdx] || null;
@@ -479,7 +493,7 @@ export class ParticleSphere {
       tvlData[i] = scaledTvl;
       isVaultData[i] = 1.0;
 
-      this.vaultParticles.push({
+      const pObj = {
         index: i,
         vault,
         tvl,
@@ -489,11 +503,15 @@ export class ParticleSphere {
         screenY: 0,
         scale: 1,
         zFinal: 0
-      });
+      };
+
+      this.vaultParticles.push(pObj);
+      if (vault && vault.address) {
+        this.vaultMap.set(vault.address.toLowerCase(), pObj);
+      }
     }
 
-    // --- 2. Populate 8,434 Ambient Morpho Blue Fractal Particles ---
-    // Uniform Fibonacci distribution guarantees optimal particle separation and eliminates white-spot clumping
+    // --- 2. Populate Ambient Morpho Blue Fractal Particles ---
     const ambientCount = count - vaultCount;
     for (let k = 0; k < ambientCount; k++) {
       const i = vaultCount + k;
@@ -517,19 +535,27 @@ export class ParticleSphere {
       this.relaxArr[i] = rand(7, 14);
       this.aFactorArr[i] = rand(0.9, 1.1);
 
-      // Independent harmonic frequencies for mutual anti-synchronization repulsion
-      const latDist = 0.022 - 0.022 * Math.abs(0.5 - v) * 1.6;
-      this.freqUArr[i] = rand(0.8, 2.4) * latDist * randSign();
-      this.freqVArr[i] = rand(0.8, 2.4) * latDist * randSign();
-      this.ampArr[i] = 0.0018 * rand(0.6, 2.2);
+      const theta = 2.0 * Math.PI * u;
+      const phiAngle = Math.acos(2.0 * v - 1.0);
+      const sinPhi = Math.sin(phiAngle);
+      this.baseXArr[i] = sinPhi * Math.cos(theta);
+      this.baseYArr[i] = sinPhi * Math.sin(theta);
+      this.baseZArr[i] = Math.cos(phiAngle);
+
+      this.positions[3 * i] = this.baseXArr[i] * rSpread;
+      this.positions[3 * i + 1] = this.baseYArr[i] * rSpread;
+      this.positions[3 * i + 2] = this.baseZArr[i] * rSpread;
 
       tvlData[i] = 0;
       isVaultData[i] = 0;
     }
 
-    // Upload static attributes to GPU
+    // Upload initial attributes to GPU
     if (this.gl) {
       const gl = this.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.positions);
+
       gl.bindBuffer(gl.ARRAY_BUFFER, this.tvlBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, tvlData);
 
@@ -670,7 +696,7 @@ export class ParticleSphere {
   rotateToVault(address) {
     if (!address) return;
     const addrLower = address.toLowerCase();
-    const p = this.vaultParticles.find(pt => pt.vault && pt.vault.address.toLowerCase() === addrLower);
+    const p = this.vaultMap.get(addrLower);
     if (p) {
       const idx = p.index;
       const x = this.positions[3 * idx];
@@ -699,10 +725,10 @@ export class ParticleSphere {
   getParticleScreenPos(vaultAddress) {
     if (!vaultAddress) return { x: this.cx, y: this.cy, radius: 4 };
     const addrLower = vaultAddress.toLowerCase();
-    const p = this.vaultParticles.find(pt => pt.vault && pt.vault.address.toLowerCase() === addrLower);
+    const p = this.vaultMap.get(addrLower);
 
     if (p && p.screenX && p.screenY) {
-      return { x: p.screenX, y: p.screenY, radius: Math.max(4, p.baseSize * p.scale) };
+      return { x: p.screenX, y: p.screenY, radius: Math.max(3, p.baseSize * p.scale) };
     }
     return { x: this.cx, y: this.cy, radius: 4 };
   }
@@ -749,65 +775,16 @@ export class ParticleSphere {
     const p00 = fovFactor / this.aspect;
     const p11 = fovFactor;
 
-    // --- 1. JIT-Optimized Physical Coordinates Update ---
-    for (let i = 0; i < count; i++) {
-      this.mdvudArr[i] *= 0.92;
-      this.mdvvdArr[i] *= 0.92;
-      this.mdvuArr[i] -= (this.mdvuArr[i] - this.mdvudArr[i]) / (100.0 / dt);
-      this.mdvvArr[i] -= (this.mdvvArr[i] - this.mdvvdArr[i]) / (100.0 / dt);
-      this.uArr[i] -= this.driftArr[i] * dt;
+    // --- 1. Cursor Wave Deformation (Only when mouse moves) ---
+    let needBufferUpload = false;
 
-      const diff = Math.abs(this.vArr[i] - this.vdArr[i]);
-      if (diff > 0.05) {
-        const equatorDist = 0.5 - Math.abs(0.5 - this.vArr[i]);
-        const r2d = 1.0 - Math.min(0.8, 2.0 * equatorDist) * this.aFactorArr[i];
-        this.r2Arr[i] -= (this.r2Arr[i] - r2d) / (10.0 / dt);
-        this.uArr[i] += this.driftArr[i] * dt * 3.0;
-      } else {
-        this.r2Arr[i] = 1.0;
-      }
-
-      this.vArr[i] -= (this.vArr[i] - this.vdArr[i]) / (this.elapsedFrames < 40 ? 30.0 : 400.0 / dt);
-      this.rArr[i] -= (this.rArr[i] - this.rdArr[i] - this.hArr[i]) / (this.relaxArr[i] / dt);
-
-      if (this.vArr[i] > 0.05 && this.vArr[i] < 0.95) {
-        const bumpBoost = 1.0 + 40.0 * this.hArr[i];
-        this.muiArr[i] += this.freqUArr[i] * dt * bumpBoost;
-        this.mviArr[i] += this.freqVArr[i] * dt * bumpBoost;
-        const mu = Math.sin(this.muiArr[i]) * this.ampArr[i];
-        const mv = Math.cos(this.mviArr[i]) * this.ampArr[i];
-
-        const effU = this.uArr[i] + mu + this.mdvuArr[i];
-        const effV = clamp(this.vArr[i] + mv + this.mdvvArr[i], 0.002, 0.998);
-
-        const theta = 2.0 * Math.PI * effU;
-        const phi = Math.acos(2.0 * effV - 1.0);
-        const rad = this.rArr[i] * this.r2Arr[i];
-
-        const sinPhi = Math.sin(phi);
-        pos[3 * i] = sinPhi * Math.cos(theta) * rad;
-        pos[3 * i + 1] = sinPhi * Math.sin(theta) * rad;
-        pos[3 * i + 2] = Math.cos(phi) * this.rArr[i];
-      } else {
-        const theta = 2.0 * Math.PI * (this.uArr[i] + this.mdvuArr[i]);
-        const phi = Math.acos(2.0 * this.vArr[i] - 1.0);
-        const rad = this.rArr[i];
-
-        const sinPhi = Math.sin(phi);
-        pos[3 * i] = sinPhi * Math.cos(theta) * rad;
-        pos[3 * i + 1] = sinPhi * Math.sin(theta) * rad;
-        pos[3 * i + 2] = Math.cos(phi) * rad;
-      }
-    }
-
-    // --- 2. Wave Deformation Physics (Impulse from Cursor) ---
     if (this.hasMouseMoved) {
       for (let i = 0; i < count; i++) {
         const x = pos[3 * i];
         const y = pos[3 * i + 1];
         const z = pos[3 * i + 2];
 
-        // 3D Rotation
+        // 3D Viewport Rotation
         const x1 = x * cosY + z * sinY;
         const z1 = -x * sinY + z * cosY;
         const y2 = y * cosX - z1 * sinX;
@@ -824,22 +801,37 @@ export class ParticleSphere {
           if (dist < 0.12) {
             const penetration = 0.12 - dist;
             const depthMod = 1.0 + Math.min(0, y2 / 0.15);
-            const v = this.vArr[i];
-            const latDamping = clamp(v < 0.5 ? 10.0 * v : 10.0 - 10.0 * v, 0.2, 1.0);
-
-            this.hArr[i] = 1.4 * penetration * depthMod;
-            this.mdvudArr[i] -= 230.0 * this.mouseVelX * penetration * depthMod * latDamping;
-            this.mdvvdArr[i] += 230.0 * this.mouseVelY * penetration * depthMod * latDamping;
-          } else {
-            this.hArr[i] = 0;
+            this.hArr[i] = 0.26 * penetration * depthMod;
+            this.isWaveActive = true;
           }
-        } else {
-          this.hArr[i] = 0;
         }
       }
     }
 
-    // --- 3. Raycast Hit Detection for 566 Vaults ---
+    // --- 2. Wave Relaxation (Zero Trig Math, Simple Radial Scalar) ---
+    if (this.isWaveActive) {
+      let activeEnergy = 0;
+      for (let i = 0; i < count; i++) {
+        if (Math.abs(this.hArr[i]) > 0.0002) {
+          this.hArr[i] *= 0.88;
+          activeEnergy += Math.abs(this.hArr[i]);
+          const rad = this.rArr[i] + this.hArr[i];
+          pos[3 * i] = this.baseXArr[i] * rad;
+          pos[3 * i + 1] = this.baseYArr[i] * rad;
+          pos[3 * i + 2] = this.baseZArr[i] * rad;
+        } else if (this.hArr[i] !== 0) {
+          this.hArr[i] = 0;
+          const rad = this.rArr[i];
+          pos[3 * i] = this.baseXArr[i] * rad;
+          pos[3 * i + 1] = this.baseYArr[i] * rad;
+          pos[3 * i + 2] = this.baseZArr[i] * rad;
+        }
+      }
+      this.isWaveActive = activeEnergy > 0.01;
+      needBufferUpload = true;
+    }
+
+    // --- 3. Raycast Hit Detection for Active Vaults Only ---
     let closestDistance = 24;
     let closestParticle = null;
 
@@ -866,7 +858,7 @@ export class ParticleSphere {
       p.scale = this.camZ / clipW;
 
       if (z2 > -0.2) {
-        const hitRadius = Math.max(18, p.baseSize * p.scale * 3.5);
+        const hitRadius = Math.max(16, p.baseSize * p.scale * 3.0);
         const dist = Math.hypot(this.mouseX - p.screenX, this.mouseY - p.screenY);
         if (dist <= hitRadius && dist < closestDistance) {
           closestDistance = dist;
@@ -878,7 +870,7 @@ export class ParticleSphere {
     this.hoveredParticle = closestParticle;
     this.canvas.style.cursor = this.isDragging ? 'grabbing' : 'grab';
 
-    // --- 4. WebGL Render Pass (0% CPU Lag, Single Draw Call) ---
+    // --- 4. WebGL Render Pass (0% CPU Lag, Single Hardware Draw Call) ---
     if (gl) {
       gl.clearColor(0.0, 0.0, 0.0, 0.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -886,11 +878,13 @@ export class ParticleSphere {
       gl.useProgram(this.program);
       gl.bindVertexArray(this.vao);
 
-      // Upload updated vertex positions to GPU
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
+      // Upload updated vertex positions to GPU only when deformed
+      if (needBufferUpload) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
+      }
 
-      // ModelView matrix
+      // ModelView matrix rotates entire particle cloud on GPU
       const modelView = makeModelView(this.rotX, this.rotY, this.camZ);
 
       gl.uniformMatrix4fv(this.uniforms.uProjection, false, this.projectionMatrix);
@@ -900,13 +894,13 @@ export class ParticleSphere {
       gl.uniform2f(this.uniforms.uMousePosition, 2.0 * this.normMouseX, -2.0 * this.normMouseY);
       gl.uniform1i(this.uniforms.uHasMouseMoved, this.hasMouseMoved ? 1 : 0);
 
-      // Single hardware draw call for all 9,000 particles
+      // Single hardware draw call for all particles
       gl.drawArrays(gl.POINTS, 0, count);
 
       gl.bindVertexArray(null);
     }
 
-    // --- 5. 2D Overlay Pass (Central Logo & Hover Halos) ---
+    // --- 5. 2D Overlay Pass (Central Logo & Hover/Active Halos) ---
     if (this.overlayCtx) {
       const ctx = this.overlayCtx;
       ctx.clearRect(0, 0, this.width, this.height);
@@ -961,9 +955,7 @@ export class ParticleSphere {
   renderVaultHighlights(ctx, time) {
     // 1. Render persistent selected vault (while audit window is open)
     if (this.selectedVaultAddress) {
-      const selectedTarget = this.vaultParticles.find(
-        p => p.vault && p.vault.address.toLowerCase() === this.selectedVaultAddress
-      );
+      const selectedTarget = this.vaultMap.get(this.selectedVaultAddress);
       if (selectedTarget) {
         this.drawVaultHalo(ctx, selectedTarget, true, time);
       }
@@ -971,9 +963,7 @@ export class ParticleSphere {
 
     // 2. Render hovered or search-focused vault (if different from selected)
     if (this.highlightedVaultAddress && this.highlightedVaultAddress !== this.selectedVaultAddress) {
-      const hoverTarget = this.vaultParticles.find(
-        p => p.vault && p.vault.address.toLowerCase() === this.highlightedVaultAddress
-      );
+      const hoverTarget = this.vaultMap.get(this.highlightedVaultAddress);
       if (hoverTarget) {
         this.drawVaultHalo(ctx, hoverTarget, false, time);
       }
@@ -983,71 +973,65 @@ export class ParticleSphere {
   drawVaultHalo(ctx, target, isSelected, time) {
     ctx.save();
 
-    // Base alpha depends on depth (if slightly rotated behind, dim softly rather than disappear)
+    // Base alpha depends on depth (if rotated behind, dim softly rather than disappear)
     const isBack = target.zFinal < -0.15;
     const depthAlpha = isBack ? 0.35 : 1.0;
 
     if (isSelected) {
-      // Golden/Cyan electric beacon for selected vault
-      const glowRadius = Math.max(16, target.baseSize * target.scale * 4.6);
-      const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 2.2);
-      grad.addColorStop(0, `rgba(0, 220, 255, ${0.95 * depthAlpha})`);
-      grad.addColorStop(0.35, `rgba(36, 112, 255, ${0.65 * depthAlpha})`);
-      grad.addColorStop(0.7, `rgba(36, 112, 255, ${0.2 * depthAlpha})`);
+      // Compact, elegant cyan/electric beacon for selected vault (smaller per user request)
+      const beaconR = Math.max(3.2, target.baseSize * target.scale * 1.35);
+      const glowR = beaconR * 2.2; // approx 8 - 12px max
+
+      // Compact subtle radial gradient
+      const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowR);
+      grad.addColorStop(0, `rgba(0, 229, 255, ${0.85 * depthAlpha})`);
+      grad.addColorStop(0.45, `rgba(36, 112, 255, ${0.4 * depthAlpha})`);
       grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
 
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(target.screenX, target.screenY, glowRadius * 2.2, 0, Math.PI * 2);
+      ctx.arc(target.screenX, target.screenY, glowR, 0, Math.PI * 2);
       ctx.fill();
 
-      // Double pulsating beacon rings
-      const pulse1 = 1.0 + Math.sin(time * 3.2) * 0.3;
-      const pulse2 = 1.2 + Math.cos(time * 2.8) * 0.25;
-
-      ctx.strokeStyle = `rgba(0, 230, 255, ${0.95 * depthAlpha})`;
-      ctx.lineWidth = 2.0;
+      // Single delicate pulsating neon ring
+      const pulse = 1.0 + Math.sin(time * 3.6) * 0.22;
+      ctx.strokeStyle = `rgba(0, 230, 255, ${0.9 * depthAlpha})`;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.arc(target.screenX, target.screenY, glowRadius * pulse1, 0, Math.PI * 2);
+      ctx.arc(target.screenX, target.screenY, beaconR * 1.55 * pulse, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.strokeStyle = `rgba(100, 180, 255, ${0.55 * depthAlpha})`;
-      ctx.lineWidth = 1.0;
-      ctx.beginPath();
-      ctx.arc(target.screenX, target.screenY, glowRadius * pulse2, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Core diamond / bright white point
+      // Sharp, bright core point
       ctx.fillStyle = `rgba(255, 255, 255, ${depthAlpha})`;
       ctx.beginPath();
-      ctx.arc(target.screenX, target.screenY, Math.max(4, target.baseSize * target.scale * 2.0), 0, Math.PI * 2);
+      ctx.arc(target.screenX, target.screenY, Math.max(2.2, beaconR * 0.65), 0, Math.PI * 2);
       ctx.fill();
 
     } else {
       // Standard hover neon halo
-      const glowRadius = Math.max(12, target.baseSize * target.scale * 3.8);
-      const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 2);
-      grad.addColorStop(0, `rgba(36, 112, 255, ${0.95 * depthAlpha})`);
-      grad.addColorStop(0.35, `rgba(87, 146, 255, ${0.45 * depthAlpha})`);
+      const glowRadius = Math.max(8, target.baseSize * target.scale * 1.8);
+      const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 1.6);
+      grad.addColorStop(0, `rgba(36, 112, 255, ${0.85 * depthAlpha})`);
+      grad.addColorStop(0.5, `rgba(87, 146, 255, ${0.35 * depthAlpha})`);
       grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
 
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(target.screenX, target.screenY, glowRadius * 2, 0, Math.PI * 2);
+      ctx.arc(target.screenX, target.screenY, glowRadius * 1.6, 0, Math.PI * 2);
       ctx.fill();
 
       // Pulsating outer neon ring
-      const pulse = 1.0 + Math.sin(time * 3.5) * 0.25;
-      ctx.strokeStyle = `rgba(87, 146, 255, ${depthAlpha})`;
-      ctx.lineWidth = 1.5;
+      const pulse = 1.0 + Math.sin(time * 3.5) * 0.2;
+      ctx.strokeStyle = `rgba(87, 146, 255, ${0.85 * depthAlpha})`;
+      ctx.lineWidth = 1.0;
       ctx.beginPath();
       ctx.arc(target.screenX, target.screenY, glowRadius * pulse, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Core white point
+      // Core point
       ctx.fillStyle = `rgba(255, 255, 255, ${depthAlpha})`;
       ctx.beginPath();
-      ctx.arc(target.screenX, target.screenY, target.baseSize * target.scale * 1.6, 0, Math.PI * 2);
+      ctx.arc(target.screenX, target.screenY, Math.max(2.0, target.baseSize * target.scale * 0.9), 0, Math.PI * 2);
       ctx.fill();
     }
 

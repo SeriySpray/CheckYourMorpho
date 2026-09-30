@@ -22,6 +22,7 @@ const DOM = {
   ttLiq: document.getElementById('tt-liq'),
   ttApy: document.getElementById('tt-apy'),
   morphProxy: document.getElementById('morph-proxy'),
+  morphProxyRetract: document.getElementById('morph-proxy-retract'),
   auditModal: document.getElementById('audit-modal'),
   auditPanelBody: document.getElementById('audit-panel-body'),
   closeBtn: document.getElementById('modal-close-btn'),
@@ -636,6 +637,7 @@ let isTransitioningVault = false;
 
 /**
  * Executes the smooth particle morphing flight from the 3D sphere into the Left Floating Terminal.
+ * If another vault was open, the old one collapses and flies back SIMULTANEOUSLY while the new one flies out.
  */
 async function openVaultAudit(vault, startPos) {
   if (isTransitioningVault) return;
@@ -658,60 +660,7 @@ async function openVaultAudit(vault, startPos) {
       return null;
     });
 
-  // Check if a vault window is ALREADY open
-  const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
-
-  if (isAlreadyOpen) {
-    isTransitioningVault = true;
-
-    // STEP 1: Previous vault window closes and flies back to its particle on the sphere
-    const prevVaultAddress = selectedVaultAddress;
-    const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
-    const targetHeight = window.innerHeight - 36;
-    const targetCenterX = 20 + targetWidth / 2;
-    const targetCenterY = 18 + targetHeight / 2;
-
-    // Hide left panel
-    DOM.auditModal.classList.add('hidden');
-
-    // Spawn proxy in left terminal bounds
-    DOM.morphProxy.style.transition = 'none';
-    DOM.morphProxy.style.left = `${targetCenterX}px`;
-    DOM.morphProxy.style.top = `${targetCenterY}px`;
-    DOM.morphProxy.style.width = `${targetWidth}px`;
-    DOM.morphProxy.style.height = `${targetHeight}px`;
-    DOM.morphProxy.style.borderRadius = '20px';
-    DOM.morphProxy.style.opacity = '0.9';
-    DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
-    DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-    DOM.morphProxy.classList.remove('hidden');
-
-    // Previous particle screen position on sphere
-    let prevPos = sphere.getParticleScreenPos(prevVaultAddress);
-    if (!prevPos) {
-      prevPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
-    }
-
-    // Force reflow and fly back
-    DOM.morphProxy.offsetHeight;
-    DOM.morphProxy.style.transition = 'all 550ms cubic-bezier(0.16, 1, 0.3, 1)';
-    DOM.morphProxy.style.left = `${prevPos.x}px`;
-    DOM.morphProxy.style.top = `${prevPos.y}px`;
-    DOM.morphProxy.style.width = '12px';
-    DOM.morphProxy.style.height = '12px';
-    DOM.morphProxy.style.borderRadius = '50%';
-    DOM.morphProxy.style.opacity = '0.2';
-    DOM.morphProxy.style.background = '#2470ff';
-
-    // Wait for the collapse animation to finish before launching the new vault
-    await new Promise(resolve => setTimeout(resolve, 520));
-
-    DOM.morphProxy.classList.add('hidden');
-  }
-
-  // STEP 2: Highlight new vault on sphere and launch slowed-down majestic fly-out animation
-  selectedVaultAddress = vault.address;
-  sphere.setSelectedVault(vault.address);
+  isTransitioningVault = true;
 
   // Target coordinates for Left Floating Terminal
   const targetLeft = 20;
@@ -721,7 +670,56 @@ async function openVaultAudit(vault, startPos) {
   const targetCenterX = targetLeft + targetWidth / 2;
   const targetCenterY = targetTop + targetHeight / 2;
 
-  // Determine starting coordinate from sphere particle
+  // Check if a vault window is ALREADY open
+  const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
+  const prevVaultAddress = selectedVaultAddress;
+
+  // Immediately set the new selected vault on sphere so the new compact beacon lights up
+  selectedVaultAddress = vault.address;
+  sphere.setSelectedVault(vault.address);
+
+  // 1. If already open, launch the RETRACTING proxy simultaneously back to its particle
+  if (isAlreadyOpen && DOM.morphProxyRetract) {
+    let prevPos = prevVaultAddress ? sphere.getParticleScreenPos(prevVaultAddress) : null;
+    if (!prevPos) {
+      prevPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
+    }
+
+    // Hide the static audit modal so user sees the retracting proxy shrinking back
+    DOM.auditModal.classList.add('hidden');
+
+    const pRetract = DOM.morphProxyRetract;
+    pRetract.style.transition = 'none';
+    pRetract.style.left = `${targetCenterX}px`;
+    pRetract.style.top = `${targetCenterY}px`;
+    pRetract.style.width = `${targetWidth}px`;
+    pRetract.style.height = `${targetHeight}px`;
+    pRetract.style.borderRadius = '20px';
+    pRetract.style.opacity = '0.85';
+    pRetract.style.background = 'rgba(9, 12, 19, 0.88)';
+    pRetract.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+    pRetract.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.6)';
+    pRetract.classList.remove('hidden');
+
+    // Force reflow and start retract flight concurrently (680ms)
+    pRetract.offsetHeight;
+    pRetract.style.transition = 'all 680ms cubic-bezier(0.16, 1, 0.3, 1)';
+    pRetract.style.left = `${prevPos.x}px`;
+    pRetract.style.top = `${prevPos.y}px`;
+    pRetract.style.width = '8px';
+    pRetract.style.height = '8px';
+    pRetract.style.borderRadius = '50%';
+    pRetract.style.opacity = '0';
+    pRetract.style.background = '#2470ff';
+
+    setTimeout(() => {
+      pRetract.classList.add('hidden');
+    }, 700);
+  } else {
+    DOM.auditModal.classList.add('hidden');
+  }
+
+  // 2. SIMULTANEOUSLY: Launch the ADVANCING proxy from the new particle into the left terminal
   let startX = startPos ? startPos.x : null;
   let startY = startPos ? startPos.y : null;
   if (!startX || !startY) {
@@ -735,35 +733,35 @@ async function openVaultAudit(vault, startPos) {
     }
   }
 
-  // Position morph proxy at new particle coordinate
-  DOM.morphProxy.style.transition = 'none';
-  DOM.morphProxy.style.left = `${startX}px`;
-  DOM.morphProxy.style.top = `${startY}px`;
-  DOM.morphProxy.style.width = '14px';
-  DOM.morphProxy.style.height = '14px';
-  DOM.morphProxy.style.borderRadius = '50%';
-  DOM.morphProxy.style.opacity = '1';
-  DOM.morphProxy.style.background = '#2470ff';
-  DOM.morphProxy.style.border = '1px solid #ffffff';
-  DOM.morphProxy.style.boxShadow = '0 0 36px #00e5ff, 0 0 70px rgba(36, 112, 255, 0.9)';
-  DOM.morphProxy.classList.remove('hidden');
+  const pOpen = DOM.morphProxy;
+  pOpen.style.transition = 'none';
+  pOpen.style.left = `${startX}px`;
+  pOpen.style.top = `${startY}px`;
+  pOpen.style.width = '10px';
+  pOpen.style.height = '10px';
+  pOpen.style.borderRadius = '50%';
+  pOpen.style.opacity = '1';
+  pOpen.style.background = '#00e5ff';
+  pOpen.style.border = '1px solid #ffffff';
+  pOpen.style.boxShadow = '0 0 24px #00e5ff, 0 0 45px rgba(36, 112, 255, 0.8)';
+  pOpen.classList.remove('hidden');
 
-  // Force reflow and start slow, fluid glide towards the left side (980ms)
-  DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 980ms cubic-bezier(0.18, 0.95, 0.28, 1)';
-  DOM.morphProxy.style.left = `${targetCenterX}px`;
-  DOM.morphProxy.style.top = `${targetCenterY}px`;
-  DOM.morphProxy.style.width = `${targetWidth}px`;
-  DOM.morphProxy.style.height = `${targetHeight}px`;
-  DOM.morphProxy.style.borderRadius = '20px';
-  DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
-  DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-  DOM.morphProxy.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(36, 112, 255, 0.2)';
+  // Force reflow and start advancing flight concurrently into left terminal bounds (720ms)
+  pOpen.offsetHeight;
+  pOpen.style.transition = 'all 720ms cubic-bezier(0.18, 0.95, 0.28, 1)';
+  pOpen.style.left = `${targetCenterX}px`;
+  pOpen.style.top = `${targetCenterY}px`;
+  pOpen.style.width = `${targetWidth}px`;
+  pOpen.style.height = `${targetHeight}px`;
+  pOpen.style.borderRadius = '20px';
+  pOpen.style.background = 'rgba(9, 12, 19, 0.88)';
+  pOpen.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+  pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 35px rgba(36, 112, 255, 0.18)';
 
   // Wait for audit data
   const data = await auditDataPromise;
   if (!data) {
-    DOM.morphProxy.classList.add('hidden');
+    pOpen.classList.add('hidden');
     isTransitioningVault = false;
     closeVaultAudit();
     return;
@@ -772,15 +770,15 @@ async function openVaultAudit(vault, startPos) {
   activeAuditData = data;
   populateAuditModal(data);
 
-  // Reveal left terminal at 880ms (as flight smoothly docks in place)
+  // Reveal left terminal as flight smoothly docks in place (700ms)
   setTimeout(() => {
     DOM.auditModal.classList.remove('hidden');
-    DOM.morphProxy.style.opacity = '0';
+    pOpen.style.opacity = '0';
     setTimeout(() => {
-      DOM.morphProxy.classList.add('hidden');
+      pOpen.classList.add('hidden');
       isTransitioningVault = false;
-    }, 350);
-  }, 880);
+    }, 250);
+  }, 690);
 }
 
 /**
@@ -806,7 +804,7 @@ function closeVaultAudit() {
   DOM.morphProxy.style.width = `${targetWidth}px`;
   DOM.morphProxy.style.height = `${targetHeight}px`;
   DOM.morphProxy.style.borderRadius = '20px';
-  DOM.morphProxy.style.opacity = '0.9';
+  DOM.morphProxy.style.opacity = '0.85';
   DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
   DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
   DOM.morphProxy.classList.remove('hidden');
@@ -817,15 +815,15 @@ function closeVaultAudit() {
     particlePos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
   }
 
-  // 4. Force reflow, then glide back to particle (650ms)
+  // 4. Force reflow, then glide back to particle (550ms)
   DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 650ms cubic-bezier(0.16, 1, 0.3, 1)';
+  DOM.morphProxy.style.transition = 'all 550ms cubic-bezier(0.16, 1, 0.3, 1)';
   DOM.morphProxy.style.left = `${particlePos.x}px`;
   DOM.morphProxy.style.top = `${particlePos.y}px`;
-  DOM.morphProxy.style.width = '12px';
-  DOM.morphProxy.style.height = '12px';
+  DOM.morphProxy.style.width = '8px';
+  DOM.morphProxy.style.height = '8px';
   DOM.morphProxy.style.borderRadius = '50%';
-  DOM.morphProxy.style.opacity = '0.2';
+  DOM.morphProxy.style.opacity = '0';
   DOM.morphProxy.style.background = '#2470ff';
 
   setTimeout(() => {
@@ -834,7 +832,7 @@ function closeVaultAudit() {
     sphere.setSelectedVault(null);
     sphere.highlightVault(null);
     isTransitioningVault = false;
-  }, 650);
+  }, 560);
 }
 
 /**
