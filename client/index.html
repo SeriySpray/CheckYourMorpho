@@ -31,7 +31,6 @@
         <span class="explorer-tag">MORPHO VAULTS</span>
         <div class="explorer-header-actions">
           <span id="explorer-count" class="explorer-count">311 Vaults</span>
-          <button id="explorer-reset-btn" class="explorer-reset-btn hidden" title="Reset all filters">Reset</button>
         </div>
       </div>
       <h3 class="explorer-heading">Vaults Explorer</h3>
@@ -44,75 +43,184 @@
         <path d="M12.5 12.5L17 17"></path>
       </svg>
       <input type="text" id="vault-search-input" placeholder="Search by name, symbol, curator, address..." autocomplete="off" spellcheck="false">
+      <button type="button" id="search-clear-btn" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
       <kbd class="search-shortcut" id="search-shortcut-esc">ESC</kbd>
     </div>
 
-    <!-- Official Morpho Filter Grid (Network, Asset, Curator, Sort By) -->
+    <!-- Morpho Custom Filter Grid (Network, Asset, Curator, Sort By) -->
     <div class="explorer-filters-grid">
-      <!-- 1. Network Filter -->
-      <div class="filter-group">
-        <label for="filter-network" class="filter-label">Network</label>
-        <div class="select-wrapper">
-          <select id="filter-network" class="explorer-select">
-            <option value="all">All Networks</option>
-            <option value="1">Ethereum</option>
-            <option value="8453">Base</option>
-            <option value="4663">Robinhood</option>
-            <option value="42161">Arbitrum</option>
-            <option value="10">Optimism</option>
-            <option value="137">Polygon</option>
-          </select>
+      <!-- 1. Network Filter Dropdown -->
+      <div class="custom-dropdown" id="dropdown-network" data-filter="network">
+        <button type="button" class="dropdown-trigger" id="trigger-network" aria-haspopup="listbox" aria-expanded="false">
+          <div class="trigger-meta">
+            <span class="trigger-label">Network</span>
+            <span class="trigger-value" id="val-network">All Networks</span>
+          </div>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <div class="dropdown-menu" id="menu-network" role="listbox">
+          <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
+            <span class="item-text">All Networks</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="1" role="option" aria-selected="false">
+            <span class="item-text"><span class="chain-dot ethereum"></span>Ethereum</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="8453" role="option" aria-selected="false">
+            <span class="item-text"><span class="chain-dot base"></span>Base</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="4663" role="option" aria-selected="false">
+            <span class="item-text"><span class="chain-dot robinhood"></span>Robinhood</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="42161" role="option" aria-selected="false">
+            <span class="item-text"><span class="chain-dot arbitrum"></span>Arbitrum</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="10" role="option" aria-selected="false">
+            <span class="item-text"><span class="chain-dot optimism"></span>Optimism</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="137" role="option" aria-selected="false">
+            <span class="item-text"><span class="chain-dot polygon"></span>Polygon</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
         </div>
       </div>
 
-      <!-- 2. Asset Filter -->
-      <div class="filter-group">
-        <label for="filter-asset" class="filter-label">Asset</label>
-        <div class="select-wrapper">
-          <select id="filter-asset" class="explorer-select">
-            <option value="all">All Assets</option>
-            <option value="USDC">USDC</option>
-            <option value="USDG">USDG</option>
-            <option value="ETH">ETH / WETH</option>
-            <option value="PYUSD">PYUSD</option>
-            <option value="USDT">USDT</option>
-            <option value="USDE">USDe / sUSDe</option>
-            <option value="EURC">EURC / EURCV</option>
-          </select>
+      <!-- 2. Asset Filter Dropdown -->
+      <div class="custom-dropdown" id="dropdown-asset" data-filter="asset">
+        <button type="button" class="dropdown-trigger" id="trigger-asset" aria-haspopup="listbox" aria-expanded="false">
+          <div class="trigger-meta">
+            <span class="trigger-label">Asset</span>
+            <span class="trigger-value" id="val-asset">All Assets</span>
+          </div>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <div class="dropdown-menu" id="menu-asset" role="listbox">
+          <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
+            <span class="item-text">All Assets</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="USDC" role="option" aria-selected="false">
+            <span class="item-text">USDC</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="USDG" role="option" aria-selected="false">
+            <span class="item-text">USDG</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="ETH" role="option" aria-selected="false">
+            <span class="item-text">ETH / WETH</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="PYUSD" role="option" aria-selected="false">
+            <span class="item-text">PYUSD</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="USDT" role="option" aria-selected="false">
+            <span class="item-text">USDT</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="USDE" role="option" aria-selected="false">
+            <span class="item-text">USDe / sUSDe</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="EURC" role="option" aria-selected="false">
+            <span class="item-text">EURC / EURCV</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
         </div>
       </div>
 
-      <!-- 3. Curator Filter -->
-      <div class="filter-group">
-        <label for="filter-curator" class="filter-label">Curator</label>
-        <div class="select-wrapper">
-          <select id="filter-curator" class="explorer-select">
-            <option value="all">All Curators</option>
-            <option value="steakhouse">Steakhouse Financial</option>
-            <option value="gauntlet">Gauntlet</option>
-            <option value="re7">Re7 Labs</option>
-            <option value="flagship">Morpho Flagship</option>
-            <option value="bprotocol">B.Protocol</option>
-          </select>
+      <!-- 3. Curator Filter Dropdown -->
+      <div class="custom-dropdown" id="dropdown-curator" data-filter="curator">
+        <button type="button" class="dropdown-trigger" id="trigger-curator" aria-haspopup="listbox" aria-expanded="false">
+          <div class="trigger-meta">
+            <span class="trigger-label">Curator</span>
+            <span class="trigger-value" id="val-curator">All Curators</span>
+          </div>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <div class="dropdown-menu" id="menu-curator" role="listbox">
+          <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
+            <span class="item-text">All Curators</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="steakhouse" role="option" aria-selected="false">
+            <span class="item-text">Steakhouse Financial</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="gauntlet" role="option" aria-selected="false">
+            <span class="item-text">Gauntlet</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="re7" role="option" aria-selected="false">
+            <span class="item-text">Re7 Labs</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="flagship" role="option" aria-selected="false">
+            <span class="item-text">Morpho Flagship</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="bprotocol" role="option" aria-selected="false">
+            <span class="item-text">B.Protocol</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
         </div>
       </div>
 
-      <!-- 4. Sort By Filter -->
-      <div class="filter-group">
-        <label for="filter-sort" class="filter-label">Sort By</label>
-        <div class="select-wrapper">
-          <select id="filter-sort" class="explorer-select">
-            <option value="tvl_desc">Deposits (TVL): High to Low</option>
-            <option value="apy_desc">Net APY: High to Low</option>
-            <option value="liq_desc">Free Liquidity: High to Low</option>
-            <option value="score_desc">Safety Score: High to Low</option>
-          </select>
+      <!-- 4. Sort By Filter Dropdown -->
+      <div class="custom-dropdown" id="dropdown-sort" data-filter="sort">
+        <button type="button" class="dropdown-trigger" id="trigger-sort" aria-haspopup="listbox" aria-expanded="false">
+          <div class="trigger-meta">
+            <span class="trigger-label">Sort By</span>
+            <span class="trigger-value" id="val-sort">Total Deposits</span>
+          </div>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <div class="dropdown-menu" id="menu-sort" role="listbox">
+          <div class="dropdown-item selected" data-value="tvl_desc" role="option" aria-selected="true">
+            <span class="item-text">Total Deposits (TVL)</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="apy_desc" role="option" aria-selected="false">
+            <span class="item-text">Net APY: High to Low</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="liq_desc" role="option" aria-selected="false">
+            <span class="item-text">Free Liquidity: High to Low</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div class="dropdown-item" data-value="score_desc" role="option" aria-selected="false">
+            <span class="item-text">Safety Score: High to Low</span>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Active Filter Chips / Badges Row (if any active) -->
-    <div id="active-filter-chips" class="active-filter-chips hidden"></div>
+    <!-- Active Filter Chips / Clear Toolbar (visible only when filters or search query are active) -->
+    <div id="active-filter-chips" class="active-filter-chips hidden">
+      <div class="chips-container" id="chips-container"></div>
+      <button type="button" id="explorer-reset-btn" class="filter-reset-action" title="Clear all active filters">
+        Clear all
+      </button>
+    </div>
 
     <!-- Vaults List -->
     <ul id="explorer-vaults-list" class="explorer-vaults-list">

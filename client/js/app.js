@@ -32,17 +32,15 @@ const DOM = {
   modalBackdrop: document.getElementById('modal-backdrop'),
   closeBtn: document.getElementById('modal-close-btn'),
 
-  // Master Vault Explorer Terminal (Right-side 500px)
+  // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
   explorerResetBtn: document.getElementById('explorer-reset-btn'),
   searchInput: document.getElementById('vault-search-input'),
+  searchClearBtn: document.getElementById('search-clear-btn'),
   searchShortcutEsc: document.getElementById('search-shortcut-esc'),
-  filterNetwork: document.getElementById('filter-network'),
-  filterAsset: document.getElementById('filter-asset'),
-  filterCurator: document.getElementById('filter-curator'),
-  filterSort: document.getElementById('filter-sort'),
   activeFilterChips: document.getElementById('active-filter-chips'),
+  chipsContainer: document.getElementById('chips-container'),
   explorerVaultsList: document.getElementById('explorer-vaults-list'),
 
   // Panel 1: Main
@@ -193,22 +191,186 @@ const explorerFilters = {
 };
 
 /**
+ * Closes all open custom dropdown menus.
+ */
+function closeAllDropdowns() {
+  document.querySelectorAll('.custom-dropdown.open').forEach(dropdown => {
+    dropdown.classList.remove('open');
+    dropdown.querySelector('.dropdown-trigger')?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+/**
+ * Updates a custom dropdown's trigger label and selected item state.
+ */
+function updateDropdownUI(filterKey, value) {
+  const dropdown = document.querySelector(`.custom-dropdown[data-filter="${filterKey}"]`);
+  if (!dropdown) return;
+  const trigger = dropdown.querySelector('.dropdown-trigger');
+  const valEl = dropdown.querySelector('.trigger-value');
+  const items = dropdown.querySelectorAll('.dropdown-item');
+
+  let selectedLabel = '';
+  items.forEach(item => {
+    const itemVal = item.getAttribute('data-value');
+    const isSelected = itemVal === value;
+    item.classList.toggle('selected', isSelected);
+    item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    if (isSelected) {
+      const textSpan = item.querySelector('.item-text');
+      selectedLabel = textSpan ? textSpan.textContent.trim() : item.textContent.trim();
+    }
+  });
+
+  if (valEl && selectedLabel) {
+    valEl.textContent = selectedLabel;
+  }
+
+  // Highlight trigger if active (non-default)
+  const isDefault = (filterKey === 'sort') ? value === 'tvl_desc' : value === 'all';
+  trigger?.classList.toggle('is-active', !isDefault);
+}
+
+/**
+ * Sets a filter value and updates the UI and list.
+ */
+function setFilterValue(filterKey, value) {
+  explorerFilters[filterKey] = value;
+  updateDropdownUI(filterKey, value);
+  renderVaultExplorer();
+}
+
+/**
+ * Renders active filter tags and controls in the active chips toolbar.
+ */
+function updateActiveFilterChips() {
+  if (!DOM.activeFilterChips || !DOM.chipsContainer) return;
+
+  const isFiltered = Boolean(
+    explorerFilters.query ||
+    explorerFilters.network !== 'all' ||
+    explorerFilters.asset !== 'all' ||
+    explorerFilters.curator !== 'all' ||
+    explorerFilters.sort !== 'tvl_desc'
+  );
+
+  if (!isFiltered) {
+    DOM.activeFilterChips.classList.add('hidden');
+    DOM.chipsContainer.innerHTML = '';
+    return;
+  }
+
+  DOM.activeFilterChips.classList.remove('hidden');
+  let chipsHtml = '';
+
+  if (explorerFilters.query) {
+    chipsHtml += `
+      <span class="filter-chip" data-type="query">
+        <span class="chip-label">"${escapeHtml(explorerFilters.query)}"</span>
+        <button type="button" class="chip-remove" data-clear="query" aria-label="Remove search filter" title="Remove">&times;</button>
+      </span>
+    `;
+  }
+
+  if (explorerFilters.network !== 'all') {
+    const chainName = formatChainName(parseInt(explorerFilters.network, 10));
+    chipsHtml += `
+      <span class="filter-chip" data-type="network">
+        <span class="chip-label">${escapeHtml(chainName)}</span>
+        <button type="button" class="chip-remove" data-clear="network" aria-label="Remove network filter" title="Remove">&times;</button>
+      </span>
+    `;
+  }
+
+  if (explorerFilters.asset !== 'all') {
+    chipsHtml += `
+      <span class="filter-chip" data-type="asset">
+        <span class="chip-label">${escapeHtml(explorerFilters.asset)}</span>
+        <button type="button" class="chip-remove" data-clear="asset" aria-label="Remove asset filter" title="Remove">&times;</button>
+      </span>
+    `;
+  }
+
+  if (explorerFilters.curator !== 'all') {
+    const curatorLabels = {
+      steakhouse: 'Steakhouse',
+      gauntlet: 'Gauntlet',
+      re7: 'Re7 Labs',
+      flagship: 'Morpho Flagship',
+      bprotocol: 'B.Protocol'
+    };
+    const label = curatorLabels[explorerFilters.curator] || explorerFilters.curator;
+    chipsHtml += `
+      <span class="filter-chip" data-type="curator">
+        <span class="chip-label">${escapeHtml(label)}</span>
+        <button type="button" class="chip-remove" data-clear="curator" aria-label="Remove curator filter" title="Remove">&times;</button>
+      </span>
+    `;
+  }
+
+  if (explorerFilters.sort !== 'tvl_desc') {
+    const sortLabels = {
+      apy_desc: 'APY: High to Low',
+      liq_desc: 'Liquidity: High to Low',
+      score_desc: 'Safety: High to Low'
+    };
+    const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
+    chipsHtml += `
+      <span class="filter-chip" data-type="sort">
+        <span class="chip-label">${escapeHtml(label)}</span>
+        <button type="button" class="chip-remove" data-clear="sort" aria-label="Remove sort filter" title="Remove">&times;</button>
+      </span>
+    `;
+  }
+
+  DOM.chipsContainer.innerHTML = chipsHtml;
+
+  // Bind individual chip remove buttons
+  DOM.chipsContainer.querySelectorAll('.chip-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const toClear = btn.getAttribute('data-clear');
+      if (toClear === 'query') {
+        if (DOM.searchInput) DOM.searchInput.value = '';
+        if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
+        explorerFilters.query = '';
+      } else if (toClear === 'sort') {
+        explorerFilters.sort = 'tvl_desc';
+        updateDropdownUI('sort', 'tvl_desc');
+      } else {
+        explorerFilters[toClear] = 'all';
+        updateDropdownUI(toClear, 'all');
+      }
+      renderVaultExplorer();
+    });
+  });
+}
+
+/**
  * Sets up event listeners for the Master Vault Explorer Terminal.
  */
 function setupVaultExplorerEvents() {
   if (DOM.searchInput) {
     DOM.searchInput.addEventListener('input', () => {
-      explorerFilters.query = DOM.searchInput.value.trim().toLowerCase();
+      const val = DOM.searchInput.value.trim();
+      if (DOM.searchClearBtn) {
+        DOM.searchClearBtn.classList.toggle('hidden', val.length === 0);
+      }
+      explorerFilters.query = val.toLowerCase();
       renderVaultExplorer();
     });
 
     DOM.searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        DOM.searchInput.value = '';
-        explorerFilters.query = '';
-        renderVaultExplorer();
-        DOM.searchInput.blur();
-        sphere.highlightVault(null);
+        closeAllDropdowns();
+        if (DOM.searchInput.value) {
+          DOM.searchInput.value = '';
+          if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
+          explorerFilters.query = '';
+          renderVaultExplorer();
+          DOM.searchInput.blur();
+          sphere.highlightVault(null);
+        }
       } else if (e.key === 'Enter') {
         const firstItem = DOM.explorerVaultsList?.querySelector('.explorer-vault-item');
         if (firstItem) {
@@ -218,10 +380,23 @@ function setupVaultExplorerEvents() {
     });
   }
 
+  if (DOM.searchClearBtn) {
+    DOM.searchClearBtn.addEventListener('click', () => {
+      if (DOM.searchInput) {
+        DOM.searchInput.value = '';
+        DOM.searchClearBtn.classList.add('hidden');
+        explorerFilters.query = '';
+        renderVaultExplorer();
+        DOM.searchInput.focus();
+      }
+    });
+  }
+
   if (DOM.searchShortcutEsc) {
     DOM.searchShortcutEsc.addEventListener('click', () => {
       if (DOM.searchInput) {
         DOM.searchInput.value = '';
+        if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
         explorerFilters.query = '';
         renderVaultExplorer();
         DOM.searchInput.blur();
@@ -230,33 +405,50 @@ function setupVaultExplorerEvents() {
     });
   }
 
-  if (DOM.filterNetwork) {
-    DOM.filterNetwork.addEventListener('change', (e) => {
-      explorerFilters.network = e.target.value;
-      renderVaultExplorer();
-    });
-  }
+  // Custom Dropdown triggers and options
+  const dropdowns = document.querySelectorAll('.custom-dropdown');
+  dropdowns.forEach(dropdown => {
+    const trigger = dropdown.querySelector('.dropdown-trigger');
+    const menu = dropdown.querySelector('.dropdown-menu');
+    const filterKey = dropdown.getAttribute('data-filter');
 
-  if (DOM.filterAsset) {
-    DOM.filterAsset.addEventListener('change', (e) => {
-      explorerFilters.asset = e.target.value;
-      renderVaultExplorer();
-    });
-  }
+    if (trigger) {
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = dropdown.classList.contains('open');
+        closeAllDropdowns();
+        if (!wasOpen) {
+          dropdown.classList.add('open');
+          trigger.setAttribute('aria-expanded', 'true');
+        }
+      });
+    }
 
-  if (DOM.filterCurator) {
-    DOM.filterCurator.addEventListener('change', (e) => {
-      explorerFilters.curator = e.target.value;
-      renderVaultExplorer();
-    });
-  }
+    if (menu) {
+      menu.querySelectorAll('.dropdown-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const value = item.getAttribute('data-value');
+          setFilterValue(filterKey, value);
+          closeAllDropdowns();
+        });
+      });
+    }
+  });
 
-  if (DOM.filterSort) {
-    DOM.filterSort.addEventListener('change', (e) => {
-      explorerFilters.sort = e.target.value;
-      renderVaultExplorer();
-    });
-  }
+  // Global document click closes open dropdowns
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.custom-dropdown')) {
+      closeAllDropdowns();
+    }
+  });
+
+  // Global ESC closes open dropdowns
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeAllDropdowns();
+    }
+  });
 
   if (DOM.explorerResetBtn) {
     DOM.explorerResetBtn.addEventListener('click', () => {
@@ -273,11 +465,14 @@ function resetAllFilters() {
   explorerFilters.sort = 'tvl_desc';
 
   if (DOM.searchInput) DOM.searchInput.value = '';
-  if (DOM.filterNetwork) DOM.filterNetwork.value = 'all';
-  if (DOM.filterAsset) DOM.filterAsset.value = 'all';
-  if (DOM.filterCurator) DOM.filterCurator.value = 'all';
-  if (DOM.filterSort) DOM.filterSort.value = 'tvl_desc';
+  if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
 
+  updateDropdownUI('network', 'all');
+  updateDropdownUI('asset', 'all');
+  updateDropdownUI('curator', 'all');
+  updateDropdownUI('sort', 'tvl_desc');
+
+  closeAllDropdowns();
   sphere.highlightVault(null);
   renderVaultExplorer();
 }
@@ -322,13 +517,7 @@ function renderVaultExplorer() {
     explorerFilters.sort !== 'tvl_desc'
   );
 
-  if (DOM.explorerResetBtn) {
-    if (isFiltered) {
-      DOM.explorerResetBtn.classList.remove('hidden');
-    } else {
-      DOM.explorerResetBtn.classList.add('hidden');
-    }
-  }
+  updateActiveFilterChips();
 
   let results = allVaults.filter(v => {
     // 1. Text Query Filter
@@ -386,7 +575,11 @@ function renderVaultExplorer() {
   });
 
   if (DOM.explorerCount) {
-    DOM.explorerCount.textContent = `${results.length} Vaults`;
+    if (isFiltered) {
+      DOM.explorerCount.textContent = `${results.length} / ${allVaults.length} Vaults`;
+    } else {
+      DOM.explorerCount.textContent = `${results.length} Vaults`;
+    }
   }
 
   // 3D sphere highlighting
