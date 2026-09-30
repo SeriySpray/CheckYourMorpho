@@ -92,8 +92,7 @@ async function fetchPaginatedVaults(query, rootKey, where, pageSize) {
  * @param {object} options
  * @returns {Promise<any[]>}
  */
-export async function fetchAllVaults(chainIds = [1, 8453], options = {}) {
-  const minTvl = options.minTvlUsd ?? CONFIG.sync.minTvlUsd ?? 5000;
+export async function fetchAllVaults(chainIds = null, options = {}) {
   const query = `
     query GetVaults($first: Int!, $skip: Int!, $where: VaultFilters) {
       vaults(first: $first, skip: $skip, where: $where) {
@@ -167,19 +166,9 @@ export async function fetchAllVaults(chainIds = [1, 8453], options = {}) {
     }
   `;
 
+  // Strictly fetch only officially listed/published vaults from morpho.org
   const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-  const filterActive = { totalAssetsUsd_gte: minTvl, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-
-  const [listedItems, activeItems] = await Promise.all([
-    fetchPaginatedVaults(query, 'vaults', filterListed, 100),
-    fetchPaginatedVaults(query, 'vaults', filterActive, 100)
-  ]);
-
-  const vaultMap = new Map();
-  for (const item of [...listedItems, ...activeItems]) {
-    vaultMap.set(item.address.toLowerCase(), item);
-  }
-  return Array.from(vaultMap.values());
+  return await fetchPaginatedVaults(query, 'vaults', filterListed, 100);
 }
 
 /**
@@ -309,8 +298,7 @@ export async function fetchVaultV2AllocationTransactions(vaultAddress, chainId, 
  * @param {object} options
  * @returns {Promise<any[]>}
  */
-export async function fetchAllVaultV2s(chainIds = [1, 8453], options = {}) {
-  const minTvl = options.minTvlUsd ?? CONFIG.sync.minTvlUsd ?? 5000;
+export async function fetchAllVaultV2s(chainIds = null, options = {}) {
   const query = `
     query GetVaultV2s($first: Int!, $skip: Int!, $where: VaultV2sFilters) {
       vaultV2s(first: $first, skip: $skip, where: $where) {
@@ -364,17 +352,7 @@ export async function fetchAllVaultV2s(chainIds = [1, 8453], options = {}) {
     }
   `;
 
+  // Strictly fetch only officially listed/published V2 vaults from morpho.org (pageSize: 25 to respect query complexity limits)
   const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-  const filterActive = { totalAssetsUsd_gte: minTvl, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-
-  const [listedItems, activeItems] = await Promise.all([
-    fetchPaginatedVaults(query, 'vaultV2s', filterListed, 25),
-    fetchPaginatedVaults(query, 'vaultV2s', filterActive, 25)
-  ]);
-
-  const vaultMap = new Map();
-  for (const item of [...listedItems, ...activeItems]) {
-    vaultMap.set(item.address.toLowerCase(), item);
-  }
-  return Array.from(vaultMap.values());
+  return await fetchPaginatedVaults(query, 'vaultV2s', filterListed, 25);
 }

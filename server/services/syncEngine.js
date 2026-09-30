@@ -247,24 +247,38 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
 
   console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
 
-  // --- Clean up unlisted dust (< $5000) from database ---
-  console.log('[SyncEngine] Purging unlisted dust (< $5000) from database...');
+  // --- Clean up unlisted vaults & orphan data from database ---
+  console.log('[SyncEngine] Purging unlisted vaults and orphan data from database...');
   db.exec(`
-    DELETE FROM vaults WHERE total_assets_usd < 5000 AND (is_listed = 0 OR is_listed IS NULL);
+    DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL;
     DELETE FROM vault_allocations WHERE vault_address NOT IN (SELECT address FROM vaults);
+    DELETE FROM reallocations WHERE vault_address NOT IN (SELECT address FROM vaults);
+    DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
   `);
 
-  // --- STEP 3: Fetch reallocation history for all active vaults (V1 & V2) ---
+  // --- STEP 3: Fetch reallocation history exclusively for published vaults on the site ---
   let reallocationsCount = 0;
   if (options.fetchHistoryForTop && topVaultsForHistory.length > 0) {
-    console.log(`[SyncEngine] Fetching reallocation history for ${topVaultsForHistory.length} active vaults (V1 & V2)...`);
-    for (const v of topVaultsForHistory) {
+    // Prioritize largest vaults by TVL
+    topVaultsForHistory.sort((a, b) => (b.total_assets_usd || 0) - (a.total_assets_usd || 0));
+
+    // Only process vaults with active capital or existing allocations
+    const activeVaultsToProcess = topVaultsForHistory.filter(v => (v.total_assets_usd || 0) > 100 || v.is_listed);
+    console.log(`[SyncEngine] Fetching reallocation history for ${activeVaultsToProcess.length} published vaults...`);
+
+    const checkExistingCount = db.prepare('SELECT count(*) as c FROM reallocations WHERE vault_address = ?');
+
+    for (const v of activeVaultsToProcess) {
       try {
+        const existingCount = checkExistingCount.get(v.address)?.c || 0;
+        // If already in DB, fetch the latest 30 transactions to capture updates quickly; if fresh, fetch up to 200
+        const fetchLimit = existingCount > 0 ? 30 : 200;
+
         let rawEvents = [];
         if (v.version === 'v2') {
-          rawEvents = await fetchVaultV2AllocationTransactions(v.address, v.chain_id, 200);
+          rawEvents = await fetchVaultV2AllocationTransactions(v.address, v.chain_id, fetchLimit);
         } else {
-          rawEvents = await fetchVaultReallocates(v.address, 200);
+          rawEvents = await fetchVaultReallocates(v.address, fetchLimit);
         }
 
         if (rawEvents.length > 0) {
@@ -294,7 +308,7 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
   console.log(`- V2 Vaults: ${v2Count}`);
   console.log(`- Markets: ${marketsCount}`);
   console.log(`- Allocations: ${allocationsCount}`);
-  console.log(`- Reallocations recorded: ${reallocationsCount}`);
+  console.log(`- Reallocations processed: ${reallocationsCount}`);
 
   return {
     v1Count,
@@ -308,7 +322,7 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
 
 // Allow direct CLI execution
 if (process.argv[1] && process.argv[1].endsWith('syncEngine.js')) {
-  syncAllVaults({ fetchHistoryForTop: true, minAssetsUsdForHistory: 50000 })
+  syncAllVaults({ fetchHistoryForTop: true, minAssetsUsdForHistory: 100 })
     .then(() => process.exit(0))
     .catch((err) => {
       console.error('[SyncEngine] Fatal error during sync:', err);
