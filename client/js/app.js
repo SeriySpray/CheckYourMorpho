@@ -28,6 +28,10 @@ const DOM = {
   closeBtn: document.getElementById('modal-close-btn'),
   modalMarketsTabCount: document.getElementById('modal-markets-tab-count'),
 
+  // Prime Top Vaults Terminal (Left-side 440px)
+  topVaultsWidget: document.getElementById('top-vaults-widget'),
+  topVaultsList: document.getElementById('top-vaults-list'),
+
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
@@ -95,6 +99,11 @@ async function initApp() {
     },
     onVaultHover: (vault, particle) => {
       handleParticleHover(vault, particle);
+    },
+    onLogoClick: () => {
+      if (selectedVaultAddress || !DOM.auditModal.classList.contains('hidden')) {
+        closeVaultAudit();
+      }
     }
   });
   window.sphere = sphere;
@@ -114,6 +123,7 @@ async function initApp() {
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
     sphere.setVaults(allVaults);
     renderVaultExplorer();
+    renderTopVaults();
   } catch (err) {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
@@ -649,6 +659,104 @@ function renderVaultExplorer() {
   DOM.explorerVaultsList.appendChild(fragment);
 }
 
+/**
+ * Renders the Left-Side Prime Top Vaults list ranked by composite institutional score.
+ */
+function renderTopVaults() {
+  if (!DOM.topVaultsList || allVaults.length === 0) return;
+
+  // Evaluate candidate vaults with TVL > $100k
+  const candidates = allVaults.filter(v => (v.totalAssetsUsd || 0) > 100000);
+
+  const scored = candidates.map(v => {
+    const tvl = Number(v.totalAssetsUsd) || 0;
+    const apy = Number(v.netApy) || 0;
+    const mqi = Number(v.mqiPercent ?? 100);
+    const isClean = Boolean(v.isAllClean ?? (mqi === 100));
+    const hhi = Number(v.hhi) || 0;
+    const hhiTier = v.hhiTier || 'DIVERSIFIED';
+
+    // 1. Cleanliness penalty (40 pts)
+    let score = 0;
+    if (isClean && mqi === 100) score += 40;
+    else score += (mqi / 100) * 15;
+
+    // 2. TVL scale (battle-tested volume, max 25 pts)
+    const tvlScore = Math.min(25, Math.max(0, (Math.log10(tvl) - 5) * 8));
+    score += tvlScore;
+
+    // 3. Diversification (HHI, max 15 pts)
+    if (hhiTier === 'DIVERSIFIED') score += 15;
+    else if (hhiTier === 'MODERATE') score += 12;
+    else if (hhiTier === 'CONCENTRATED') score += 8;
+    else score += 4;
+
+    // 4. Net APY bonus (max 10 pts)
+    const apyScore = Math.min(10, Math.max(0, apy * 100));
+    score += apyScore;
+
+    // 5. Liquidity / Exit capacity (max 10 pts)
+    const liq = Number(v.liquidityUsd) || 0;
+    const exitPct = Math.min(100, Math.max(0, (liq / (tvl || 1)) * 100));
+    score += Math.min(10, (exitPct / 100) * 10);
+
+    return { vault: v, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const topVaults = scored.slice(0, 6).map(s => s.vault);
+
+  DOM.topVaultsList.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+
+  topVaults.forEach((v, index) => {
+    const li = document.createElement('li');
+    li.className = 'top-vault-item';
+    li.setAttribute('data-address', v.address);
+
+    const chainName = formatChainName(v.chainId);
+    const chainClass = getChainClass(v.chainId);
+    const assetSym = v.asset?.symbol || '';
+    const curator = formatCuratorName(v.curatorName, v.name);
+    const tvl = v.totalAssetsUsd || v.liquidityUsd || 0;
+    const apy = v.netApy || 0;
+
+    li.innerHTML = `
+      <span class="top-vault-rank rank-${index + 1}">#${index + 1}</span>
+      <div class="top-vault-info">
+        <div class="top-vault-name-row">
+          <span class="vault-chain-badge ${chainClass}">${chainName}</span>
+          <span class="top-vault-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
+        </div>
+        <span class="top-vault-meta">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong></span>
+      </div>
+      <div class="top-vault-metrics">
+        <span class="top-vault-apy">${(apy * 100).toFixed(2)}% APY</span>
+        <span class="top-vault-tvl">${formatCurrency(tvl)}</span>
+      </div>
+    `;
+
+    li.addEventListener('mouseenter', () => {
+      sphere.highlightVault(v.address);
+    });
+
+    li.addEventListener('mouseleave', () => {
+      if (!explorerFilters.query) {
+        sphere.highlightVault(null);
+      }
+    });
+
+    li.addEventListener('click', () => {
+      const pos = sphere.getParticleScreenPos(v.address);
+      openVaultAudit(v, pos);
+    });
+
+    fragment.appendChild(li);
+  });
+
+  DOM.topVaultsList.appendChild(fragment);
+}
+
 let isTransitioningVault = false;
 const clientAuditCache = new Map();
 
@@ -747,6 +855,11 @@ async function openVaultAudit(vault, startPos) {
   }
 
   isTransitioningVault = true;
+
+  // Immediately hide left top vaults widget during any vault opening or transition
+  if (DOM.topVaultsWidget) {
+    DOM.topVaultsWidget.classList.add('hidden');
+  }
 
   // Target coordinates for Left Floating Terminal
   const targetLeft = 20;
@@ -940,6 +1053,11 @@ function closeVaultAudit() {
       sphere.setSelectedVault(null);
       sphere.highlightVault(null);
       isTransitioningVault = false;
+
+      // Only reveal top vaults widget if no vault is currently open and transition has completed
+      if (!selectedVaultAddress && DOM.topVaultsWidget) {
+        DOM.topVaultsWidget.classList.remove('hidden');
+      }
     }, 450);
   }, 210);
 }
@@ -1020,7 +1138,7 @@ function populateAuditModal(data) {
 
   if (DOM.riskHhiVal) {
     if (isUnallocated) {
-      DOM.riskHhiVal.textContent = `N/A (${verdict.hhi?.tierLabel || '100% Cash'})`;
+      DOM.riskHhiVal.textContent = 'N/A';
     } else {
       DOM.riskHhiVal.textContent = `${hhiVal} (${verdict.hhi?.tierLabel || 'HHI'})`;
     }
@@ -1031,7 +1149,7 @@ function populateAuditModal(data) {
   }
   if (DOM.riskHhiDesc) {
     if (isUnallocated) {
-      DOM.riskHhiDesc.textContent = 'Всі кошти у вільному кеші; позики та застава відсутні.';
+      DOM.riskHhiDesc.textContent = 'No active collateral backing';
     } else {
       const top = verdict.hhi?.topCollateral;
       DOM.riskHhiDesc.textContent = top && top.symbol !== 'None'
@@ -1055,7 +1173,7 @@ function populateAuditModal(data) {
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
     if (isUnallocated) {
-      DOM.riskEffectiveAssets.textContent = '0 Effective Assets (Немає застави)';
+      DOM.riskEffectiveAssets.textContent = '0 Effective Assets';
     } else {
       DOM.riskEffectiveAssets.textContent = `${verdict.hhi?.effectiveAssets ?? 0} Effective Assets`;
     }

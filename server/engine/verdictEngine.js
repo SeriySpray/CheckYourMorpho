@@ -62,7 +62,7 @@ export function generateVaultVerdict(vault, allocations = []) {
 
   // 5. Plaintext Objective Summary
   let summary = hhi.tier === 'UNALLOCATED'
-    ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: Немає застави (100% кеш). Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`
+    ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: N/A. Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`
     : `MQI: ${mqi.mqiPercent}% clean capital. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`;
 
   return {

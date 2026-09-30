@@ -276,6 +276,7 @@ export class ParticleSphere {
     this.selectedVaultAddress = null;
     this.onVaultSelect = options.onVaultSelect || null;
     this.onVaultHover = options.onVaultHover || null;
+    this.onLogoClick = options.onLogoClick || null;
 
     this.animFrameId = null;
 
@@ -649,16 +650,29 @@ export class ParticleSphere {
       this.isDragging = false;
     });
 
-    // Click on particle: opens audit dashboard
+    // Click on particle or central Morpho logo
     this.canvas.addEventListener('click', (e) => {
       if (this.dragDistance > 6) return;
+
+      const rect = this.canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Check click on central Morpho logo
+      const distToCenter = Math.hypot(clickX - this.cx, clickY - this.cy);
+      const baseLogoSize = Math.min(72, Math.min(this.width, this.height) * 0.10);
+      const logoHitRadius = Math.max(36, baseLogoSize * 0.85);
+
+      if (distToCenter <= logoHitRadius) {
+        if (this.onLogoClick) {
+          this.onLogoClick();
+          return;
+        }
+      }
 
       let targetParticle = this.hoveredParticle;
 
       if (!targetParticle) {
-        const rect = this.canvas.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
-        const clickY = e.clientY - rect.top;
         let minD = 24;
         for (const p of this.vaultParticles) {
           if (p.zFinal > -0.2) {
@@ -841,8 +855,24 @@ export class ParticleSphere {
       }
     }
 
+    // Check if mouse is hovering over central Morpho logo
+    const distToCenter = Math.hypot(this.mouseX - this.cx, this.mouseY - this.cy);
+    const baseLogoSize = Math.min(72, Math.min(this.width, this.height) * 0.10);
+    const logoHitRadius = Math.max(36, baseLogoSize * 0.85);
+    const isHoveringLogo = distToCenter <= logoHitRadius;
+
+    this.isHoveringLogo = isHoveringLogo;
     this.hoveredParticle = closestParticle;
-    this.canvas.style.cursor = this.isDragging ? 'grabbing' : 'grab';
+
+    if (this.isDragging) {
+      this.canvas.style.cursor = 'grabbing';
+    } else if (isHoveringLogo) {
+      this.canvas.style.cursor = 'pointer';
+    } else if (closestParticle) {
+      this.canvas.style.cursor = 'pointer';
+    } else {
+      this.canvas.style.cursor = 'grab';
+    }
 
     // --- 4. WebGL Render Pass (0% CPU Lag, Single Hardware Draw Call) ---
     if (gl) {

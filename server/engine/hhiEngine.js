@@ -57,20 +57,14 @@ export function calculateHHI(vault, allocations = []) {
       hhi: 0,
       effectiveAssets: 0,
       tier: 'UNALLOCATED',
-      tierLabel: 'Немає застави (100% кеш)',
+      tierLabel: 'N/A',
       isExtremeConcentration: false,
       topCollateral: {
-        symbol: 'CASH (UNALLOCATED)',
-        sharePercent: 100,
-        usd: Math.max(0, Math.round(totalAssetsUsd * 100) / 100)
+        symbol: 'None',
+        sharePercent: 0,
+        usd: 0
       },
-      breakdown: [
-        {
-          symbol: 'CASH (UNALLOCATED)',
-          usd: Math.max(0, Math.round(totalAssetsUsd * 100) / 100),
-          sharePercent: 100
-        }
-      ]
+      breakdown: []
     };
   }
 
@@ -98,16 +92,6 @@ export function calculateHHI(vault, allocations = []) {
   const topCollatSymbol = sortedCollateral[0][0];
   const topCollatUsd = sortedCollateral[0][1];
   const topCollatShare = Math.max(0, Math.min(100, Math.round((topCollatUsd / totalAssetsUsd) * 1000) / 10));
-
-  // If there is cash or idle buffer, add CASH (UNALLOCATED) to breakdown
-  const cashShare = Math.max(0, Math.min(1.0, unallocatedCashUsd / totalAssetsUsd));
-  if (cashShare > 0.005) {
-    breakdown.push({
-      symbol: 'CASH (UNALLOCATED)',
-      usd: Math.round(unallocatedCashUsd * 100) / 100,
-      sharePercent: Math.round(cashShare * 1000) / 10
-    });
-  }
 
   // Sort breakdown descending by share of vault capital
   breakdown.sort((a, b) => b.sharePercent - a.sharePercent);
