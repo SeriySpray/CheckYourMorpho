@@ -242,19 +242,19 @@ function setFilterValue(filterKey, value) {
 
 /**
  * Renders active filter tags and controls in the active chips toolbar.
+ * Search query is managed exclusively in the search input and does not appear as a filter chip.
  */
 function updateActiveFilterChips() {
   if (!DOM.activeFilterChips || !DOM.chipsContainer) return;
 
-  const isFiltered = Boolean(
-    explorerFilters.query ||
+  const hasActiveFilters = Boolean(
     explorerFilters.network !== 'all' ||
     explorerFilters.asset !== 'all' ||
     explorerFilters.curator !== 'all' ||
     explorerFilters.sort !== 'tvl_desc'
   );
 
-  if (!isFiltered) {
+  if (!hasActiveFilters) {
     DOM.activeFilterChips.classList.add('hidden');
     DOM.chipsContainer.innerHTML = '';
     return;
@@ -262,15 +262,6 @@ function updateActiveFilterChips() {
 
   DOM.activeFilterChips.classList.remove('hidden');
   let chipsHtml = '';
-
-  if (explorerFilters.query) {
-    chipsHtml += `
-      <span class="filter-chip" data-type="query">
-        <span class="chip-label">"${escapeHtml(explorerFilters.query)}"</span>
-        <button type="button" class="chip-remove" data-clear="query" aria-label="Remove search filter" title="Remove">&times;</button>
-      </span>
-    `;
-  }
 
   if (explorerFilters.network !== 'all') {
     const chainName = formatChainName(parseInt(explorerFilters.network, 10));
@@ -330,11 +321,7 @@ function updateActiveFilterChips() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const toClear = btn.getAttribute('data-clear');
-      if (toClear === 'query') {
-        if (DOM.searchInput) DOM.searchInput.value = '';
-        if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
-        explorerFilters.query = '';
-      } else if (toClear === 'sort') {
+      if (toClear === 'sort') {
         explorerFilters.sort = 'tvl_desc';
         updateDropdownUI('sort', 'tvl_desc');
       } else {
@@ -452,20 +439,16 @@ function setupVaultExplorerEvents() {
 
   if (DOM.explorerResetBtn) {
     DOM.explorerResetBtn.addEventListener('click', () => {
-      resetAllFilters();
+      resetDropdownFilters();
     });
   }
 }
 
-function resetAllFilters() {
-  explorerFilters.query = '';
+function resetDropdownFilters() {
   explorerFilters.network = 'all';
   explorerFilters.asset = 'all';
   explorerFilters.curator = 'all';
   explorerFilters.sort = 'tvl_desc';
-
-  if (DOM.searchInput) DOM.searchInput.value = '';
-  if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
 
   updateDropdownUI('network', 'all');
   updateDropdownUI('asset', 'all');
@@ -473,8 +456,16 @@ function resetAllFilters() {
   updateDropdownUI('sort', 'tvl_desc');
 
   closeAllDropdowns();
-  sphere.highlightVault(null);
   renderVaultExplorer();
+}
+
+function resetAllFilters() {
+  explorerFilters.query = '';
+  if (DOM.searchInput) DOM.searchInput.value = '';
+  if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
+
+  resetDropdownFilters();
+  sphere.highlightVault(null);
 }
 
 function matchesAssetFilter(assetSym, filter) {
