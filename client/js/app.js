@@ -23,8 +23,9 @@ const DOM = {
   ttApy: document.getElementById('tt-apy'),
   morphProxy: document.getElementById('morph-proxy'),
   auditModal: document.getElementById('audit-modal'),
-  modalBackdrop: document.getElementById('modal-backdrop'),
+  auditPanelBody: document.getElementById('audit-panel-body'),
   closeBtn: document.getElementById('modal-close-btn'),
+  modalMarketsTabCount: document.getElementById('modal-markets-tab-count'),
 
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
@@ -101,6 +102,7 @@ async function initApp() {
   // 2. Bind UI Events
   setupVaultExplorerEvents();
   setupModalEvents();
+  setupAuditNavTabs();
   setupPanelTabEvents();
 
   // 3. Fetch Vaults from REST API
@@ -631,44 +633,81 @@ function renderVaultExplorer() {
 }
 
 /**
- * Executes the particle morphing flight and window expansion sequence (Photo 1 & 2).
+ * Executes the smooth particle morphing flight from the 3D sphere into the Left Floating Terminal.
  */
 async function openVaultAudit(vault, startPos) {
   selectedVaultAddress = vault.address;
   DOM.tooltip.classList.add('hidden');
-  if (DOM.vaultExplorerWidget) {
-    DOM.vaultExplorerWidget.classList.add('hidden');
+
+  // Highlight selected vault particle on the 3D sphere
+  sphere.highlightVault(vault.address);
+
+  // If the left audit terminal is ALREADY open, smoothly crossfade content
+  const isAlreadyOpen = !DOM.auditModal.classList.contains('hidden');
+  if (isAlreadyOpen) {
+    if (DOM.auditPanelBody) DOM.auditPanelBody.style.opacity = '0.4';
+    try {
+      const res = await fetch(`/api/vaults/${vault.address}`);
+      if (!res.ok) throw new Error('Vault audit data not found');
+      const data = await res.json();
+      activeAuditData = data;
+      populateAuditModal(data);
+      if (DOM.auditPanelBody) DOM.auditPanelBody.style.opacity = '1';
+    } catch (err) {
+      console.error('Error fetching vault audit:', err);
+      if (DOM.auditPanelBody) DOM.auditPanelBody.style.opacity = '1';
+    }
+    return;
   }
 
-  const startX = startPos ? startPos.x : window.innerWidth / 2;
-  const startY = startPos ? startPos.y : window.innerHeight / 2;
-  const targetX = window.innerWidth / 2;
-  const targetY = window.innerHeight / 2;
+  // Target coordinates for Left Floating Terminal
+  const targetLeft = 20;
+  const targetTop = 18;
+  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetHeight = window.innerHeight - 36;
+  const targetCenterX = targetLeft + targetWidth / 2;
+  const targetCenterY = targetTop + targetHeight / 2;
+
+  // Determine starting coordinate from sphere particle
+  let startX = startPos ? startPos.x : null;
+  let startY = startPos ? startPos.y : null;
+  if (!startX || !startY) {
+    const pPos = sphere.getParticleScreenPos(vault.address);
+    if (pPos) {
+      startX = pPos.x;
+      startY = pPos.y;
+    } else {
+      startX = window.innerWidth * 0.45;
+      startY = window.innerHeight * 0.5;
+    }
+  }
 
   // 1. Position morph proxy at particle coordinate
   DOM.morphProxy.style.transition = 'none';
   DOM.morphProxy.style.left = `${startX}px`;
   DOM.morphProxy.style.top = `${startY}px`;
-  DOM.morphProxy.style.width = '10px';
-  DOM.morphProxy.style.height = '10px';
+  DOM.morphProxy.style.width = '12px';
+  DOM.morphProxy.style.height = '12px';
   DOM.morphProxy.style.borderRadius = '50%';
   DOM.morphProxy.style.opacity = '1';
+  DOM.morphProxy.style.background = '#2470ff';
+  DOM.morphProxy.style.border = '1px solid #ffffff';
+  DOM.morphProxy.style.boxShadow = '0 0 32px #00d2ff, 0 0 60px rgba(36, 112, 255, 0.8)';
   DOM.morphProxy.classList.remove('hidden');
 
-  // 2. Shrink and blur the background 3D sphere
-  DOM.sphereWrapper.classList.add('shrunk');
-
-  // 3. Force reflow and start flight + morph animation towards center
+  // 2. Reflow and start slow, fluid glide towards the left side
   DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 450ms cubic-bezier(0.16, 1, 0.3, 1)';
-  DOM.morphProxy.style.left = `${targetX}px`;
-  DOM.morphProxy.style.top = `${targetY}px`;
-  DOM.morphProxy.style.width = '160px';
-  DOM.morphProxy.style.height = '100px';
-  DOM.morphProxy.style.borderRadius = '16px';
-  DOM.morphProxy.style.opacity = '0.9';
+  DOM.morphProxy.style.transition = 'all 720ms cubic-bezier(0.16, 1, 0.3, 1)';
+  DOM.morphProxy.style.left = `${targetCenterX}px`;
+  DOM.morphProxy.style.top = `${targetCenterY}px`;
+  DOM.morphProxy.style.width = `${targetWidth}px`;
+  DOM.morphProxy.style.height = `${targetHeight}px`;
+  DOM.morphProxy.style.borderRadius = '20px';
+  DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
+  DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+  DOM.morphProxy.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(36, 112, 255, 0.2)';
 
-  // 4. Fetch full audit report from backend API
+  // 3. Concurrently fetch audit data from REST API
   try {
     const res = await fetch(`/api/vaults/${vault.address}`);
     if (!res.ok) throw new Error('Vault audit data not found');
@@ -677,12 +716,12 @@ async function openVaultAudit(vault, startPos) {
 
     populateAuditModal(data);
 
-    // 5. Reveal audit modal panels unfolding from center
+    // 4. Reveal Left Terminal in sync with morph completion
     setTimeout(() => {
       DOM.auditModal.classList.remove('hidden');
       DOM.morphProxy.style.opacity = '0';
       setTimeout(() => DOM.morphProxy.classList.add('hidden'), 300);
-    }, 380);
+    }, 640);
 
   } catch (err) {
     console.error('Error fetching vault audit:', err);
@@ -691,49 +730,53 @@ async function openVaultAudit(vault, startPos) {
 }
 
 /**
- * Reverses the morphing animation: collapses panels back into particle and returns to sphere.
+ * Reverses the morphing animation: collapses left panel back into particle on the 3D sphere.
  */
 function closeVaultAudit() {
   if (DOM.auditModal.classList.contains('hidden')) return;
 
-  const targetPos = sphere.getParticleScreenPos(selectedVaultAddress);
-  const centerX = window.innerWidth / 2;
-  const centerY = window.innerHeight / 2;
+  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetHeight = window.innerHeight - 36;
+  const targetCenterX = 20 + targetWidth / 2;
+  const targetCenterY = 18 + targetHeight / 2;
 
-  // 1. Hide modal dashboard
+  // 1. Hide left audit terminal
   DOM.auditModal.classList.add('hidden');
-  if (DOM.vaultExplorerWidget) {
-    DOM.vaultExplorerWidget.classList.remove('hidden');
-  }
 
-  // 2. Spawn morph proxy in center
+  // 2. Spawn morph proxy in left terminal bounds
   DOM.morphProxy.style.transition = 'none';
-  DOM.morphProxy.style.left = `${centerX}px`;
-  DOM.morphProxy.style.top = `${centerY}px`;
-  DOM.morphProxy.style.width = '160px';
-  DOM.morphProxy.style.height = '100px';
-  DOM.morphProxy.style.borderRadius = '16px';
-  DOM.morphProxy.style.opacity = '0.85';
+  DOM.morphProxy.style.left = `${targetCenterX}px`;
+  DOM.morphProxy.style.top = `${targetCenterY}px`;
+  DOM.morphProxy.style.width = `${targetWidth}px`;
+  DOM.morphProxy.style.height = `${targetHeight}px`;
+  DOM.morphProxy.style.borderRadius = '20px';
+  DOM.morphProxy.style.opacity = '0.9';
+  DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
+  DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
   DOM.morphProxy.classList.remove('hidden');
 
-  // 3. Force reflow, then fly back to particle coordinates on the sphere
+  // 3. Determine return coordinates of the particle on the 3D sphere
+  let particlePos = selectedVaultAddress ? sphere.getParticleScreenPos(selectedVaultAddress) : null;
+  if (!particlePos) {
+    particlePos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
+  }
+
+  // 4. Force reflow, then glide back to particle
   DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 400ms cubic-bezier(0.16, 1, 0.3, 1)';
-  DOM.morphProxy.style.left = `${targetPos.x}px`;
-  DOM.morphProxy.style.top = `${targetPos.y}px`;
-  DOM.morphProxy.style.width = '8px';
-  DOM.morphProxy.style.height = '8px';
+  DOM.morphProxy.style.transition = 'all 620ms cubic-bezier(0.16, 1, 0.3, 1)';
+  DOM.morphProxy.style.left = `${particlePos.x}px`;
+  DOM.morphProxy.style.top = `${particlePos.y}px`;
+  DOM.morphProxy.style.width = '12px';
+  DOM.morphProxy.style.height = '12px';
   DOM.morphProxy.style.borderRadius = '50%';
   DOM.morphProxy.style.opacity = '0.2';
-
-  // 4. Restore background sphere to normal scale
-  DOM.sphereWrapper.classList.remove('shrunk');
+  DOM.morphProxy.style.background = '#2470ff';
 
   setTimeout(() => {
     DOM.morphProxy.classList.add('hidden');
     selectedVaultAddress = null;
     sphere.highlightVault(null);
-  }, 420);
+  }, 620);
 }
 
 /**
@@ -837,6 +880,21 @@ function populateAuditModal(data) {
   // --- PANEL 3: MARKETS & REALLOCATIONS ---
   DOM.modalMarketsCount.textContent = allocations.length;
   DOM.modalReallocsCount.textContent = reallocations.length;
+  if (DOM.modalMarketsTabCount) {
+    DOM.modalMarketsTabCount.textContent = allocations.length;
+  }
+
+  // Reset mini-tabs to Overview
+  const navTabs = document.querySelectorAll('.audit-nav-tab');
+  const navPanels = document.querySelectorAll('.audit-tab-panel');
+  navTabs.forEach(t => {
+    const isOverview = t.dataset.tab === 'tab-overview';
+    t.classList.toggle('active', isOverview);
+    t.setAttribute('aria-selected', isOverview ? 'true' : 'false');
+  });
+  navPanels.forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-overview');
+  });
 
   // Populate Allocations Table
   DOM.allocationsTbody.innerHTML = '';
@@ -888,13 +946,39 @@ function populateAuditModal(data) {
  * Sets up listeners for modal open/close actions.
  */
 function setupModalEvents() {
-  DOM.closeBtn.addEventListener('click', closeVaultAudit);
-  DOM.modalBackdrop.addEventListener('click', closeVaultAudit);
+  if (DOM.closeBtn) DOM.closeBtn.addEventListener('click', closeVaultAudit);
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !DOM.auditModal.classList.contains('hidden')) {
       closeVaultAudit();
     }
+  });
+}
+
+/**
+ * Sets up mini-tabs navigation inside the left audit terminal (Overview / Risk & Exit / Markets).
+ */
+function setupAuditNavTabs() {
+  const tabs = document.querySelectorAll('.audit-nav-tab');
+  const panels = document.querySelectorAll('.audit-tab-panel');
+  if (!tabs.length) return;
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetId = tab.dataset.tab;
+      tabs.forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      panels.forEach(p => p.classList.remove('active'));
+
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      const targetPanel = document.getElementById(targetId);
+      if (targetPanel) {
+        targetPanel.classList.add('active');
+      }
+    });
   });
 }
 

@@ -245,208 +245,215 @@
   <!-- Morphing Flying Proxy Element -->
   <div id="morph-proxy" class="morph-proxy hidden"></div>
 
-  <!-- Audit Modal Overlay (Morphs from the particle) -->
-  <div id="audit-modal" class="audit-modal hidden">
-    <div class="modal-backdrop" id="modal-backdrop"></div>
-
-    <div class="audit-dashboard" id="audit-dashboard">
-      <!-- Close Button -->
-      <button class="close-btn" id="modal-close-btn" aria-label="Close Audit View">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"></path>
-        </svg>
-      </button>
-
-      <!-- Grid of 3 Information Panels according to Reference Drawing -->
-      <div class="dashboard-grid">
-
-        <!-- PANEL 1: Main Overview & Protocol Architecture (Top Left) -->
-        <section class="panel panel-main" id="panel-main">
-          <div class="panel-header">
-            <div class="vault-identity">
-              <div class="vault-badges">
-                <span class="badge badge-chain" id="modal-chain-badge">ETHEREUM</span>
-                <span class="badge badge-version" id="modal-version-badge">V2</span>
-                <span class="badge badge-listed" id="modal-listed-badge">LISTED</span>
-              </div>
-              <h1 class="vault-name" id="modal-vault-name">Steakhouse Prime USDC</h1>
-              <div class="vault-curator">Curated by <span id="modal-curator-name">Steakhouse</span></div>
-            </div>
-
-            <div class="safety-score-pill" id="modal-score-pill">
-              <div class="score-label">SAFETY SCORE</div>
-              <div class="score-value-row">
-                <span class="score-grade" id="modal-grade">AAA</span>
-                <span class="score-number" id="modal-score">92/100</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Key Financial Highlights Row -->
-          <div class="financials-row">
-            <div class="fin-card">
-              <span class="fin-label">TOTAL VALUE LOCKED</span>
-              <span class="fin-value" id="modal-tvl">$0.00</span>
-              <span class="fin-sub" id="modal-assets-human">0.00 USDC</span>
-            </div>
-            <div class="fin-card">
-              <span class="fin-label">FREE LIQUIDITY</span>
-              <span class="fin-value" id="modal-liq">$0.00</span>
-              <span class="fin-sub highlight" id="modal-exit-cap-pct">0% Exit Cap</span>
-            </div>
-            <div class="fin-card">
-              <span class="fin-label">NET APY</span>
-              <span class="fin-value green" id="modal-net-apy">0.00%</span>
-              <span class="fin-sub" id="modal-fee">Fee: 0%</span>
-            </div>
-          </div>
-
-          <!-- Vault Protocol Architecture & Specifications -->
-          <div class="vault-specs-section">
-            <div class="specs-header">
-              <span class="specs-title">VAULT ARCHITECTURE & SPECIFICATIONS</span>
-            </div>
-            <div class="specs-grid">
-              <div class="spec-card">
-                <span class="spec-label">Underlying Loan Asset</span>
-                <span class="spec-value" id="modal-spec-asset">USDC</span>
-                <span class="spec-sub" id="modal-spec-asset-addr">0x...</span>
-              </div>
-              <div class="spec-card">
-                <span class="spec-label">Active Markets</span>
-                <span class="spec-value" id="modal-spec-markets">0 Markets</span>
-                <span class="spec-sub">Supplied Credit Pools</span>
-              </div>
-              <div class="spec-card">
-                <span class="spec-label">Curator Fee</span>
-                <span class="spec-value" id="modal-spec-fee">0.0%</span>
-                <span class="spec-sub">Annual Performance</span>
-              </div>
-              <div class="spec-card">
-                <span class="spec-label">Contract Address</span>
-                <span class="spec-value mono" id="modal-spec-address">0x0000...0000</span>
-                <span class="spec-sub" id="modal-spec-chain">Ethereum Mainnet</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- PANEL 2: Risk Profile, Exit Capacity & Red Flags (Top Right) -->
-        <section class="panel panel-risk" id="panel-risk">
-          <div class="panel-section-title">RISK & LIQUIDITY AUDIT</div>
-
-          <!-- Instant Exit Capacity Meter -->
-          <div class="meter-box">
-            <div class="meter-header">
-              <span class="meter-label">Instant Exit Capacity</span>
-              <span class="meter-value" id="risk-exit-pct">0%</span>
-            </div>
-            <div class="meter-track">
-              <div class="meter-fill" id="risk-exit-bar" style="width: 0%;"></div>
-            </div>
-            <div class="meter-desc" id="risk-exit-desc">Available to withdraw without liquidity lockup</div>
-          </div>
-
-          <!-- Market Dominance Meter -->
-          <div class="meter-box">
-            <div class="meter-header">
-              <span class="meter-label">Max Market Dominance</span>
-              <span class="meter-value" id="risk-dom-pct">0%</span>
-            </div>
-            <div class="meter-track">
-              <div class="meter-fill yellow" id="risk-dom-bar" style="width: 0%;"></div>
-            </div>
-            <div class="meter-desc" id="risk-dom-desc">Portion of largest market supplied by this vault</div>
-          </div>
-
-          <!-- Time-Weighted Risk (TWR) Metrics -->
-          <div class="twr-metrics-grid">
-            <div class="twr-card">
-              <span class="twr-label">TWR 30D</span>
-              <span class="twr-val" id="risk-twr-30d">0.0</span>
-            </div>
-            <div class="twr-card">
-              <span class="twr-label">TWR 90D</span>
-              <span class="twr-val" id="risk-twr-90d">0.0</span>
-            </div>
-            <div class="twr-card">
-              <span class="twr-label">All-Time</span>
-              <span class="twr-val" id="risk-twr-all">0.0</span>
-            </div>
-          </div>
-
-          <!-- Curator Track Record & Discipline -->
-          <div class="curator-audit-box">
-            <div class="curator-audit-header">
-              <span class="curator-audit-title">Curator Track Record</span>
-              <span class="discipline-badge" id="risk-discipline-score">85/100 Score</span>
-            </div>
-            <div class="curator-meta">
-              <span id="risk-reallocs-count">0 reallocations indexed</span>
-              <span id="risk-spikes-count">0 peak spikes detected</span>
-            </div>
-          </div>
-
-          <!-- Synthesized Red Flags Warnings List -->
-          <div class="red-flags-section">
-            <div class="red-flags-header">AUDIT FLAGS</div>
-            <div class="flags-container" id="risk-flags-list">
-              <div class="flag-item clear">No critical risk flags detected for this vault.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- PANEL 3: Underlying Markets & Reallocation Timeline (Bottom Full Width) -->
-        <section class="panel panel-markets" id="panel-markets">
-          <div class="sub-tabs-bar">
-            <button class="sub-tab active" data-target="tab-allocations">Underlying Markets (<span id="modal-markets-count">0</span>)</button>
-            <button class="sub-tab" data-target="tab-reallocations">Curator Reallocations (<span id="modal-reallocs-count">0</span>)</button>
-          </div>
-
-          <!-- Sub-Tab 1: Allocations Table -->
-          <div class="sub-tab-content active" id="tab-allocations">
-            <div class="table-wrapper">
-              <table class="data-table" id="allocations-table">
-                <thead>
-                  <tr>
-                    <th>Collateral</th>
-                    <th>Loan Token</th>
-                    <th>LLTV</th>
-                    <th>Weight</th>
-                    <th>Supplied</th>
-                    <th>Free Liquidity</th>
-                    <th>Utilization</th>
-                    <th>Supply APY</th>
-                  </tr>
-                </thead>
-                <tbody id="allocations-tbody"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Sub-Tab 2: Reallocations Timeline -->
-          <div class="sub-tab-content" id="tab-reallocations">
-            <div class="table-wrapper">
-              <table class="data-table" id="reallocations-table">
-                <thead>
-                  <tr>
-                    <th>Date / Time</th>
-                    <th>Action</th>
-                    <th>Collateral</th>
-                    <th>LLTV</th>
-                    <th>Amount</th>
-                    <th>Transaction</th>
-                  </tr>
-                </thead>
-                <tbody id="reallocations-tbody"></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
+  <!-- Floating Left Audit Terminal (Morphs from the 3D particle) -->
+  <aside id="audit-modal" class="audit-panel-widget hidden" role="region" aria-label="Vault Audit Details">
+    
+    <!-- Panel Header: Badges, Close Button, Vault Title, Curator, Safety Score, Mini-Tabs -->
+    <header class="audit-panel-header">
+      <div class="audit-header-top-row">
+        <div class="vault-badges">
+          <span class="badge badge-chain" id="modal-chain-badge">ETHEREUM</span>
+          <span class="badge badge-version" id="modal-version-badge">V2</span>
+          <span class="badge badge-listed" id="modal-listed-badge">LISTED</span>
+        </div>
+        <button type="button" class="audit-close-btn" id="modal-close-btn" aria-label="Close Audit View">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"></path>
+          </svg>
+        </button>
       </div>
+
+      <div class="audit-identity-row">
+        <div class="audit-identity-meta">
+          <h2 class="vault-name" id="modal-vault-name">Steakhouse Prime USDC</h2>
+          <div class="vault-curator">Curated by <span id="modal-curator-name">Steakhouse</span></div>
+        </div>
+
+        <div class="safety-score-pill" id="modal-score-pill">
+          <div class="score-label">SAFETY SCORE</div>
+          <div class="score-value-row">
+            <span class="score-grade" id="modal-grade">AAA</span>
+            <span class="score-number" id="modal-score">92/100</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini-Tabs Segmented Bar -->
+      <nav class="audit-nav-tabs" role="tablist">
+        <button type="button" class="audit-nav-tab active" data-tab="tab-overview" role="tab" aria-selected="true">Overview</button>
+        <button type="button" class="audit-nav-tab" data-tab="tab-risk" role="tab" aria-selected="false">Risk & Exit</button>
+        <button type="button" class="audit-nav-tab" data-tab="tab-markets" role="tab" aria-selected="false">Markets (<span id="modal-markets-tab-count">0</span>)</button>
+      </nav>
+    </header>
+
+    <!-- Scrollable Panel Body -->
+    <div class="audit-panel-body" id="audit-panel-body">
+
+      <!-- TAB 1: OVERVIEW -->
+      <div class="audit-tab-panel active" id="tab-overview" role="tabpanel">
+        <!-- Key Financial Highlights Grid -->
+        <div class="compact-financials-grid">
+          <div class="fin-card">
+            <span class="fin-label">TOTAL DEPOSITS</span>
+            <span class="fin-value" id="modal-tvl">$0.00</span>
+            <span class="fin-sub" id="modal-assets-human">0.00 USDC</span>
+          </div>
+          <div class="fin-card">
+            <span class="fin-label">FREE LIQUIDITY</span>
+            <span class="fin-value" id="modal-liq">$0.00</span>
+            <span class="fin-sub highlight" id="modal-exit-cap-pct">0% Exit Cap</span>
+          </div>
+          <div class="fin-card">
+            <span class="fin-label">NET APY</span>
+            <span class="fin-value green" id="modal-net-apy">0.00%</span>
+            <span class="fin-sub" id="modal-fee">Fee: 0%</span>
+          </div>
+        </div>
+
+        <!-- Vault Protocol Architecture & Specifications -->
+        <div class="vault-specs-section">
+          <div class="specs-header">
+            <span class="specs-title">VAULT ARCHITECTURE & SPECIFICATIONS</span>
+          </div>
+          <div class="specs-grid">
+            <div class="spec-card">
+              <span class="spec-label">Underlying Loan Asset</span>
+              <span class="spec-value" id="modal-spec-asset">USDC</span>
+              <span class="spec-sub mono" id="modal-spec-asset-addr">0x...</span>
+            </div>
+            <div class="spec-card">
+              <span class="spec-label">Active Markets</span>
+              <span class="spec-value" id="modal-spec-markets">0 Markets</span>
+              <span class="spec-sub">Supplied Credit Pools</span>
+            </div>
+            <div class="spec-card">
+              <span class="spec-label">Curator Fee</span>
+              <span class="spec-value" id="modal-spec-fee">0.0%</span>
+              <span class="spec-sub">Annual Performance</span>
+            </div>
+            <div class="spec-card">
+              <span class="spec-label">Contract Address</span>
+              <span class="spec-value mono" id="modal-spec-address">0x0000...0000</span>
+              <span class="spec-sub" id="modal-spec-chain">Ethereum Mainnet</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: RISK & EXIT -->
+      <div class="audit-tab-panel" id="tab-risk" role="tabpanel">
+        <div class="panel-section-title">RISK & LIQUIDITY AUDIT</div>
+
+        <!-- Instant Exit Capacity Meter -->
+        <div class="meter-box">
+          <div class="meter-header">
+            <span class="meter-label">Instant Exit Capacity</span>
+            <span class="meter-value" id="risk-exit-pct">0%</span>
+          </div>
+          <div class="meter-track">
+            <div class="meter-fill" id="risk-exit-bar" style="width: 0%;"></div>
+          </div>
+          <div class="meter-desc" id="risk-exit-desc">Available to withdraw without liquidity lockup</div>
+        </div>
+
+        <!-- Market Dominance Meter -->
+        <div class="meter-box">
+          <div class="meter-header">
+            <span class="meter-label">Max Market Dominance</span>
+            <span class="meter-value" id="risk-dom-pct">0%</span>
+          </div>
+          <div class="meter-track">
+            <div class="meter-fill yellow" id="risk-dom-bar" style="width: 0%;"></div>
+          </div>
+          <div class="meter-desc" id="risk-dom-desc">Portion of largest market supplied by this vault</div>
+        </div>
+
+        <!-- Time-Weighted Risk (TWR) Metrics -->
+        <div class="twr-metrics-grid">
+          <div class="twr-card">
+            <span class="twr-label">TWR 30D</span>
+            <span class="twr-val" id="risk-twr-30d">0.0</span>
+          </div>
+          <div class="twr-card">
+            <span class="twr-label">TWR 90D</span>
+            <span class="twr-val" id="risk-twr-90d">0.0</span>
+          </div>
+          <div class="twr-card">
+            <span class="twr-label">All-Time</span>
+            <span class="twr-val" id="risk-twr-all">0.0</span>
+          </div>
+        </div>
+
+        <!-- Curator Track Record & Discipline -->
+        <div class="curator-audit-box">
+          <div class="curator-audit-header">
+            <span class="curator-audit-title">Curator Track Record</span>
+            <span class="discipline-badge" id="risk-discipline-score">85/100 Score</span>
+          </div>
+          <div class="curator-meta">
+            <span id="risk-reallocs-count">0 reallocations indexed</span>
+            <span id="risk-spikes-count">0 peak spikes detected</span>
+          </div>
+        </div>
+
+        <!-- Red Flags -->
+        <div class="red-flags-section">
+          <div class="red-flags-header">AUDIT FLAGS</div>
+          <div class="flags-container" id="risk-flags-list">
+            <div class="flag-item clear">No critical risk flags detected for this vault.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: MARKETS & HISTORY -->
+      <div class="audit-tab-panel" id="tab-markets" role="tabpanel">
+        <div class="sub-tabs-bar">
+          <button type="button" class="sub-tab active" data-target="tab-allocations">Underlying Markets (<span id="modal-markets-count">0</span>)</button>
+          <button type="button" class="sub-tab" data-target="tab-reallocations">Curator Reallocations (<span id="modal-reallocs-count">0</span>)</button>
+        </div>
+
+        <!-- Allocations Table -->
+        <div class="sub-tab-content active" id="tab-allocations">
+          <div class="table-wrapper">
+            <table class="data-table" id="allocations-table">
+              <thead>
+                <tr>
+                  <th>Collateral</th>
+                  <th>LLTV</th>
+                  <th>Weight</th>
+                  <th>Supplied</th>
+                  <th>Free Liq</th>
+                  <th>Util</th>
+                  <th>APY</th>
+                </tr>
+              </thead>
+              <tbody id="allocations-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Reallocations Timeline -->
+        <div class="sub-tab-content" id="tab-reallocations">
+          <div class="table-wrapper">
+            <table class="data-table" id="reallocations-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Action</th>
+                  <th>Collateral</th>
+                  <th>LLTV</th>
+                  <th>Amount</th>
+                  <th>Tx</th>
+                </tr>
+              </thead>
+              <tbody id="reallocations-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
-  </div>
+  </aside>
 
   <!-- JavaScript Modules -->
   <script type="module" src="js/sphere.js"></script>

@@ -79,10 +79,8 @@ body::before {
 }
 
 .sphere-wrapper.shrunk {
-  transform: scale(0.68) translateY(-40px);
-  opacity: 0.18;
-  filter: blur(8px);
-  pointer-events: none;
+  opacity: 0.95;
+  filter: none;
 }
 
 #sphere-canvas {
@@ -282,83 +280,6 @@ body::before {
 .morph-proxy.hidden {
   display: none;
   opacity: 0;
-}
-
-/* Audit Modal Overlay */
-.audit-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  overflow-y: auto;
-  opacity: 1;
-  transition: opacity 350ms ease;
-}
-
-.audit-modal.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  z-index: 41;
-}
-
-/* Audit Dashboard Container (Center) */
-.audit-dashboard {
-  position: relative;
-  z-index: 42;
-  width: 100%;
-  max-width: 1200px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  transform: scale(1);
-  transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 300ms ease;
-}
-
-.audit-modal.hidden .audit-dashboard {
-  transform: scale(0.92);
-  opacity: 0;
-}
-
-/* Close Button */
-.close-btn {
-  position: absolute;
-  top: -16px;
-  right: -16px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #141414;
-  border: 1px solid var(--border-strong);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 50;
-  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-}
-
-.close-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-.close-btn:hover {
-  background: #222222;
-  color: #ffffff;
-  transform: scale(1.08);
 }
 
 /* Utility Classes */
