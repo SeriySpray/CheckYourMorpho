@@ -893,8 +893,8 @@
   top: 18px;
   bottom: 18px;
   left: 20px;
-  width: 440px;
-  max-width: calc(100vw - 40px);
+  width: 480px;
+  max-width: calc(50vw - 30px);
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -964,30 +964,26 @@
 
 .top-vaults-list {
   list-style: none;
-  overflow-y: auto;
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-right: 4px;
+  margin: 0 -4px;
+  padding: 4px 6px 8px 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
-.top-vault-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background 200ms ease, border-color 200ms ease, transform 200ms ease;
+.top-vaults-list::-webkit-scrollbar {
+  width: 4px;
 }
 
-.top-vault-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateX(2px);
+.top-vaults-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
 }
 
 .top-vault-rank {
@@ -995,7 +991,7 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
-  width: 20px;
+  width: 22px;
   flex-shrink: 0;
 }
 
@@ -1064,8 +1060,8 @@
   top: 18px;
   bottom: 18px;
   right: 20px;
-  width: 440px;
-  max-width: calc(100vw - 40px);
+  width: 480px;
+  max-width: calc(50vw - 30px);
   z-index: 15;
   display: flex;
   flex-direction: column;

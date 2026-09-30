@@ -103,7 +103,7 @@ body::before {
   position: fixed;
   top: 0;
   left: 0;
-  right: 440px;
+  right: 500px;
   height: 64px;
   padding: 0 28px;
   display: flex;

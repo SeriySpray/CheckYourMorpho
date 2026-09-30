@@ -711,7 +711,7 @@ function renderTopVaults() {
 
   topVaults.forEach((v, index) => {
     const li = document.createElement('li');
-    li.className = 'top-vault-item';
+    li.className = 'explorer-vault-item top-vault-item';
     li.setAttribute('data-address', v.address);
 
     const chainName = formatChainName(v.chainId);
@@ -722,17 +722,17 @@ function renderTopVaults() {
     const apy = v.netApy || 0;
 
     li.innerHTML = `
-      <span class="top-vault-rank rank-${index + 1}">#${index + 1}</span>
-      <div class="top-vault-info">
-        <div class="top-vault-name-row">
+      <div class="vault-item-left">
+        <div class="vault-item-title-row">
+          <span class="top-vault-rank rank-${index + 1}">#${index + 1}</span>
           <span class="vault-chain-badge ${chainClass}">${chainName}</span>
-          <span class="top-vault-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
+          <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
         </div>
-        <span class="top-vault-meta">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong></span>
+        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong></span>
       </div>
-      <div class="top-vault-metrics">
-        <span class="top-vault-apy">${(apy * 100).toFixed(2)}% APY</span>
-        <span class="top-vault-tvl">${formatCurrency(tvl)}</span>
+      <div class="vault-item-right">
+        <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
+        <span class="vault-item-apy">${(apy * 100).toFixed(2)}% APY</span>
       </div>
     `;
 
