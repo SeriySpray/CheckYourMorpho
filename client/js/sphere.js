@@ -29,6 +29,25 @@ const biasedRand = (min, max, bias = 0, base = 10) => {
 };
 const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 
+function gcd(a, b) {
+  while (b) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+function getCoprimeStride(n) {
+  if (n <= 2) return 1;
+  let s = Math.max(1, Math.floor(n * 0.618033988749895));
+  while (gcd(s, n) !== 1) {
+    s++;
+    if (s >= n) s = 1;
+  }
+  return s;
+}
+
 // Matrix helpers (pure vanilla JS)
 function makePerspective(fovRad, aspect, near, far) {
   const f = 1.0 / Math.tan(fovRad / 2.0);
@@ -452,7 +471,11 @@ export class ParticleSphere {
     this.vaultMap.clear();
 
     const phi = (1 + Math.sqrt(5)) / 2;
-    const stride = vaultCount > 1 ? Math.floor(vaultCount * 0.618033988749895) : 1;
+    const stride = getCoprimeStride(vaultCount);
+
+    const fovFactor = 1.0 / Math.tan(this.fov / 2.0);
+    const p00 = fovFactor / (this.aspect || 1);
+    const p11 = fovFactor;
 
     // --- 1. Populate Active Vault Particles ---
     for (let i = 0; i < vaultCount; i++) {
@@ -481,7 +504,7 @@ export class ParticleSphere {
       this.positions[3 * i + 1] = this.baseYArr[i];
       this.positions[3 * i + 2] = this.baseZArr[i];
 
-      const vaultIdx = this.vaults.length > 0 ? ((i * stride) % this.vaults.length) : i;
+      const vaultIdx = this.vaults.length > 0 ? ((i * stride) % vaultCount) : i;
       const vault = this.vaults[vaultIdx] || null;
       const tvl = vault ? (vault.totalAssetsUsd || 0) : 0;
 
@@ -494,21 +517,25 @@ export class ParticleSphere {
       tvlData[i] = scaledTvl;
       isVaultData[i] = 1.0;
 
+      const clipW = Math.max(0.1, this.camZ - this.baseZArr[i]);
+      const initScreenX = this.cx + ((p00 * this.baseXArr[i]) / clipW) * (this.width / 2.0);
+      const initScreenY = this.cy - ((p11 * this.baseYArr[i]) / clipW) * (this.height / 2.0);
+
       const pObj = {
         index: i,
         vault,
         tvl,
         isVault: true,
         baseSize: 2.2 + scaledTvl * 0.6,
-        screenX: 0,
-        screenY: 0,
-        scale: 1,
-        zFinal: 0
+        screenX: initScreenX,
+        screenY: initScreenY,
+        scale: this.camZ / clipW,
+        zFinal: this.baseZArr[i]
       };
 
       this.vaultParticles.push(pObj);
       if (vault && vault.address) {
-        this.vaultMap.set(vault.address.toLowerCase(), pObj);
+        this.vaultMap.set(vault.address.toLowerCase().trim(), pObj);
       }
     }
 
@@ -699,7 +726,7 @@ export class ParticleSphere {
       this.selectedVaultAddress = null;
       return;
     }
-    const addrLower = address.toLowerCase();
+    const addrLower = address.toLowerCase().trim();
     this.selectedVaultAddress = addrLower;
   }
 
@@ -713,16 +740,16 @@ export class ParticleSphere {
       return;
     }
 
-    const addrLower = address.toLowerCase();
+    const addrLower = address.toLowerCase().trim();
     this.highlightedVaultAddress = addrLower;
   }
 
   getParticleScreenPos(vaultAddress) {
     if (!vaultAddress) return { x: this.cx, y: this.cy, radius: 4 };
-    const addrLower = vaultAddress.toLowerCase();
+    const addrLower = vaultAddress.toLowerCase().trim();
     const p = this.vaultMap.get(addrLower);
 
-    if (p && p.screenX && p.screenY) {
+    if (p && typeof p.screenX === 'number' && typeof p.screenY === 'number' && (p.screenX !== 0 || p.screenY !== 0)) {
       return { x: p.screenX, y: p.screenY, radius: Math.max(3, p.baseSize * p.scale) };
     }
     return { x: this.cx, y: this.cy, radius: 4 };
@@ -979,12 +1006,12 @@ export class ParticleSphere {
 
     // Base alpha depends on depth (if rotated behind, dim softly rather than disappear)
     const isBack = target.zFinal < -0.15;
-    const depthAlpha = isBack ? 0.35 : 1.0;
+    const depthAlpha = isBack ? (isSelected ? 0.65 : 0.35) : 1.0;
 
     if (isSelected) {
-      // Compact, elegant white luminous beacon for selected vault (smaller per user request)
-      const beaconR = Math.max(3.2, target.baseSize * target.scale * 1.35);
-      const glowR = beaconR * 2.2; // approx 8 - 12px max
+      // Compact, elegant white luminous beacon for selected vault
+      const beaconR = Math.max(3.8, target.baseSize * target.scale * 1.5);
+      const glowR = beaconR * 2.4; // approx 10 - 15px max
 
       // Compact subtle radial gradient in pure white
       const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowR);
