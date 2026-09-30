@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
+import { calculateMQI } from '../engine/mqiEngine.js';
+import { calculateHHI } from '../engine/hhiEngine.js';
 import { syncAllVaults } from '../services/syncEngine.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -289,27 +292,58 @@ function handleGetVaults(req, res, url) {
 
     const rows = db.prepare(selectSql).all(...params, limit, offset);
 
-    const vaults = rows.map(row => ({
-      address: row.address,
-      chainId: row.chain_id,
-      name: row.name,
-      symbol: row.symbol,
-      curatorName: row.curator_name,
-      version: row.version,
-      isListed: Boolean(row.is_listed),
-      asset: {
-        address: row.asset_address,
-        symbol: row.asset_symbol,
-        decimals: row.asset_decimals,
-        priceUsd: row.asset_price_usd
-      },
-      totalAssetsUsd: row.total_assets_usd,
-      liquidityUsd: row.liquidity_usd,
-      apy: row.apy,
-      netApy: row.net_apy,
-      fee: row.fee,
-      updatedAt: row.metadata_updated_at
-    }));
+    // Batch load allocations for returned vaults to compute MQI & HHI
+    const vaultAddresses = rows.map(r => r.address);
+    const allocMap = new Map();
+    if (vaultAddresses.length > 0) {
+      const placeholders = vaultAddresses.map(() => '?').join(',');
+      const allocRows = db.prepare(`
+        SELECT va.*, m.* 
+        FROM vault_allocations va 
+        JOIN markets m ON va.market_unique_key = m.unique_key 
+        WHERE va.vault_address IN (${placeholders})
+      `).all(...vaultAddresses);
+      for (const a of allocRows) {
+        const k = a.vault_address.toLowerCase();
+        if (!allocMap.has(k)) allocMap.set(k, []);
+        allocMap.get(k).push(a);
+      }
+    }
+
+    const vaults = rows.map(row => {
+      const allocs = allocMap.get(row.address.toLowerCase()) || [];
+      const mqi = calculateMQI(row, allocs);
+      const hhi = calculateHHI(row, allocs);
+
+      return {
+        address: row.address,
+        chainId: row.chain_id,
+        name: row.name,
+        symbol: row.symbol,
+        curatorName: row.curator_name,
+        version: row.version,
+        isListed: Boolean(row.is_listed),
+        asset: {
+          address: row.asset_address,
+          symbol: row.asset_symbol,
+          decimals: row.asset_decimals,
+          priceUsd: row.asset_price_usd
+        },
+        totalAssetsUsd: row.total_assets_usd,
+        liquidityUsd: row.liquidity_usd,
+        apy: row.apy,
+        netApy: row.net_apy,
+        fee: row.fee,
+        mqiPercent: mqi.mqiPercent,
+        isAllClean: mqi.isAllClean,
+        compromisedCount: mqi.compromisedMarkets?.length || 0,
+        hhi: hhi.hhi,
+        hhiTier: hhi.tier,
+        effectiveAssets: hhi.effectiveAssets,
+        updatedAt: row.metadata_updated_at
+      };
+    });
+
 
     sendJson(res, 200, {
       total: totalCount,

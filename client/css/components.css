@@ -1462,7 +1462,41 @@
   color: #30d158;
 }
 
+.vault-mini-badge {
+  display: inline-block;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 0.5px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.vault-mini-badge.clean {
+  background: rgba(48, 209, 88, 0.12);
+  color: #30d158;
+  border: 1px solid rgba(48, 209, 88, 0.25);
+}
+
+.vault-mini-badge.flagged {
+  background: rgba(255, 69, 58, 0.15);
+  color: #ff453a;
+  border: 1px solid rgba(255, 69, 58, 0.35);
+}
+
+.vault-item-hhi-pill {
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: #a1a1aa;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.5px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 @media (max-width: 900px) {
+
   .vault-explorer-widget {
     top: auto;
     bottom: 0;

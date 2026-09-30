@@ -367,7 +367,8 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
     }
   `;
 
-  // Strictly fetch only officially listed/published V2 vaults from morpho.org (pageSize: 25 to respect query complexity limits)
+  // Strictly fetch only officially listed/published V2 vaults from morpho.org (pageSize: 10 to respect query complexity limits)
   const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-  return await fetchPaginatedVaults(query, 'vaultV2s', filterListed, 25);
+  return await fetchPaginatedVaults(query, 'vaultV2s', filterListed, 10);
 }
+

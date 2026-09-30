@@ -550,10 +550,17 @@ function renderVaultExplorer() {
     if (explorerFilters.sort === 'liq_desc') {
       return (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
     }
-    if (explorerFilters.sort === 'score_desc') {
-      const scoreA = a.safetyScore !== undefined ? a.safetyScore : 80;
-      const scoreB = b.safetyScore !== undefined ? b.safetyScore : 80;
-      return scoreB - scoreA;
+    if (explorerFilters.sort === 'mqi_asc') {
+      return (a.mqiPercent ?? 100) - (b.mqiPercent ?? 100);
+    }
+    if (explorerFilters.sort === 'mqi_desc') {
+      return (b.mqiPercent ?? 100) - (a.mqiPercent ?? 100);
+    }
+    if (explorerFilters.sort === 'hhi_desc') {
+      return (b.hhi ?? 0) - (a.hhi ?? 0);
+    }
+    if (explorerFilters.sort === 'hhi_asc') {
+      return (a.hhi ?? 0) - (b.hhi ?? 0);
     }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
@@ -597,6 +604,13 @@ function renderVaultExplorer() {
     const curator = formatCuratorName(v.curatorName, v.name);
     const tvl = v.totalAssetsUsd || v.liquidityUsd || 0;
     const apy = v.netApy || 0;
+    const mqi = v.mqiPercent ?? 100;
+    const isClean = v.isAllClean ?? (mqi === 100);
+    const hhi = Number(v.hhi ?? 0);
+
+    const mqiBadgeHtml = isClean 
+      ? `<span class="vault-mini-badge clean">100% Clean</span>`
+      : `<span class="vault-mini-badge flagged">${mqi.toFixed(1)}% Clean</span>`;
 
     li.innerHTML = `
       <div class="vault-item-left">
@@ -604,13 +618,17 @@ function renderVaultExplorer() {
           <span class="vault-chain-badge ${chainClass}">${chainName}</span>
           <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
         </div>
-        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong></span>
+        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong> • ${mqiBadgeHtml}</span>
       </div>
       <div class="vault-item-right">
         <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
-        <span class="vault-item-apy">${(apy * 100).toFixed(2)}% APY</span>
+        <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end;">
+          <span class="vault-item-apy">${(apy * 100).toFixed(2)}% APY</span>
+          <span class="vault-item-hhi-pill" title="Herfindahl Index: ${hhi.toFixed(3)}">HHI ${hhi.toFixed(2)}</span>
+        </div>
       </div>
     `;
+
 
     li.addEventListener('mouseenter', () => {
       sphere.highlightVault(v.address);
