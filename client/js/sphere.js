@@ -690,7 +690,6 @@ export class ParticleSphere {
     }
     const addrLower = address.toLowerCase();
     this.selectedVaultAddress = addrLower;
-    this.rotateToVault(addrLower);
   }
 
   rotateToVault(address) {
@@ -719,7 +718,6 @@ export class ParticleSphere {
 
     const addrLower = address.toLowerCase();
     this.highlightedVaultAddress = addrLower;
-    this.rotateToVault(addrLower);
   }
 
   getParticleScreenPos(vaultAddress) {
@@ -742,22 +740,10 @@ export class ParticleSphere {
     this.elapsedFrames += dt;
 
     if (!this.isDragging) {
-      if (this.targetRotY !== null && this.targetRotX !== null) {
-        const dy = (this.targetRotY - this.rotY);
-        const dx = (this.targetRotX - this.rotX);
-        this.rotY += dy * 0.08;
-        this.rotX += dx * 0.08;
-
-        if (Math.abs(dy) < 0.001 && Math.abs(dx) < 0.001) {
-          this.targetRotY = null;
-          this.targetRotX = null;
-        }
-      } else {
-        this.velX *= 0.94;
-        this.velY *= 0.94;
-        this.rotY += this.autoSpeedY + this.velY;
-        this.rotX += this.autoSpeedX + this.velX;
-      }
+      this.velX *= 0.94;
+      this.velY *= 0.94;
+      this.rotY += this.autoSpeedY + this.velY;
+      this.rotX += this.autoSpeedX + this.velX;
     }
 
     this.render(dt);
