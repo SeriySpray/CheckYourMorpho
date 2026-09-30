@@ -9,10 +9,11 @@
  * 1 (Clean) if:
  *   - Market is officially listed in Morpho (is_listed == 1)
  *   - No active or realized bad debt (bad_debt_usd == 0 && realized_bad_debt_usd == 0)
- *   - Verified canonical oracle (e.g. ChainlinkOracleV2, Morpho factory)
- *   - No critical warnings (not_whitelisted, unrecognized_collateral_asset)
+ *   - Valid oracle contract address (not zero address)
+ *   - No critical protocol security warnings (not_whitelisted, unrecognized_collateral_asset, level RED)
  * 0 (Compromised) if ANY of the above conditions is violated.
  */
+
 
 /**
  * Evaluates whether a market passes the strict binary clean test.
@@ -43,18 +44,13 @@ export function isMarketClean(market) {
   // Check 3: Oracle Verification (only required for borrowing markets with collateral)
   if (!isIdleReserve) {
     const oracleAddr = (market.oracle_address || '').toLowerCase();
-    const oracleType = market.oracle_type || '';
     const isZeroAddress = !oracleAddr || oracleAddr === '0x0000000000000000000000000000000000000000';
-    const isKnownOracle = oracleType.toLowerCase().includes('chainlink') ||
-                          oracleType.toLowerCase().includes('morpho') ||
-                          oracleType.toLowerCase().includes('feed');
 
     if (isZeroAddress) {
       reasons.push('Missing oracle contract address');
-    } else if (!isKnownOracle && oracleType.toLowerCase() === 'unknown') {
-      reasons.push(`Unverified oracle implementation (${oracleType})`);
     }
   }
+
 
   // Check 4: Protocol Warnings
   const warningsCount = Number(market.warnings_count || 0);
