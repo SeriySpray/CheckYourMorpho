@@ -396,18 +396,6 @@ function handleGetVaultByAddress(req, res, address) {
     // Compute comprehensive audit verdict
     const verdict = generateVaultVerdict(vault, allocations, reallocations);
 
-    // Monte Carlo simulation calibration profile
-    const netApy = Number(vault.net_apy) || 0;
-    const baseVol = Math.max(0.005, (100 - verdict.safetyScore) / 400); // 0.5% for AAA to 2.5% for D
-    const monteCarloParams = {
-      annualExpectedYield: netApy,
-      dailyDrift: netApy / 365,
-      dailyVolatility: baseVol / Math.sqrt(365),
-      riskAdjustedApy: Math.round(netApy * (verdict.safetyScore / 100) * 100) / 100,
-      presetHorizonsDays: [30, 90, 180, 365],
-      presetAmountsUsd: [1000, 10000, 50000, 100000]
-    };
-
     sendJson(res, 200, {
       vault: {
         address: vault.address,
@@ -458,8 +446,7 @@ function handleGetVaultByAddress(req, res, address) {
         collateralSymbol: r.collateral_asset_symbol,
         assetsHuman: r.assets_human,
         lltvPercent: r.lltv_percent
-      })),
-      monteCarloParams
+      }))
     });
   } catch (err) {
     sendJson(res, 500, { error: 'Failed to compute vault audit report', details: err.message });

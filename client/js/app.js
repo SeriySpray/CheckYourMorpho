@@ -1,20 +1,14 @@
 /**
  * CheckYourMorpho: Main Frontend Controller
- * Connects 3D Particle Sphere, search autocomplete, morphing animation, and Monte Carlo chart.
+ * Connects 3D Particle Sphere, search autocomplete, filters, and audit modal.
  */
 
 import { ParticleSphere } from './sphere.js';
-import { MonteCarloChart } from './chart.js';
 
 let sphere = null;
-let monteCarloChart = null;
 let allVaults = [];
 let selectedVaultAddress = null;
 let activeAuditData = null;
-
-// Current Monte Carlo parameter state
-let currentDeposit = 10000;
-let currentHorizonDays = 30;
 
 // DOM Elements cache
 const DOM = {
@@ -43,7 +37,7 @@ const DOM = {
   chipsContainer: document.getElementById('chips-container'),
   explorerVaultsList: document.getElementById('explorer-vaults-list'),
 
-  // Panel 1: Main
+  // Panel 1: Main & Specs
   modalChainBadge: document.getElementById('modal-chain-badge'),
   modalVersionBadge: document.getElementById('modal-version-badge'),
   modalListedBadge: document.getElementById('modal-listed-badge'),
@@ -57,10 +51,12 @@ const DOM = {
   modalExitCapPct: document.getElementById('modal-exit-cap-pct'),
   modalNetApy: document.getElementById('modal-net-apy'),
   modalFee: document.getElementById('modal-fee'),
-  horizonTabs: document.getElementById('horizon-tabs'),
-  depositPresets: document.querySelector('.deposit-presets'),
-  chartStatsSummary: document.getElementById('chart-stats-summary'),
-  chartCanvas: document.getElementById('monte-carlo-canvas'),
+  modalSpecAsset: document.getElementById('modal-spec-asset'),
+  modalSpecAssetAddr: document.getElementById('modal-spec-asset-addr'),
+  modalSpecMarkets: document.getElementById('modal-spec-markets'),
+  modalSpecFee: document.getElementById('modal-spec-fee'),
+  modalSpecAddress: document.getElementById('modal-spec-address'),
+  modalSpecChain: document.getElementById('modal-spec-chain'),
 
   // Panel 2: Risk
   riskExitPct: document.getElementById('risk-exit-pct'),
@@ -90,10 +86,7 @@ const DOM = {
  * Initializes application and fetches vaults data.
  */
 async function initApp() {
-  // 1. Initialize Monte Carlo chart instance
-  monteCarloChart = new MonteCarloChart(DOM.chartCanvas);
-
-  // 2. Initialize 3D Particle Sphere
+  // 1. Initialize 3D Particle Sphere
   sphere = new ParticleSphere(DOM.sphereCanvas, {
     totalParticles: 1200,
     onVaultSelect: (vault, pos) => {
@@ -105,13 +98,12 @@ async function initApp() {
   });
   window.sphere = sphere;
 
-  // 3. Bind UI Events
+  // 2. Bind UI Events
   setupVaultExplorerEvents();
   setupModalEvents();
-  setupChartControlEvents();
   setupPanelTabEvents();
 
-  // 4. Fetch Vaults from REST API
+  // 3. Fetch Vaults from REST API
   try {
     const res = await fetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
     const data = await res.json();
@@ -690,10 +682,6 @@ async function openVaultAudit(vault, startPos) {
       DOM.auditModal.classList.remove('hidden');
       DOM.morphProxy.style.opacity = '0';
       setTimeout(() => DOM.morphProxy.classList.add('hidden'), 300);
-
-      // Trigger Monte Carlo simulation
-      monteCarloChart.resize();
-      runCurrentSimulation();
     }, 380);
 
   } catch (err) {
@@ -788,6 +776,28 @@ function populateAuditModal(data) {
   DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
   DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
 
+  // Specs Card Grid
+  if (DOM.modalSpecAsset) DOM.modalSpecAsset.textContent = v.asset?.symbol || 'Unknown';
+  if (DOM.modalSpecAssetAddr) {
+    const assetAddr = v.asset?.address || '';
+    DOM.modalSpecAssetAddr.textContent = assetAddr ? `${assetAddr.slice(0, 6)}...${assetAddr.slice(-4)}` : 'Native / Unknown';
+  }
+  if (DOM.modalSpecMarkets) {
+    const count = allocations.length;
+    DOM.modalSpecMarkets.textContent = `${count} Market${count === 1 ? '' : 's'}`;
+  }
+  if (DOM.modalSpecFee) {
+    DOM.modalSpecFee.textContent = `${((v.fee || 0) * 100).toFixed(1)}%`;
+  }
+  if (DOM.modalSpecAddress) {
+    const addr = v.address || '';
+    DOM.modalSpecAddress.textContent = addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : '0x...';
+    DOM.modalSpecAddress.title = addr;
+  }
+  if (DOM.modalSpecChain) {
+    DOM.modalSpecChain.textContent = `${chainName} (${v.chainId || 1})`;
+  }
+
   // --- PANEL 2: RISK & EXIT CAPACITY ---
   const exitPct = verdict.liquidity?.instantExitCapacityPercent || 0;
   DOM.riskExitPct.textContent = `${exitPct}%`;
@@ -875,29 +885,6 @@ function populateAuditModal(data) {
 }
 
 /**
- * Runs and renders Monte Carlo simulation with current deposit & horizon settings.
- */
-function runCurrentSimulation() {
-  if (!activeAuditData || !monteCarloChart) return;
-
-  const netApy = activeAuditData.vault.netApy || 0;
-  const safetyScore = activeAuditData.verdict.safetyScore || 80;
-
-  const simResult = monteCarloChart.simulate({
-    initialDeposit: currentDeposit,
-    horizonDays: currentHorizonDays,
-    annualApy: netApy,
-    safetyScore
-  });
-
-  const profit = simResult.finalExpected - currentDeposit;
-  const profitPct = (profit / currentDeposit) * 100;
-  const sign = profit >= 0 ? '+' : '';
-
-  DOM.chartStatsSummary.textContent = `Expected ${sign}${formatCurrency(profit)} (${sign}${profitPct.toFixed(2)}%)`;
-}
-
-/**
  * Sets up listeners for modal open/close actions.
  */
 function setupModalEvents() {
@@ -908,31 +895,6 @@ function setupModalEvents() {
     if (e.key === 'Escape' && !DOM.auditModal.classList.contains('hidden')) {
       closeVaultAudit();
     }
-  });
-}
-
-/**
- * Sets up listeners for Monte Carlo interactive controls.
- */
-function setupChartControlEvents() {
-  // Horizon Tabs
-  DOM.horizonTabs.addEventListener('click', (e) => {
-    const btn = e.target.closest('.tab-btn');
-    if (!btn) return;
-    DOM.horizonTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentHorizonDays = parseInt(btn.dataset.days, 10);
-    runCurrentSimulation();
-  });
-
-  // Deposit Presets
-  DOM.depositPresets.addEventListener('click', (e) => {
-    const btn = e.target.closest('.preset-btn');
-    if (!btn) return;
-    DOM.depositPresets.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentDeposit = parseFloat(btn.dataset.amount);
-    runCurrentSimulation();
   });
 }
 
