@@ -900,11 +900,11 @@ export class ParticleSphere {
     const baseLogoSize = Math.min(72, Math.min(this.width, this.height) * 0.10);
     const logoSize = baseLogoSize * breath;
 
-    // Ambient radial glow behind the butterfly
+    // Ambient radial glow behind the butterfly (subtle white/silver fading to pure black)
     const coreGlow = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, logoSize * 1.4);
-    coreGlow.addColorStop(0, 'rgba(87, 146, 255, 0.45)');
-    coreGlow.addColorStop(0.4, 'rgba(36, 112, 255, 0.16)');
-    coreGlow.addColorStop(1, 'rgba(10, 20, 45, 0)');
+    coreGlow.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+    coreGlow.addColorStop(0.4, 'rgba(255, 255, 255, 0.06)');
+    coreGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
     ctx.fillStyle = coreGlow;
     ctx.beginPath();
@@ -924,7 +924,7 @@ export class ParticleSphere {
   }
 
   /**
-   * Renders glowing neon halos for hovered or search-selected vaults and persistent selected vault
+   * Renders glowing monochrome halos for hovered or search-selected vaults and persistent selected vault
    */
   renderVaultHighlights(ctx, time) {
     // 1. Render persistent selected vault (while audit window is open)
@@ -952,24 +952,24 @@ export class ParticleSphere {
     const depthAlpha = isBack ? 0.35 : 1.0;
 
     if (isSelected) {
-      // Compact, elegant cyan/electric beacon for selected vault (smaller per user request)
+      // Compact, elegant white luminous beacon for selected vault (smaller per user request)
       const beaconR = Math.max(3.2, target.baseSize * target.scale * 1.35);
       const glowR = beaconR * 2.2; // approx 8 - 12px max
 
-      // Compact subtle radial gradient
+      // Compact subtle radial gradient in pure white
       const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowR);
-      grad.addColorStop(0, `rgba(0, 229, 255, ${0.85 * depthAlpha})`);
-      grad.addColorStop(0.45, `rgba(36, 112, 255, ${0.4 * depthAlpha})`);
-      grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
+      grad.addColorStop(0, `rgba(255, 255, 255, ${0.85 * depthAlpha})`);
+      grad.addColorStop(0.45, `rgba(255, 255, 255, ${0.3 * depthAlpha})`);
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(target.screenX, target.screenY, glowR, 0, Math.PI * 2);
       ctx.fill();
 
-      // Single delicate pulsating neon ring
+      // Single delicate pulsating white ring
       const pulse = 1.0 + Math.sin(time * 3.6) * 0.22;
-      ctx.strokeStyle = `rgba(0, 230, 255, ${0.9 * depthAlpha})`;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.85 * depthAlpha})`;
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.arc(target.screenX, target.screenY, beaconR * 1.55 * pulse, 0, Math.PI * 2);
@@ -982,21 +982,21 @@ export class ParticleSphere {
       ctx.fill();
 
     } else {
-      // Standard hover neon halo
+      // Standard hover halo in elegant silver/white
       const glowRadius = Math.max(8, target.baseSize * target.scale * 1.8);
       const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 1.6);
-      grad.addColorStop(0, `rgba(36, 112, 255, ${0.85 * depthAlpha})`);
-      grad.addColorStop(0.5, `rgba(87, 146, 255, ${0.35 * depthAlpha})`);
-      grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
+      grad.addColorStop(0, `rgba(255, 255, 255, ${0.75 * depthAlpha})`);
+      grad.addColorStop(0.5, `rgba(255, 255, 255, ${0.25 * depthAlpha})`);
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(target.screenX, target.screenY, glowRadius * 1.6, 0, Math.PI * 2);
       ctx.fill();
 
-      // Pulsating outer neon ring
+      // Pulsating outer ring
       const pulse = 1.0 + Math.sin(time * 3.5) * 0.2;
-      ctx.strokeStyle = `rgba(87, 146, 255, ${0.85 * depthAlpha})`;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.75 * depthAlpha})`;
       ctx.lineWidth = 1.0;
       ctx.beginPath();
       ctx.arc(target.screenX, target.screenY, glowRadius * pulse, 0, Math.PI * 2);

@@ -23,8 +23,8 @@
 
 .search-box:focus-within {
   background: rgba(22, 22, 22, 0.95);
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px var(--accent-blue), 0 0 24px var(--accent-blue-glow);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 .search-icon {
@@ -109,7 +109,7 @@
 }
 
 .result-item:hover, .result-item.selected {
-  background: rgba(36, 112, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .result-left {
@@ -125,17 +125,14 @@
   padding: 2px 5px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
-.result-chain.base {
-  background: rgba(0, 82, 255, 0.2);
-  color: #5792ff;
-}
-
-.result-chain.robinhood {
-  background: rgba(0, 200, 5, 0.2);
-  color: #00c805;
+.result-chain.base, .result-chain.robinhood {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
 }
 
 .result-names {
@@ -188,13 +185,13 @@
   z-index: 25;
   display: flex;
   flex-direction: column;
-  background: rgba(9, 12, 19, 0.88);
+  background: rgba(14, 14, 14, 0.88);
   backdrop-filter: blur(28px) saturate(190%);
   -webkit-backdrop-filter: blur(28px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   padding: 16px 18px 14px 18px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1), transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
@@ -297,11 +294,11 @@
 }
 
 .audit-nav-tab.active {
-  background: rgba(36, 112, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
   font-weight: 600;
-  border: 1px solid rgba(36, 112, 255, 0.4);
-  box-shadow: 0 2px 8px rgba(36, 112, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 /* Scrollable Panel Body */
@@ -389,19 +386,16 @@
   color: #fff;
 }
 
-.badge-chain.base {
-  background: rgba(0, 82, 255, 0.2);
-  color: #5792ff;
-}
-
-.badge-chain.robinhood {
-  background: rgba(0, 200, 5, 0.2);
-  color: #00c805;
+.badge-chain.base, .badge-chain.robinhood {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
 }
 
 .badge-version {
-  background: rgba(36, 112, 255, 0.15);
-  color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
 }
 
 .badge-listed {
@@ -505,7 +499,7 @@
 }
 
 .fin-sub.highlight {
-  color: var(--accent-blue);
+  color: #ffffff;
 }
 
 /* Vault Specifications Section */
@@ -568,7 +562,7 @@
 .spec-value.mono {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #93c5fd;
+  color: #ffffff;
 }
 
 .spec-sub {
@@ -848,7 +842,7 @@
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
-  background: rgba(13, 17, 26, 0.96);
+  background: rgba(16, 16, 16, 0.96);
   backdrop-filter: blur(8px);
   z-index: 2;
 }
@@ -903,13 +897,13 @@
   z-index: 15;
   display: flex;
   flex-direction: column;
-  background: rgba(9, 12, 19, 0.85);
+  background: rgba(14, 14, 14, 0.88);
   backdrop-filter: blur(28px) saturate(190%);
   -webkit-backdrop-filter: blur(28px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   padding: 16px 18px 14px 18px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: opacity 350ms cubic-bezier(0.16, 1, 0.3, 1), transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -937,7 +931,7 @@
   font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 600;
-  color: var(--accent-blue);
+  color: var(--text-secondary);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -977,8 +971,8 @@
 
 .explorer-search-box:focus-within {
   background: rgba(255, 255, 255, 0.07);
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px var(--accent-blue), 0 0 16px var(--accent-blue-glow);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 4px 16px rgba(0, 0, 0, 0.6);
 }
 
 .explorer-search-box .search-icon {
@@ -1061,7 +1055,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  background: rgba(20, 24, 34, 0.85);
+  background: rgba(18, 18, 18, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   padding: 6px 10px;
@@ -1073,24 +1067,24 @@
 }
 
 .dropdown-trigger:hover {
-  border-color: rgba(36, 112, 255, 0.4);
-  background: rgba(26, 32, 46, 0.95);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(26, 26, 26, 0.95);
 }
 
 .dropdown-trigger.open,
 .custom-dropdown.open .dropdown-trigger {
-  border-color: var(--accent-blue);
-  background: rgba(26, 32, 46, 0.98);
-  box-shadow: 0 0 0 1px var(--accent-blue), 0 0 12px var(--accent-blue-glow);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(26, 26, 26, 0.98);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
 .dropdown-trigger.is-active {
-  border-color: rgba(36, 112, 255, 0.55);
-  background: rgba(36, 112, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .dropdown-trigger.is-active .trigger-value {
-  color: #60a5fa;
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -1129,7 +1123,7 @@
 
 .custom-dropdown.open .dropdown-chevron {
   transform: rotate(180deg);
-  color: var(--accent-blue);
+  color: #ffffff;
 }
 
 /* Floating Dropdown Menu */
@@ -1142,10 +1136,10 @@
   min-width: 185px;
   max-height: 240px;
   overflow-y: auto;
-  background: rgba(13, 17, 26, 0.99);
+  background: rgba(16, 16, 16, 0.98);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 9px;
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.88), 0 0 0 1px rgba(255, 255, 255, 0.08);
   padding: 4px;
@@ -1185,21 +1179,21 @@
   padding: 7px 9px;
   border-radius: 6px;
   font-size: 11px;
-  color: #cbd5e1;
+  color: #d4d4d8;
   cursor: pointer;
   user-select: none;
   transition: all var(--transition-fast);
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
 }
 
 .dropdown-item.selected {
-  background: rgba(36, 112, 255, 0.14);
-  color: #60a5fa;
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-weight: 600;
 }
 
 .item-text {
@@ -1214,7 +1208,7 @@
 .item-check {
   width: 12px;
   height: 12px;
-  stroke: #60a5fa;
+  stroke: #ffffff;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -1231,36 +1225,31 @@
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .chain-dot.ethereum {
-  background: #a4b8ff;
-  box-shadow: 0 0 6px rgba(98, 126, 234, 0.6);
+  background: #e4e4e7;
 }
 
 .chain-dot.base {
-  background: #5792ff;
-  box-shadow: 0 0 6px rgba(0, 82, 255, 0.6);
+  background: #3b82f6;
 }
 
 .chain-dot.robinhood {
-  background: #30d158;
-  box-shadow: 0 0 6px rgba(0, 200, 5, 0.6);
+  background: #10b981;
 }
 
 .chain-dot.arbitrum {
-  background: #64c2ff;
-  box-shadow: 0 0 6px rgba(40, 160, 240, 0.6);
+  background: #06b6d4;
 }
 
 .chain-dot.optimism {
-  background: #ff5e6c;
-  box-shadow: 0 0 6px rgba(255, 4, 32, 0.6);
+  background: #ef4444;
 }
 
 .chain-dot.polygon {
-  background: #b58aff;
-  box-shadow: 0 0 6px rgba(130, 71, 229, 0.6);
+  background: #a855f7;
 }
 
 /* Active Filter Chips & Clear Toolbar */
@@ -1271,8 +1260,8 @@
   gap: 8px;
   padding: 6px 10px;
   margin-bottom: 10px;
-  background: rgba(36, 112, 255, 0.05);
-  border: 1px dashed rgba(36, 112, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   animation: dropdownFadeIn 150ms ease;
 }
@@ -1292,11 +1281,11 @@
   gap: 5px;
   padding: 2px 7px;
   border-radius: 5px;
-  background: rgba(36, 112, 255, 0.12);
-  border: 1px solid rgba(36, 112, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   font-size: 10px;
   font-family: var(--font-sans);
-  color: #93c5fd;
+  color: #ffffff;
   white-space: nowrap;
 }
 
@@ -1307,7 +1296,7 @@
 .chip-remove {
   background: transparent;
   border: none;
-  color: #93c5fd;
+  color: #a1a1aa;
   cursor: pointer;
   padding: 0;
   font-size: 12px;
@@ -1327,9 +1316,9 @@
   font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 500;
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.08);
-  border: 1px solid rgba(255, 107, 107, 0.22);
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 5px;
   padding: 3px 8px;
   cursor: pointer;
@@ -1339,8 +1328,8 @@
 }
 
 .filter-reset-action:hover {
-  background: rgba(255, 107, 107, 0.2);
-  border-color: rgba(255, 107, 107, 0.4);
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
   color: #ffffff;
 }
 
@@ -1389,9 +1378,9 @@
 }
 
 .explorer-vault-item:hover {
-  background: rgba(36, 112, 255, 0.1);
-  border-color: rgba(36, 112, 255, 0.38);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px rgba(36, 112, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
   transform: translateY(-1px);
 }
 
@@ -1413,49 +1402,25 @@
   font-size: 9px;
   font-family: var(--font-mono);
   font-weight: 600;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 4px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
   flex-shrink: 0;
 }
 
-.vault-chain-badge.robinhood {
-  background: rgba(0, 200, 5, 0.15);
-  color: #30d158;
-  border: 1px solid rgba(48, 209, 88, 0.25);
-}
-
-.vault-chain-badge.base {
-  background: rgba(0, 82, 255, 0.15);
-  color: #5792ff;
-  border: 1px solid rgba(87, 146, 255, 0.25);
-}
-
-.vault-chain-badge.ethereum {
-  background: rgba(98, 126, 234, 0.15);
-  color: #a4b8ff;
-  border: 1px solid rgba(164, 184, 255, 0.25);
-}
-
-.vault-chain-badge.arbitrum {
-  background: rgba(40, 160, 240, 0.15);
-  color: #64c2ff;
-  border: 1px solid rgba(100, 194, 255, 0.25);
-}
-
-.vault-chain-badge.optimism {
-  background: rgba(255, 4, 32, 0.15);
-  color: #ff5e6c;
-  border: 1px solid rgba(255, 94, 108, 0.25);
-}
-
+.vault-chain-badge.robinhood,
+.vault-chain-badge.base,
+.vault-chain-badge.ethereum,
+.vault-chain-badge.arbitrum,
+.vault-chain-badge.optimism,
 .vault-chain-badge.polygon {
-  background: rgba(130, 71, 229, 0.15);
-  color: #b58aff;
-  border: 1px solid rgba(181, 138, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
 }
 
 .vault-item-name {

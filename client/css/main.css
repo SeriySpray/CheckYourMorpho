@@ -8,15 +8,15 @@
 
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --border-highlight: rgba(36, 112, 255, 0.4);
+  --border-highlight: rgba(255, 255, 255, 0.28);
 
   --text-primary: #ffffff;
-  --text-secondary: #8e8e93;
-  --text-muted: #55555b;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
 
-  --accent-blue: #2470ff;
-  --accent-blue-hover: #3d82ff;
-  --accent-blue-glow: rgba(36, 112, 255, 0.35);
+  --accent-blue: #ffffff;
+  --accent-blue-hover: #e4e4e7;
+  --accent-blue-glow: rgba(255, 255, 255, 0.12);
 
   --accent-green: #30d158;
   --accent-green-glow: rgba(48, 209, 88, 0.25);
@@ -57,7 +57,7 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: 
-    radial-gradient(circle at center, rgba(36, 112, 255, 0.04) 0%, transparent 70%),
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.02) 0%, transparent 70%),
     linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
   background-size: 100% 100%, 40px 40px, 40px 40px;
@@ -148,9 +148,9 @@ body::before {
   letter-spacing: 0.08em;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(36, 112, 255, 0.15);
-  color: var(--accent-blue);
-  border: 1px solid rgba(36, 112, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   font-family: var(--font-mono);
 }
 
@@ -168,7 +168,7 @@ body::before {
   height: 7px;
   border-radius: 50%;
   background: var(--accent-green);
-  box-shadow: 0 0 8px var(--accent-green-glow);
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.4);
   animation: pulse-dot 2.5s infinite ease-in-out;
 }
 
@@ -182,11 +182,11 @@ body::before {
   position: fixed;
   z-index: 20;
   pointer-events: none;
-  background: rgba(13, 13, 13, 0.92);
-  border: 1px solid var(--border-subtle);
+  background: rgba(14, 14, 14, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   padding: 10px 14px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(36, 112, 255, 0.1);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transform: translate(-50%, -120%);
@@ -258,9 +258,9 @@ body::before {
 .tooltip-action {
   margin-top: 8px;
   padding-top: 6px;
-  border-top: 1px dashed var(--border-subtle);
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
   font-size: 10px;
-  color: var(--accent-blue);
+  color: var(--text-secondary);
   text-align: center;
   letter-spacing: 0.02em;
 }
@@ -270,9 +270,9 @@ body::before {
   position: fixed;
   z-index: 50;
   pointer-events: none;
-  background: var(--accent-blue);
-  border: 1px solid #ffffff;
-  box-shadow: 0 0 24px rgba(36, 112, 255, 0.8), 0 0 60px rgba(36, 112, 255, 0.4);
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
   transform: translate(-50%, -50%);
   will-change: left, top, width, height, opacity;
   contain: layout paint;

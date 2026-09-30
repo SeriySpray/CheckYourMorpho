@@ -605,7 +605,7 @@ function renderVaultExplorer() {
           <span class="vault-chain-badge ${chainClass}">${chainName}</span>
           <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
         </div>
-        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#88aaff">${escapeHtml(assetSym)}</strong></span>
+        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong></span>
       </div>
       <div class="vault-item-right">
         <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
@@ -766,9 +766,9 @@ async function openVaultAudit(vault, startPos) {
     pRetract.style.height = `${targetHeight}px`;
     pRetract.style.borderRadius = '20px';
     pRetract.style.opacity = '0.88';
-    pRetract.style.background = 'rgba(9, 12, 19, 0.88)';
+    pRetract.style.background = 'rgba(14, 14, 14, 0.88)';
     pRetract.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-    pRetract.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.6)';
+    pRetract.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.8)';
     pRetract.classList.remove('hidden');
 
     // Stage 1: Fold window down into a ball at left dock (220ms)
@@ -777,8 +777,8 @@ async function openVaultAudit(vault, startPos) {
       pRetract.style.width = '12px';
       pRetract.style.height = '12px';
       pRetract.style.borderRadius = '50%';
-      pRetract.style.background = '#2470ff';
-      pRetract.style.boxShadow = '0 0 20px #00e5ff';
+      pRetract.style.background = '#ffffff';
+      pRetract.style.boxShadow = '0 0 16px rgba(255, 255, 255, 0.6)';
     });
 
     // Stage 2: Ball shoots across 3D space back to sphere particle (440ms)
@@ -819,9 +819,9 @@ async function openVaultAudit(vault, startPos) {
   pOpen.style.height = '14px';
   pOpen.style.borderRadius = '50%';
   pOpen.style.opacity = '1';
-  pOpen.style.background = '#00e5ff';
-  pOpen.style.border = '1.5px solid #ffffff';
-  pOpen.style.boxShadow = '0 0 24px #00e5ff, 0 0 50px rgba(36, 112, 255, 0.9)';
+  pOpen.style.background = '#ffffff';
+  pOpen.style.border = '1px solid rgba(255, 255, 255, 0.6)';
+  pOpen.style.boxShadow = '0 0 16px rgba(255, 255, 255, 0.5), 0 0 32px rgba(255, 255, 255, 0.2)';
   pOpen.classList.remove('hidden');
 
   // Stage 1: Ball flies out across 3D space to the left dock position (440ms)
@@ -838,9 +838,9 @@ async function openVaultAudit(vault, startPos) {
     pOpen.style.width = `${targetWidth}px`;
     pOpen.style.height = `${targetHeight}px`;
     pOpen.style.borderRadius = '20px';
-    pOpen.style.background = 'rgba(9, 12, 19, 0.88)';
-    pOpen.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-    pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 35px rgba(36, 112, 255, 0.18)';
+    pOpen.style.background = 'rgba(14, 14, 14, 0.88)';
+    pOpen.style.border = '1px solid rgba(255, 255, 255, 0.14)';
+    pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08)';
   }, 420);
 
   // Simultaneously resolve audit data and finish population
@@ -890,8 +890,8 @@ function closeVaultAudit() {
   DOM.morphProxy.style.height = `${targetHeight}px`;
   DOM.morphProxy.style.borderRadius = '20px';
   DOM.morphProxy.style.opacity = '0.88';
-  DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
-  DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+  DOM.morphProxy.style.background = 'rgba(14, 14, 14, 0.88)';
+  DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.14)';
   DOM.morphProxy.classList.remove('hidden');
 
   // 3. Determine return coordinates of the particle on the 3D sphere
@@ -906,8 +906,8 @@ function closeVaultAudit() {
     DOM.morphProxy.style.width = '12px';
     DOM.morphProxy.style.height = '12px';
     DOM.morphProxy.style.borderRadius = '50%';
-    DOM.morphProxy.style.background = '#2470ff';
-    DOM.morphProxy.style.boxShadow = '0 0 20px #00e5ff';
+    DOM.morphProxy.style.background = '#ffffff';
+    DOM.morphProxy.style.boxShadow = '0 0 16px rgba(255, 255, 255, 0.6)';
   });
 
   // Stage 2: Ball shoots back into particle on the sphere (440ms)
@@ -1048,7 +1048,7 @@ function populateAuditModal(data) {
   // Populate Allocations Table
   DOM.allocationsTbody.innerHTML = '';
   if (allocations.length === 0) {
-    DOM.allocationsTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">No active market allocations recorded.</td></tr>';
+    DOM.allocationsTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No active market allocations recorded.</td></tr>';
   } else {
     allocations.forEach(a => {
       const tr = document.createElement('tr');
@@ -1069,7 +1069,7 @@ function populateAuditModal(data) {
   // Populate Reallocations Table
   DOM.reallocationsTbody.innerHTML = '';
   if (reallocations.length === 0) {
-    DOM.reallocationsTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#666;">No historical curator reallocations recorded.</td></tr>';
+    DOM.reallocationsTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No historical curator reallocations recorded.</td></tr>';
   } else {
     reallocations.forEach(r => {
       const tr = document.createElement('tr');
