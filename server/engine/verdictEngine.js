@@ -37,13 +37,13 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 2: Extreme Collateral Concentration (SPOF)
-  if (hhi.hhi > 0.50) {
+  if (hhi.tier !== 'UNALLOCATED' && hhi.hhi > 0.50 && hhi.topCollateral.sharePercent >= 40) {
     redFlags.push({
       level: 'HIGH',
       title: 'Extreme Collateral Concentration',
       message: `${hhi.topCollateral.sharePercent}% of vault capital is backed by a single collateral asset (${hhi.topCollateral.symbol}), creating a Single Point of Failure (HHI: ${hhi.hhi}).`
     });
-  } else if (hhi.hhi >= 0.25) {
+  } else if (hhi.tier !== 'UNALLOCATED' && (hhi.hhi >= 0.25 || (hhi.hhi > 0.50 && hhi.topCollateral.sharePercent < 40)) && hhi.topCollateral.sharePercent >= 20) {
     redFlags.push({
       level: 'MEDIUM',
       title: 'Elevated Collateral Concentration',
@@ -61,7 +61,9 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // 5. Plaintext Objective Summary
-  let summary = `MQI: ${mqi.mqiPercent}% clean capital. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`;
+  let summary = hhi.tier === 'UNALLOCATED'
+    ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: Немає застави (100% кеш). Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`
+    : `MQI: ${mqi.mqiPercent}% clean capital. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`;
 
   return {
     vaultAddress: vault.address,

@@ -560,7 +560,9 @@ function renderVaultExplorer() {
       return (b.hhi ?? 0) - (a.hhi ?? 0);
     }
     if (explorerFilters.sort === 'hhi_asc') {
-      return (a.hhi ?? 0) - (b.hhi ?? 0);
+      const aVal = a.hhiTier === 'UNALLOCATED' ? 999 : (a.hhi ?? 0);
+      const bVal = b.hhiTier === 'UNALLOCATED' ? 999 : (b.hhi ?? 0);
+      return aVal - bVal;
     }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
@@ -1014,16 +1016,28 @@ function populateAuditModal(data) {
 
   // 2. HHI
   const hhiVal = verdict.hhi?.hhi ?? 0;
-  if (DOM.riskHhiVal) DOM.riskHhiVal.textContent = `${hhiVal} (${verdict.hhi?.tierLabel || 'HHI'})`;
+  const isUnallocated = verdict.hhi?.tier === 'UNALLOCATED';
+
+  if (DOM.riskHhiVal) {
+    if (isUnallocated) {
+      DOM.riskHhiVal.textContent = `N/A (${verdict.hhi?.tierLabel || '100% Cash'})`;
+    } else {
+      DOM.riskHhiVal.textContent = `${hhiVal} (${verdict.hhi?.tierLabel || 'HHI'})`;
+    }
+  }
   if (DOM.riskHhiBar) {
-    DOM.riskHhiBar.style.width = `${Math.min(100, Math.round(hhiVal * 100))}%`;
+    DOM.riskHhiBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(hhiVal * 100))}%`;
     DOM.riskHhiBar.style.background = '#ffffff';
   }
   if (DOM.riskHhiDesc) {
-    const top = verdict.hhi?.topCollateral;
-    DOM.riskHhiDesc.textContent = top && top.symbol !== 'None'
-      ? `Top collateral: ${top.symbol} (${top.sharePercent}% of total capital)`
-      : 'Herfindahl-Hirschman single-asset concentration index';
+    if (isUnallocated) {
+      DOM.riskHhiDesc.textContent = 'Всі кошти у вільному кеші; позики та застава відсутні.';
+    } else {
+      const top = verdict.hhi?.topCollateral;
+      DOM.riskHhiDesc.textContent = top && top.symbol !== 'None'
+        ? `Top collateral: ${top.symbol} (${top.sharePercent}% of total capital)`
+        : 'Herfindahl-Hirschman single-asset concentration index';
+    }
   }
 
   // 3. Exit Liquidity
@@ -1040,7 +1054,11 @@ function populateAuditModal(data) {
 
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
-    DOM.riskEffectiveAssets.textContent = `${verdict.hhi?.effectiveAssets || 1} Effective Assets`;
+    if (isUnallocated) {
+      DOM.riskEffectiveAssets.textContent = '0 Effective Assets (Немає застави)';
+    } else {
+      DOM.riskEffectiveAssets.textContent = `${verdict.hhi?.effectiveAssets ?? 0} Effective Assets`;
+    }
   }
   if (DOM.riskCollateralList) {
     DOM.riskCollateralList.innerHTML = '';

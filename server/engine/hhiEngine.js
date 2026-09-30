@@ -25,55 +25,92 @@ export function calculateHHI(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
   const directLiquidityUsd = Number(vault.liquidity_usd) || 0;
 
-  if (totalAssetsUsd <= 0 || allocations.length === 0) {
+  // Group allocations by unique collateral asset symbol
+  // Exclude NONE collateral, 0-LLTV markets, and empty collateral addresses (these are idle/cash holding markets)
+  const collateralMap = new Map();
+  let totalActiveCollateralUsd = 0;
+  let idleAllocationsUsd = 0;
+
+  for (const alloc of allocations) {
+    const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
+    const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
+    const supplyUsd = Number(alloc.supply_assets_usd) || 0;
+
+    // Check if this market has active collateral backing
+    const isIdleMarket = !symbol || symbol === 'NONE' || lltvNum === 0 || !alloc.collateral_asset_address || alloc.collateral_asset_address === '0x0000000000000000000000000000000000000000';
+
+    if (isIdleMarket) {
+      idleAllocationsUsd += supplyUsd;
+    } else if (supplyUsd > 0) {
+      const current = collateralMap.get(symbol) || 0;
+      collateralMap.set(symbol, current + supplyUsd);
+      totalActiveCollateralUsd += supplyUsd;
+    }
+  }
+
+  // Any vault capital not deployed into active collateral is unallocated cash / idle reserve
+  const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalActiveCollateralUsd);
+
+  // If there is no active collateral backing at all (100% idle cash or empty vault)
+  if (totalAssetsUsd <= 0 || totalActiveCollateralUsd <= 0 || collateralMap.size === 0) {
     return {
       hhi: 0,
       effectiveAssets: 0,
-      tier: 'DIVERSIFIED',
-      tierLabel: 'Висока диверсифікація',
+      tier: 'UNALLOCATED',
+      tierLabel: 'Немає застави (100% кеш)',
       isExtremeConcentration: false,
-      topCollateral: { symbol: 'None', sharePercent: 0, usd: 0 },
-      breakdown: []
+      topCollateral: {
+        symbol: 'CASH (UNALLOCATED)',
+        sharePercent: 100,
+        usd: Math.max(0, Math.round(totalAssetsUsd * 100) / 100)
+      },
+      breakdown: [
+        {
+          symbol: 'CASH (UNALLOCATED)',
+          usd: Math.max(0, Math.round(totalAssetsUsd * 100) / 100),
+          sharePercent: 100
+        }
+      ]
     };
-  }
-
-  // Group allocations by unique collateral asset symbol
-  const collateralMap = new Map();
-
-  for (const alloc of allocations) {
-    const symbol = (alloc.collateral_asset_symbol || 'None').trim().toUpperCase();
-    const supplyUsd = Number(alloc.supply_assets_usd) || 0;
-
-    const current = collateralMap.get(symbol) || 0;
-    collateralMap.set(symbol, current + supplyUsd);
   }
 
   let hhiSum = 0;
   const breakdown = [];
 
+  // HHI is calculated across the active collateral portfolio:
+  // c_k = collateral_usd_k / totalActiveCollateralUsd
+  // HHI = sum(c_k^2)
   for (const [symbol, usd] of collateralMap.entries()) {
-    const share = Math.max(0, Math.min(1.0, usd / totalAssetsUsd));
-    hhiSum += share * share;
+    const collateralShare = Math.max(0, Math.min(1.0, usd / totalActiveCollateralUsd));
+    hhiSum += collateralShare * collateralShare;
 
+    // In breakdown, show the fraction of total vault capital (TVL)
+    const tvlShare = Math.max(0, Math.min(1.0, usd / totalAssetsUsd));
     breakdown.push({
       symbol,
       usd: Math.round(usd * 100) / 100,
-      sharePercent: Math.round(share * 1000) / 10
+      sharePercent: Math.round(tvlShare * 1000) / 10
     });
   }
 
-  // Sort breakdown descending by share
-  breakdown.sort((a, b) => b.sharePercent - a.sharePercent);
+  // Top collateral asset by USD volume
+  const sortedCollateral = [...collateralMap.entries()].sort((a, b) => b[1] - a[1]);
+  const topCollatSymbol = sortedCollateral[0][0];
+  const topCollatUsd = sortedCollateral[0][1];
+  const topCollatShare = Math.max(0, Math.min(100, Math.round((topCollatUsd / totalAssetsUsd) * 1000) / 10));
 
-  // If there is significant cash, also track it in the breakdown
-  const cashShare = Math.max(0, Math.min(1.0, directLiquidityUsd / totalAssetsUsd));
-  if (cashShare > 0.01) {
+  // If there is cash or idle buffer, add CASH (UNALLOCATED) to breakdown
+  const cashShare = Math.max(0, Math.min(1.0, unallocatedCashUsd / totalAssetsUsd));
+  if (cashShare > 0.005) {
     breakdown.push({
       symbol: 'CASH (UNALLOCATED)',
-      usd: Math.round(directLiquidityUsd * 100) / 100,
+      usd: Math.round(unallocatedCashUsd * 100) / 100,
       sharePercent: Math.round(cashShare * 1000) / 10
     });
   }
+
+  // Sort breakdown descending by share of vault capital
+  breakdown.sort((a, b) => b.sharePercent - a.sharePercent);
 
   const hhi = Math.min(1.0, Math.max(0, Math.round(hhiSum * 1000) / 1000));
   const effectiveAssets = hhi > 0 ? Math.round((1 / hhi) * 10) / 10 : 0;
@@ -93,7 +130,11 @@ export function calculateHHI(vault, allocations = []) {
     tierLabel = 'Помірна концентрація';
   }
 
-  const topCollateral = breakdown[0] || { symbol: 'None', sharePercent: 0, usd: 0 };
+  const topCollateral = {
+    symbol: topCollatSymbol,
+    usd: Math.round(topCollatUsd * 100) / 100,
+    sharePercent: topCollatShare
+  };
 
   return {
     hhi,
