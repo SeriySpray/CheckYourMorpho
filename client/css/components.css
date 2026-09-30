@@ -622,10 +622,11 @@
 
 .meter-fill {
   height: 100%;
-  background: var(--accent-blue);
+  background: #ffffff;
   border-radius: 3px;
   transition: width 400ms ease;
 }
+
 
 .meter-fill.yellow {
   background: var(--accent-orange);

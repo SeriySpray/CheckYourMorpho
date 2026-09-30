@@ -606,11 +606,10 @@ function renderVaultExplorer() {
     const apy = v.netApy || 0;
     const mqi = v.mqiPercent ?? 100;
     const isClean = v.isAllClean ?? (mqi === 100);
-    const hhi = Number(v.hhi ?? 0);
 
-    const mqiBadgeHtml = isClean 
-      ? `<span class="vault-mini-badge clean">100% Clean</span>`
-      : `<span class="vault-mini-badge flagged">${mqi.toFixed(1)}% Clean</span>`;
+    const flaggedBadgeHtml = (!isClean && mqi < 100)
+      ? ` • <span class="vault-mini-badge flagged">${(100 - mqi).toFixed(1)}% Flagged</span>`
+      : '';
 
     li.innerHTML = `
       <div class="vault-item-left">
@@ -618,16 +617,14 @@ function renderVaultExplorer() {
           <span class="vault-chain-badge ${chainClass}">${chainName}</span>
           <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
         </div>
-        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong> • ${mqiBadgeHtml}</span>
+        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong>${flaggedBadgeHtml}</span>
       </div>
       <div class="vault-item-right">
         <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
-        <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end;">
-          <span class="vault-item-apy">${(apy * 100).toFixed(2)}% APY</span>
-          <span class="vault-item-hhi-pill" title="Herfindahl Index: ${hhi.toFixed(3)}">HHI ${hhi.toFixed(2)}</span>
-        </div>
+        <span class="vault-item-apy">${(apy * 100).toFixed(2)}% APY</span>
       </div>
     `;
+
 
 
     li.addEventListener('mouseenter', () => {
@@ -1007,7 +1004,7 @@ function populateAuditModal(data) {
   if (DOM.riskMqiPct) DOM.riskMqiPct.textContent = `${mqiVal}%`;
   if (DOM.riskMqiBar) {
     DOM.riskMqiBar.style.width = `${mqiVal}%`;
-    DOM.riskMqiBar.style.background = mqiVal === 100 ? 'var(--accent-green)' : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
+    DOM.riskMqiBar.style.background = '#ffffff';
   }
   if (DOM.riskMqiDesc) {
     DOM.riskMqiDesc.textContent = verdict.mqi?.isAllClean
@@ -1020,7 +1017,7 @@ function populateAuditModal(data) {
   if (DOM.riskHhiVal) DOM.riskHhiVal.textContent = `${hhiVal} (${verdict.hhi?.tierLabel || 'HHI'})`;
   if (DOM.riskHhiBar) {
     DOM.riskHhiBar.style.width = `${Math.min(100, Math.round(hhiVal * 100))}%`;
-    DOM.riskHhiBar.style.background = hhiVal > 0.50 ? 'var(--accent-red)' : (hhiVal >= 0.25 ? 'var(--accent-orange)' : 'var(--accent-blue)');
+    DOM.riskHhiBar.style.background = '#ffffff';
   }
   if (DOM.riskHhiDesc) {
     const top = verdict.hhi?.topCollateral;
@@ -1034,8 +1031,9 @@ function populateAuditModal(data) {
   if (DOM.riskExitPct) DOM.riskExitPct.textContent = `${exitPct}%`;
   if (DOM.riskExitBar) {
     DOM.riskExitBar.style.width = `${Math.min(100, exitPct)}%`;
-    DOM.riskExitBar.style.background = exitPct < 20 ? 'var(--accent-red)' : 'var(--accent-blue)';
+    DOM.riskExitBar.style.background = '#ffffff';
   }
+
   if (DOM.riskExitDesc) {
     DOM.riskExitDesc.textContent = `${formatCurrency(verdict.liquidity?.instantExitCapacityUsd || 0)} available for immediate withdrawal without locking markets`;
   }
