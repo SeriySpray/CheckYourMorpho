@@ -36,18 +36,24 @@ export function isMarketClean(market) {
     reasons.push(`Bad debt detected ($${totalBadDebt.toLocaleString('en-US', { maximumFractionDigits: 0 })})`);
   }
 
-  // Check 3: Oracle Verification
-  const oracleAddr = (market.oracle_address || '').toLowerCase();
-  const oracleType = market.oracle_type || '';
-  const isZeroAddress = !oracleAddr || oracleAddr === '0x0000000000000000000000000000000000000000';
-  const isKnownOracle = oracleType.toLowerCase().includes('chainlink') ||
-                        oracleType.toLowerCase().includes('morpho') ||
-                        oracleType.toLowerCase().includes('feed');
+  // Check: Idle / 0-LLTV reserve markets (no collateral, no borrowing)
+  const lltvNum = Number(market.lltv_percent || 0);
+  const isIdleReserve = lltvNum === 0 && (!market.collateral_asset_address || market.collateral_asset_symbol === 'NONE');
 
-  if (isZeroAddress) {
-    reasons.push('Missing oracle contract address');
-  } else if (!isKnownOracle && oracleType.toLowerCase() === 'unknown') {
-    reasons.push(`Unverified oracle implementation (${oracleType})`);
+  // Check 3: Oracle Verification (only required for borrowing markets with collateral)
+  if (!isIdleReserve) {
+    const oracleAddr = (market.oracle_address || '').toLowerCase();
+    const oracleType = market.oracle_type || '';
+    const isZeroAddress = !oracleAddr || oracleAddr === '0x0000000000000000000000000000000000000000';
+    const isKnownOracle = oracleType.toLowerCase().includes('chainlink') ||
+                          oracleType.toLowerCase().includes('morpho') ||
+                          oracleType.toLowerCase().includes('feed');
+
+    if (isZeroAddress) {
+      reasons.push('Missing oracle contract address');
+    } else if (!isKnownOracle && oracleType.toLowerCase() === 'unknown') {
+      reasons.push(`Unverified oracle implementation (${oracleType})`);
+    }
   }
 
   // Check 4: Protocol Warnings
@@ -115,10 +121,10 @@ export function calculateMQI(vault, allocations = []) {
     const weight = Math.max(0, Math.min(1.0, supplyUsd / totalAssetsUsd));
     const test = isMarketClean(alloc);
 
-    if (test.isClean) {
+    if (test.isClean || supplyUsd < 1) {
       cleanWeightedSum += weight;
       cleanAssetsUsd += supplyUsd;
-      cleanMarketsCount++;
+      if (test.isClean) cleanMarketsCount++;
     } else {
       compromisedAssetsUsd += supplyUsd;
       compromisedMarkets.push({
@@ -138,7 +144,7 @@ export function calculateMQI(vault, allocations = []) {
     mqiPercent,
     cleanAssetsUsd: Math.round(cleanAssetsUsd * 100) / 100,
     compromisedAssetsUsd: Math.round(compromisedAssetsUsd * 100) / 100,
-    isAllClean: compromisedMarkets.length === 0,
+    isAllClean: compromisedMarkets.length === 0 && mqiPercent === 100,
     cleanMarketsCount,
     totalMarketsCount: allocations.length,
     compromisedMarkets

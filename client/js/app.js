@@ -951,7 +951,7 @@ function populateAuditModal(data) {
   // Market Quality Index (MQI) Header Pill
   const mqiVal = verdict.mqi?.mqiPercent ?? 100;
   DOM.modalGrade.textContent = `${mqiVal}%`;
-  DOM.modalScore.textContent = verdict.mqi?.isAllClean ? 'Clean Capital' : 'Compromised';
+  DOM.modalScore.textContent = (mqiVal === 100 && verdict.mqi?.isAllClean) ? 'Clean Capital' : (mqiVal < 100 ? `${(100 - mqiVal).toFixed(1)}% Flagged` : 'Clean Capital');
   DOM.modalGrade.style.color = mqiVal === 100 ? 'var(--accent-green)' : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
 
   // Financials
