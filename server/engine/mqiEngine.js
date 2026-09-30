@@ -104,25 +104,21 @@ export function calculateMQI(vault, allocations = []) {
     };
   }
 
-  // Cash weight
-  const wCash = Math.min(1.0, Math.max(0, directLiquidityUsd / totalAssetsUsd));
-  let cleanWeightedSum = wCash;
-  let cleanAssetsUsd = directLiquidityUsd;
-  let compromisedAssetsUsd = 0;
+  let cleanSupplyUsd = 0;
+  let compromisedSupplyUsd = 0;
   let cleanMarketsCount = 0;
   const compromisedMarkets = [];
 
   for (const alloc of allocations) {
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
-    const weight = Math.max(0, Math.min(1.0, supplyUsd / totalAssetsUsd));
     const test = isMarketClean(alloc);
 
     if (test.isClean || supplyUsd < 1) {
-      cleanWeightedSum += weight;
-      cleanAssetsUsd += supplyUsd;
-      if (test.isClean) cleanMarketsCount++;
+      cleanSupplyUsd += supplyUsd;
+      if (test.isClean && supplyUsd >= 1) cleanMarketsCount++;
     } else {
-      compromisedAssetsUsd += supplyUsd;
+      compromisedSupplyUsd += supplyUsd;
+      const weight = totalAssetsUsd > 0 ? supplyUsd / totalAssetsUsd : 0;
       compromisedMarkets.push({
         marketUniqueKey: alloc.market_unique_key,
         collateralSymbol: alloc.collateral_asset_symbol || 'None',
@@ -134,15 +130,24 @@ export function calculateMQI(vault, allocations = []) {
     }
   }
 
-  const mqiPercent = Math.min(100, Math.max(0, Math.round(cleanWeightedSum * 1000) / 10));
+  // Any vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)
+  const totalAllocated = cleanSupplyUsd + compromisedSupplyUsd;
+  const idleCashUsd = Math.max(0, totalAssetsUsd - totalAllocated);
+  const totalCleanAssetsUsd = cleanSupplyUsd + idleCashUsd;
+  const effectiveTotalUsd = totalCleanAssetsUsd + compromisedSupplyUsd;
+
+  const mqiPercent = effectiveTotalUsd > 0 
+    ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / effectiveTotalUsd) * 1000) / 10))
+    : 100;
 
   return {
     mqiPercent,
-    cleanAssetsUsd: Math.round(cleanAssetsUsd * 100) / 100,
-    compromisedAssetsUsd: Math.round(compromisedAssetsUsd * 100) / 100,
+    cleanAssetsUsd: Math.round(totalCleanAssetsUsd * 100) / 100,
+    compromisedAssetsUsd: Math.round(compromisedSupplyUsd * 100) / 100,
     isAllClean: compromisedMarkets.length === 0 && mqiPercent === 100,
     cleanMarketsCount,
     totalMarketsCount: allocations.length,
     compromisedMarkets
   };
 }
+
