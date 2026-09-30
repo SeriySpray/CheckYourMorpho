@@ -567,15 +567,12 @@ export class ParticleSphere {
   initEvents() {
     window.addEventListener('resize', () => this.resize());
 
-    // Mouse drag rotation
-    window.addEventListener('mousedown', (e) => {
-      if (e.target.closest('#audit-modal') || e.target.closest('.search-container')) return;
+    // Mouse drag rotation is strictly initiated on the 3D canvas only
+    this.canvas.addEventListener('mousedown', (e) => {
       this.isDragging = true;
       this.dragDistance = 0;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
-      this.targetRotX = null;
-      this.targetRotY = null;
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -624,9 +621,9 @@ export class ParticleSphere {
       this.isDragging = false;
     });
 
-    // Touch support for tablets/mobile
-    window.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1 && !e.target.closest('#audit-modal')) {
+    // Touch support for tablets/mobile strictly initiated on 3D canvas
+    this.canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
         this.isDragging = true;
         this.dragDistance = 0;
         this.lastMouseX = e.touches[0].clientX;
@@ -693,21 +690,7 @@ export class ParticleSphere {
   }
 
   rotateToVault(address) {
-    if (!address) return;
-    const addrLower = address.toLowerCase();
-    const p = this.vaultMap.get(addrLower);
-    if (p) {
-      const idx = p.index;
-      const x = this.positions[3 * idx];
-      const y = this.positions[3 * idx + 1];
-      const z = this.positions[3 * idx + 2];
-
-      const targetAngleY = Math.atan2(-x, z);
-      const targetAngleX = Math.asin(clamp(y, -1, 1));
-
-      this.targetRotY = targetAngleY;
-      this.targetRotX = -targetAngleX;
-    }
+    // Sphere auto-rotation must NEVER be interrupted or locked to a vault
   }
 
   highlightVault(address) {
@@ -739,11 +722,16 @@ export class ParticleSphere {
     this.lastTime = now;
     this.elapsedFrames += dt;
 
+    // Continuous, uninterrupted auto-rotation - NEVER stops under any circumstances
+    // (modal opening, closing, UI clicks, hovering, or drag interactions)
+    this.rotY += this.autoSpeedY * dt;
+    this.rotX += this.autoSpeedX * dt;
+
     if (!this.isDragging) {
       this.velX *= 0.94;
       this.velY *= 0.94;
-      this.rotY += this.autoSpeedY + this.velY;
-      this.rotX += this.autoSpeedX + this.velX;
+      this.rotY += this.velY;
+      this.rotX += this.velX;
     }
 
     this.render(dt);

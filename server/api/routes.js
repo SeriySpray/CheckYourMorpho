@@ -106,7 +106,9 @@ function serveFile(filePath, res) {
     res.writeHead(200, {
       'Content-Type': contentType,
       'Content-Length': content.length,
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     });
     res.end(content);
   });

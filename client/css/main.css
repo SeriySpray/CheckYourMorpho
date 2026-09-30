@@ -273,8 +273,9 @@ body::before {
   background: var(--accent-blue);
   border: 1px solid #ffffff;
   box-shadow: 0 0 24px rgba(36, 112, 255, 0.8), 0 0 60px rgba(36, 112, 255, 0.4);
-  transition: all var(--transition-morph);
   transform: translate(-50%, -50%);
+  will-change: left, top, width, height, opacity;
+  contain: layout paint;
 }
 
 .morph-proxy.hidden {

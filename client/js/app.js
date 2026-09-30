@@ -772,19 +772,21 @@ async function openVaultAudit(vault, startPos) {
     pRetract.classList.remove('hidden');
 
     // Stage 1: Fold window down into a ball at left dock (220ms)
-    pRetract.offsetHeight;
-    pRetract.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
-    pRetract.style.width = '12px';
-    pRetract.style.height = '12px';
-    pRetract.style.borderRadius = '50%';
-    pRetract.style.background = '#2470ff';
-    pRetract.style.boxShadow = '0 0 20px #00e5ff';
+    requestAnimationFrame(() => {
+      pRetract.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
+      pRetract.style.width = '12px';
+      pRetract.style.height = '12px';
+      pRetract.style.borderRadius = '50%';
+      pRetract.style.background = '#2470ff';
+      pRetract.style.boxShadow = '0 0 20px #00e5ff';
+    });
 
     // Stage 2: Ball shoots across 3D space back to sphere particle (440ms)
     setTimeout(() => {
+      const livePrevPos = prevVaultAddress ? sphere.getParticleScreenPos(prevVaultAddress) : prevPos;
       pRetract.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), opacity 440ms';
-      pRetract.style.left = `${prevPos.x}px`;
-      pRetract.style.top = `${prevPos.y}px`;
+      pRetract.style.left = `${livePrevPos.x}px`;
+      pRetract.style.top = `${livePrevPos.y}px`;
       pRetract.style.opacity = '0';
 
       setTimeout(() => {
@@ -823,10 +825,11 @@ async function openVaultAudit(vault, startPos) {
   pOpen.classList.remove('hidden');
 
   // Stage 1: Ball flies out across 3D space to the left dock position (440ms)
-  pOpen.offsetHeight;
-  pOpen.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 440ms';
-  pOpen.style.left = `${targetCenterX}px`;
-  pOpen.style.top = `${targetCenterY}px`;
+  requestAnimationFrame(() => {
+    pOpen.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 440ms';
+    pOpen.style.left = `${targetCenterX}px`;
+    pOpen.style.top = `${targetCenterY}px`;
+  });
   // (Notice: width, height, borderRadius stay circular during flight!)
 
   // Stage 2: Upon arriving at left dock, ball unfolds into the full rectangular window (300ms)
@@ -898,19 +901,21 @@ function closeVaultAudit() {
   }
 
   // Stage 1: Fold window down into a ball at dock position (220ms)
-  DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
-  DOM.morphProxy.style.width = '12px';
-  DOM.morphProxy.style.height = '12px';
-  DOM.morphProxy.style.borderRadius = '50%';
-  DOM.morphProxy.style.background = '#2470ff';
-  DOM.morphProxy.style.boxShadow = '0 0 20px #00e5ff';
+  requestAnimationFrame(() => {
+    DOM.morphProxy.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
+    DOM.morphProxy.style.width = '12px';
+    DOM.morphProxy.style.height = '12px';
+    DOM.morphProxy.style.borderRadius = '50%';
+    DOM.morphProxy.style.background = '#2470ff';
+    DOM.morphProxy.style.boxShadow = '0 0 20px #00e5ff';
+  });
 
   // Stage 2: Ball shoots back into particle on the sphere (440ms)
   setTimeout(() => {
-    DOM.morphProxy.style.transition = 'all 440ms cubic-bezier(0.16, 1, 0.3, 1)';
-    DOM.morphProxy.style.left = `${particlePos.x}px`;
-    DOM.morphProxy.style.top = `${particlePos.y}px`;
+    const liveParticlePos = closingAddress ? sphere.getParticleScreenPos(closingAddress) : particlePos;
+    DOM.morphProxy.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), opacity 440ms';
+    DOM.morphProxy.style.left = `${liveParticlePos.x}px`;
+    DOM.morphProxy.style.top = `${liveParticlePos.y}px`;
     DOM.morphProxy.style.opacity = '0';
 
     setTimeout(() => {
