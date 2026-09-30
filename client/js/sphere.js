@@ -269,9 +269,9 @@ export class ParticleSphere {
       this.logoLoaded = true;
     };
 
-    // Hover & selection callbacks
     this.hoveredParticle = null;
     this.highlightedVaultAddress = null;
+    this.selectedVaultAddress = null;
     this.onVaultSelect = options.onVaultSelect || null;
     this.onVaultHover = options.onVaultHover || null;
 
@@ -657,15 +657,19 @@ export class ParticleSphere {
     });
   }
 
-  highlightVault(address) {
+  setSelectedVault(address) {
     if (!address) {
-      this.highlightedVaultAddress = null;
+      this.selectedVaultAddress = null;
       return;
     }
-
     const addrLower = address.toLowerCase();
-    this.highlightedVaultAddress = addrLower;
+    this.selectedVaultAddress = addrLower;
+    this.rotateToVault(addrLower);
+  }
 
+  rotateToVault(address) {
+    if (!address) return;
+    const addrLower = address.toLowerCase();
     const p = this.vaultParticles.find(pt => pt.vault && pt.vault.address.toLowerCase() === addrLower);
     if (p) {
       const idx = p.index;
@@ -679,6 +683,17 @@ export class ParticleSphere {
       this.targetRotY = targetAngleY;
       this.targetRotX = -targetAngleX;
     }
+  }
+
+  highlightVault(address) {
+    if (!address) {
+      this.highlightedVaultAddress = null;
+      return;
+    }
+
+    const addrLower = address.toLowerCase();
+    this.highlightedVaultAddress = addrLower;
+    this.rotateToVault(addrLower);
   }
 
   getParticleScreenPos(vaultAddress) {
@@ -941,43 +956,100 @@ export class ParticleSphere {
   }
 
   /**
-   * Renders glowing neon halos for hovered or search-selected vaults
+   * Renders glowing neon halos for hovered or search-selected vaults and persistent selected vault
    */
   renderVaultHighlights(ctx, time) {
-    if (!this.highlightedVaultAddress) return;
+    // 1. Render persistent selected vault (while audit window is open)
+    if (this.selectedVaultAddress) {
+      const selectedTarget = this.vaultParticles.find(
+        p => p.vault && p.vault.address.toLowerCase() === this.selectedVaultAddress
+      );
+      if (selectedTarget) {
+        this.drawVaultHalo(ctx, selectedTarget, true, time);
+      }
+    }
 
-    const target = this.vaultParticles.find(
-      p => p.vault && p.vault.address.toLowerCase() === this.highlightedVaultAddress
-    );
+    // 2. Render hovered or search-focused vault (if different from selected)
+    if (this.highlightedVaultAddress && this.highlightedVaultAddress !== this.selectedVaultAddress) {
+      const hoverTarget = this.vaultParticles.find(
+        p => p.vault && p.vault.address.toLowerCase() === this.highlightedVaultAddress
+      );
+      if (hoverTarget) {
+        this.drawVaultHalo(ctx, hoverTarget, false, time);
+      }
+    }
+  }
 
-    if (!target) return;
-
+  drawVaultHalo(ctx, target, isSelected, time) {
     ctx.save();
 
-    const glowRadius = Math.max(12, target.baseSize * target.scale * 3.8);
-    const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 2);
-    grad.addColorStop(0, 'rgba(36, 112, 255, 0.95)');
-    grad.addColorStop(0.35, 'rgba(87, 146, 255, 0.45)');
-    grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
+    // Base alpha depends on depth (if slightly rotated behind, dim softly rather than disappear)
+    const isBack = target.zFinal < -0.15;
+    const depthAlpha = isBack ? 0.35 : 1.0;
 
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(target.screenX, target.screenY, glowRadius * 2, 0, Math.PI * 2);
-    ctx.fill();
+    if (isSelected) {
+      // Golden/Cyan electric beacon for selected vault
+      const glowRadius = Math.max(16, target.baseSize * target.scale * 4.6);
+      const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 2.2);
+      grad.addColorStop(0, `rgba(0, 220, 255, ${0.95 * depthAlpha})`);
+      grad.addColorStop(0.35, `rgba(36, 112, 255, ${0.65 * depthAlpha})`);
+      grad.addColorStop(0.7, `rgba(36, 112, 255, ${0.2 * depthAlpha})`);
+      grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
 
-    // Pulsating outer neon ring
-    const pulse = 1.0 + Math.sin(time * 3.5) * 0.25;
-    ctx.strokeStyle = '#5792ff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(target.screenX, target.screenY, glowRadius * pulse, 0, Math.PI * 2);
-    ctx.stroke();
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, glowRadius * 2.2, 0, Math.PI * 2);
+      ctx.fill();
 
-    // Core bright star center
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(target.screenX, target.screenY, target.baseSize * target.scale * 1.6, 0, Math.PI * 2);
-    ctx.fill();
+      // Double pulsating beacon rings
+      const pulse1 = 1.0 + Math.sin(time * 3.2) * 0.3;
+      const pulse2 = 1.2 + Math.cos(time * 2.8) * 0.25;
+
+      ctx.strokeStyle = `rgba(0, 230, 255, ${0.95 * depthAlpha})`;
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, glowRadius * pulse1, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(100, 180, 255, ${0.55 * depthAlpha})`;
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, glowRadius * pulse2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Core diamond / bright white point
+      ctx.fillStyle = `rgba(255, 255, 255, ${depthAlpha})`;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, Math.max(4, target.baseSize * target.scale * 2.0), 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // Standard hover neon halo
+      const glowRadius = Math.max(12, target.baseSize * target.scale * 3.8);
+      const grad = ctx.createRadialGradient(target.screenX, target.screenY, 0, target.screenX, target.screenY, glowRadius * 2);
+      grad.addColorStop(0, `rgba(36, 112, 255, ${0.95 * depthAlpha})`);
+      grad.addColorStop(0.35, `rgba(87, 146, 255, ${0.45 * depthAlpha})`);
+      grad.addColorStop(1, 'rgba(36, 112, 255, 0)');
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, glowRadius * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pulsating outer neon ring
+      const pulse = 1.0 + Math.sin(time * 3.5) * 0.25;
+      ctx.strokeStyle = `rgba(87, 146, 255, ${depthAlpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, glowRadius * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Core white point
+      ctx.fillStyle = `rgba(255, 255, 255, ${depthAlpha})`;
+      ctx.beginPath();
+      ctx.arc(target.screenX, target.screenY, target.baseSize * target.scale * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.restore();
   }

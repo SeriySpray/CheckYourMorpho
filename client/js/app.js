@@ -632,33 +632,86 @@ function renderVaultExplorer() {
   DOM.explorerVaultsList.appendChild(fragment);
 }
 
+let isTransitioningVault = false;
+
 /**
  * Executes the smooth particle morphing flight from the 3D sphere into the Left Floating Terminal.
  */
 async function openVaultAudit(vault, startPos) {
-  selectedVaultAddress = vault.address;
-  DOM.tooltip.classList.add('hidden');
+  if (isTransitioningVault) return;
 
-  // Highlight selected vault particle on the 3D sphere
-  sphere.highlightVault(vault.address);
-
-  // If the left audit terminal is ALREADY open, smoothly crossfade content
-  const isAlreadyOpen = !DOM.auditModal.classList.contains('hidden');
-  if (isAlreadyOpen) {
-    if (DOM.auditPanelBody) DOM.auditPanelBody.style.opacity = '0.4';
-    try {
-      const res = await fetch(`/api/vaults/${vault.address}`);
-      if (!res.ok) throw new Error('Vault audit data not found');
-      const data = await res.json();
-      activeAuditData = data;
-      populateAuditModal(data);
-      if (DOM.auditPanelBody) DOM.auditPanelBody.style.opacity = '1';
-    } catch (err) {
-      console.error('Error fetching vault audit:', err);
-      if (DOM.auditPanelBody) DOM.auditPanelBody.style.opacity = '1';
-    }
+  // If clicking the currently open vault, do nothing
+  if (selectedVaultAddress && selectedVaultAddress.toLowerCase() === vault.address.toLowerCase() && !DOM.auditModal.classList.contains('hidden')) {
     return;
   }
+
+  DOM.tooltip.classList.add('hidden');
+
+  // Pre-fetch audit data immediately in parallel so it's ready by the time animation arrives
+  const auditDataPromise = fetch(`/api/vaults/${vault.address}`)
+    .then(res => {
+      if (!res.ok) throw new Error('Vault audit data not found');
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error fetching vault audit:', err);
+      return null;
+    });
+
+  // Check if a vault window is ALREADY open
+  const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
+
+  if (isAlreadyOpen) {
+    isTransitioningVault = true;
+
+    // STEP 1: Previous vault window closes and flies back to its particle on the sphere
+    const prevVaultAddress = selectedVaultAddress;
+    const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+    const targetHeight = window.innerHeight - 36;
+    const targetCenterX = 20 + targetWidth / 2;
+    const targetCenterY = 18 + targetHeight / 2;
+
+    // Hide left panel
+    DOM.auditModal.classList.add('hidden');
+
+    // Spawn proxy in left terminal bounds
+    DOM.morphProxy.style.transition = 'none';
+    DOM.morphProxy.style.left = `${targetCenterX}px`;
+    DOM.morphProxy.style.top = `${targetCenterY}px`;
+    DOM.morphProxy.style.width = `${targetWidth}px`;
+    DOM.morphProxy.style.height = `${targetHeight}px`;
+    DOM.morphProxy.style.borderRadius = '20px';
+    DOM.morphProxy.style.opacity = '0.9';
+    DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
+    DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+    DOM.morphProxy.classList.remove('hidden');
+
+    // Previous particle screen position on sphere
+    let prevPos = sphere.getParticleScreenPos(prevVaultAddress);
+    if (!prevPos) {
+      prevPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
+    }
+
+    // Force reflow and fly back
+    DOM.morphProxy.offsetHeight;
+    DOM.morphProxy.style.transition = 'all 550ms cubic-bezier(0.16, 1, 0.3, 1)';
+    DOM.morphProxy.style.left = `${prevPos.x}px`;
+    DOM.morphProxy.style.top = `${prevPos.y}px`;
+    DOM.morphProxy.style.width = '12px';
+    DOM.morphProxy.style.height = '12px';
+    DOM.morphProxy.style.borderRadius = '50%';
+    DOM.morphProxy.style.opacity = '0.2';
+    DOM.morphProxy.style.background = '#2470ff';
+
+    // Wait for the collapse animation to finish before launching the new vault
+    await new Promise(resolve => setTimeout(resolve, 520));
+
+    DOM.morphProxy.classList.add('hidden');
+  }
+
+  // STEP 2: Highlight new vault on sphere and launch slowed-down majestic fly-out animation
+  selectedVaultAddress = vault.address;
+  sphere.setSelectedVault(vault.address);
 
   // Target coordinates for Left Floating Terminal
   const targetLeft = 20;
@@ -682,22 +735,22 @@ async function openVaultAudit(vault, startPos) {
     }
   }
 
-  // 1. Position morph proxy at particle coordinate
+  // Position morph proxy at new particle coordinate
   DOM.morphProxy.style.transition = 'none';
   DOM.morphProxy.style.left = `${startX}px`;
   DOM.morphProxy.style.top = `${startY}px`;
-  DOM.morphProxy.style.width = '12px';
-  DOM.morphProxy.style.height = '12px';
+  DOM.morphProxy.style.width = '14px';
+  DOM.morphProxy.style.height = '14px';
   DOM.morphProxy.style.borderRadius = '50%';
   DOM.morphProxy.style.opacity = '1';
   DOM.morphProxy.style.background = '#2470ff';
   DOM.morphProxy.style.border = '1px solid #ffffff';
-  DOM.morphProxy.style.boxShadow = '0 0 32px #00d2ff, 0 0 60px rgba(36, 112, 255, 0.8)';
+  DOM.morphProxy.style.boxShadow = '0 0 36px #00e5ff, 0 0 70px rgba(36, 112, 255, 0.9)';
   DOM.morphProxy.classList.remove('hidden');
 
-  // 2. Reflow and start slow, fluid glide towards the left side
+  // Force reflow and start slow, fluid glide towards the left side (980ms)
   DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 720ms cubic-bezier(0.16, 1, 0.3, 1)';
+  DOM.morphProxy.style.transition = 'all 980ms cubic-bezier(0.18, 0.95, 0.28, 1)';
   DOM.morphProxy.style.left = `${targetCenterX}px`;
   DOM.morphProxy.style.top = `${targetCenterY}px`;
   DOM.morphProxy.style.width = `${targetWidth}px`;
@@ -707,26 +760,27 @@ async function openVaultAudit(vault, startPos) {
   DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
   DOM.morphProxy.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(36, 112, 255, 0.2)';
 
-  // 3. Concurrently fetch audit data from REST API
-  try {
-    const res = await fetch(`/api/vaults/${vault.address}`);
-    if (!res.ok) throw new Error('Vault audit data not found');
-    const data = await res.json();
-    activeAuditData = data;
-
-    populateAuditModal(data);
-
-    // 4. Reveal Left Terminal in sync with morph completion
-    setTimeout(() => {
-      DOM.auditModal.classList.remove('hidden');
-      DOM.morphProxy.style.opacity = '0';
-      setTimeout(() => DOM.morphProxy.classList.add('hidden'), 300);
-    }, 640);
-
-  } catch (err) {
-    console.error('Error fetching vault audit:', err);
+  // Wait for audit data
+  const data = await auditDataPromise;
+  if (!data) {
+    DOM.morphProxy.classList.add('hidden');
+    isTransitioningVault = false;
     closeVaultAudit();
+    return;
   }
+
+  activeAuditData = data;
+  populateAuditModal(data);
+
+  // Reveal left terminal at 880ms (as flight smoothly docks in place)
+  setTimeout(() => {
+    DOM.auditModal.classList.remove('hidden');
+    DOM.morphProxy.style.opacity = '0';
+    setTimeout(() => {
+      DOM.morphProxy.classList.add('hidden');
+      isTransitioningVault = false;
+    }, 350);
+  }, 880);
 }
 
 /**
@@ -739,6 +793,8 @@ function closeVaultAudit() {
   const targetHeight = window.innerHeight - 36;
   const targetCenterX = 20 + targetWidth / 2;
   const targetCenterY = 18 + targetHeight / 2;
+
+  const closingAddress = selectedVaultAddress;
 
   // 1. Hide left audit terminal
   DOM.auditModal.classList.add('hidden');
@@ -756,14 +812,14 @@ function closeVaultAudit() {
   DOM.morphProxy.classList.remove('hidden');
 
   // 3. Determine return coordinates of the particle on the 3D sphere
-  let particlePos = selectedVaultAddress ? sphere.getParticleScreenPos(selectedVaultAddress) : null;
+  let particlePos = closingAddress ? sphere.getParticleScreenPos(closingAddress) : null;
   if (!particlePos) {
     particlePos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
   }
 
-  // 4. Force reflow, then glide back to particle
+  // 4. Force reflow, then glide back to particle (650ms)
   DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 620ms cubic-bezier(0.16, 1, 0.3, 1)';
+  DOM.morphProxy.style.transition = 'all 650ms cubic-bezier(0.16, 1, 0.3, 1)';
   DOM.morphProxy.style.left = `${particlePos.x}px`;
   DOM.morphProxy.style.top = `${particlePos.y}px`;
   DOM.morphProxy.style.width = '12px';
@@ -775,8 +831,10 @@ function closeVaultAudit() {
   setTimeout(() => {
     DOM.morphProxy.classList.add('hidden');
     selectedVaultAddress = null;
+    sphere.setSelectedVault(null);
     sphere.highlightVault(null);
-  }, 620);
+    isTransitioningVault = false;
+  }, 650);
 }
 
 /**
