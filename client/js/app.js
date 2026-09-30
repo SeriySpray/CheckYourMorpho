@@ -634,10 +634,67 @@ function renderVaultExplorer() {
 }
 
 let isTransitioningVault = false;
+const clientAuditCache = new Map();
 
 /**
- * Executes the smooth particle morphing flight from the 3D sphere into the Left Floating Terminal.
- * If another vault was open, the old one collapses and flies back SIMULTANEOUSLY while the new one flies out.
+ * Instantly pre-populates vault identity, badges, financials, and specifications
+ * from the client-cached vault object so UI never opens empty or delayed.
+ */
+function populateBasicVaultInfo(v) {
+  if (!v) return;
+
+  const chainName = formatChainName(v.chainId);
+  const chainClass = getChainClass(v.chainId);
+
+  if (DOM.modalChainBadge) {
+    DOM.modalChainBadge.textContent = chainName;
+    DOM.modalChainBadge.className = `badge badge-chain ${chainClass}`;
+  }
+  if (DOM.modalVersionBadge) {
+    DOM.modalVersionBadge.textContent = (v.version || 'V1').toUpperCase();
+  }
+  if (DOM.modalListedBadge) {
+    DOM.modalListedBadge.textContent = v.isListed ? 'LISTED' : 'UNLISTED';
+    DOM.modalListedBadge.className = `badge ${v.isListed ? 'badge-listed' : 'badge-chain'}`;
+  }
+
+  if (DOM.modalVaultName) DOM.modalVaultName.textContent = v.name || 'Morpho Vault';
+  if (DOM.modalCuratorName) DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName, v.name);
+
+  // Financials
+  if (DOM.modalTvl) DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
+  if (DOM.modalAssetsHuman) {
+    const rawAssets = v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0;
+    DOM.modalAssetsHuman.textContent = `${formatNumber(rawAssets)} ${v.asset?.symbol || ''}`;
+  }
+  if (DOM.modalLiq) DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
+  if (DOM.modalNetApy) DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+  if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
+
+  // Specs Card Grid
+  if (DOM.modalSpecAsset) DOM.modalSpecAsset.textContent = v.asset?.symbol || 'Unknown';
+  if (DOM.modalSpecAssetAddr) {
+    const assetAddr = v.asset?.address || '';
+    DOM.modalSpecAssetAddr.textContent = assetAddr ? `${assetAddr.slice(0, 6)}...${assetAddr.slice(-4)}` : 'Native / Unknown';
+  }
+  if (DOM.modalSpecFee) {
+    DOM.modalSpecFee.textContent = `${((v.fee || 0) * 100).toFixed(1)}%`;
+  }
+  if (DOM.modalSpecAddress) {
+    const addr = v.address || '';
+    DOM.modalSpecAddress.textContent = addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : '0x...';
+    DOM.modalSpecAddress.title = addr;
+  }
+  if (DOM.modalSpecChain) {
+    DOM.modalSpecChain.textContent = `${chainName} (${v.chainId || 1})`;
+  }
+}
+
+/**
+ * Executes the two-stage particle flight and unfold into the Left Floating Terminal.
+ * Stage 1: The highlighted orb shoots out across 3D space to the left dock as a ball.
+ * Stage 2: Upon arriving at the left side, it smoothly unfolds into the full window panel.
+ * Instant Pre-population & In-Memory Cache ensure zero data loading lag.
  */
 async function openVaultAudit(vault, startPos) {
   if (isTransitioningVault) return;
@@ -649,16 +706,29 @@ async function openVaultAudit(vault, startPos) {
 
   DOM.tooltip.classList.add('hidden');
 
-  // Pre-fetch audit data immediately in parallel so it's ready by the time animation arrives
-  const auditDataPromise = fetch(`/api/vaults/${vault.address}`)
-    .then(res => {
-      if (!res.ok) throw new Error('Vault audit data not found');
-      return res.json();
-    })
-    .catch(err => {
-      console.error('Error fetching vault audit:', err);
-      return null;
-    });
+  // 1. Instant Synchronous Pre-population (0ms latency: badges, TVL, APY, specs appear immediately)
+  populateBasicVaultInfo(vault);
+
+  // 2. Fetch full audit data with client-side in-memory caching
+  const cacheKey = (vault.address || '').toLowerCase();
+  let auditDataPromise;
+  if (clientAuditCache.has(cacheKey)) {
+    auditDataPromise = Promise.resolve(clientAuditCache.get(cacheKey));
+  } else {
+    auditDataPromise = fetch(`/api/vaults/${vault.address}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Vault audit data not found');
+        return res.json();
+      })
+      .then(data => {
+        clientAuditCache.set(cacheKey, data);
+        return data;
+      })
+      .catch(err => {
+        console.error('Error fetching vault audit:', err);
+        return null;
+      });
+  }
 
   isTransitioningVault = true;
 
@@ -674,18 +744,18 @@ async function openVaultAudit(vault, startPos) {
   const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
   const prevVaultAddress = selectedVaultAddress;
 
-  // Immediately set the new selected vault on sphere so the new compact beacon lights up
+  // Immediately activate compact beacon on sphere for the new vault
   selectedVaultAddress = vault.address;
   sphere.setSelectedVault(vault.address);
 
-  // 1. If already open, launch the RETRACTING proxy simultaneously back to its particle
+  // --- A. RETRACTING ANIMATION (If previous vault was open) ---
   if (isAlreadyOpen && DOM.morphProxyRetract) {
     let prevPos = prevVaultAddress ? sphere.getParticleScreenPos(prevVaultAddress) : null;
     if (!prevPos) {
       prevPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
     }
 
-    // Hide the static audit modal so user sees the retracting proxy shrinking back
+    // Hide static panel immediately so user sees the folding proxy
     DOM.auditModal.classList.add('hidden');
 
     const pRetract = DOM.morphProxyRetract;
@@ -695,31 +765,37 @@ async function openVaultAudit(vault, startPos) {
     pRetract.style.width = `${targetWidth}px`;
     pRetract.style.height = `${targetHeight}px`;
     pRetract.style.borderRadius = '20px';
-    pRetract.style.opacity = '0.85';
+    pRetract.style.opacity = '0.88';
     pRetract.style.background = 'rgba(9, 12, 19, 0.88)';
     pRetract.style.border = '1px solid rgba(255, 255, 255, 0.12)';
     pRetract.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.6)';
     pRetract.classList.remove('hidden');
 
-    // Force reflow and start retract flight concurrently (680ms)
+    // Stage 1: Fold window down into a ball at left dock (220ms)
     pRetract.offsetHeight;
-    pRetract.style.transition = 'all 680ms cubic-bezier(0.16, 1, 0.3, 1)';
-    pRetract.style.left = `${prevPos.x}px`;
-    pRetract.style.top = `${prevPos.y}px`;
-    pRetract.style.width = '8px';
-    pRetract.style.height = '8px';
+    pRetract.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
+    pRetract.style.width = '12px';
+    pRetract.style.height = '12px';
     pRetract.style.borderRadius = '50%';
-    pRetract.style.opacity = '0';
     pRetract.style.background = '#2470ff';
+    pRetract.style.boxShadow = '0 0 20px #00e5ff';
 
+    // Stage 2: Ball shoots across 3D space back to sphere particle (440ms)
     setTimeout(() => {
-      pRetract.classList.add('hidden');
-    }, 700);
+      pRetract.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), opacity 440ms';
+      pRetract.style.left = `${prevPos.x}px`;
+      pRetract.style.top = `${prevPos.y}px`;
+      pRetract.style.opacity = '0';
+
+      setTimeout(() => {
+        pRetract.classList.add('hidden');
+      }, 450);
+    }, 210);
   } else {
     DOM.auditModal.classList.add('hidden');
   }
 
-  // 2. SIMULTANEOUSLY: Launch the ADVANCING proxy from the new particle into the left terminal
+  // --- B. ADVANCING ANIMATION (Ball shoots out from sphere -> unfolds into window) ---
   let startX = startPos ? startPos.x : null;
   let startY = startPos ? startPos.y : null;
   if (!startX || !startY) {
@@ -737,28 +813,34 @@ async function openVaultAudit(vault, startPos) {
   pOpen.style.transition = 'none';
   pOpen.style.left = `${startX}px`;
   pOpen.style.top = `${startY}px`;
-  pOpen.style.width = '10px';
-  pOpen.style.height = '10px';
+  pOpen.style.width = '14px';
+  pOpen.style.height = '14px';
   pOpen.style.borderRadius = '50%';
   pOpen.style.opacity = '1';
   pOpen.style.background = '#00e5ff';
-  pOpen.style.border = '1px solid #ffffff';
-  pOpen.style.boxShadow = '0 0 24px #00e5ff, 0 0 45px rgba(36, 112, 255, 0.8)';
+  pOpen.style.border = '1.5px solid #ffffff';
+  pOpen.style.boxShadow = '0 0 24px #00e5ff, 0 0 50px rgba(36, 112, 255, 0.9)';
   pOpen.classList.remove('hidden');
 
-  // Force reflow and start advancing flight concurrently into left terminal bounds (720ms)
+  // Stage 1: Ball flies out across 3D space to the left dock position (440ms)
   pOpen.offsetHeight;
-  pOpen.style.transition = 'all 720ms cubic-bezier(0.18, 0.95, 0.28, 1)';
+  pOpen.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 440ms';
   pOpen.style.left = `${targetCenterX}px`;
   pOpen.style.top = `${targetCenterY}px`;
-  pOpen.style.width = `${targetWidth}px`;
-  pOpen.style.height = `${targetHeight}px`;
-  pOpen.style.borderRadius = '20px';
-  pOpen.style.background = 'rgba(9, 12, 19, 0.88)';
-  pOpen.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-  pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 35px rgba(36, 112, 255, 0.18)';
+  // (Notice: width, height, borderRadius stay circular during flight!)
 
-  // Wait for audit data
+  // Stage 2: Upon arriving at left dock, ball unfolds into the full rectangular window (300ms)
+  setTimeout(() => {
+    pOpen.style.transition = 'width 300ms cubic-bezier(0.16, 1, 0.3, 1), height 300ms cubic-bezier(0.16, 1, 0.3, 1), border-radius 300ms cubic-bezier(0.16, 1, 0.3, 1), background 300ms, border-color 300ms, box-shadow 300ms';
+    pOpen.style.width = `${targetWidth}px`;
+    pOpen.style.height = `${targetHeight}px`;
+    pOpen.style.borderRadius = '20px';
+    pOpen.style.background = 'rgba(9, 12, 19, 0.88)';
+    pOpen.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+    pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 35px rgba(36, 112, 255, 0.18)';
+  }, 420);
+
+  // Simultaneously resolve audit data and finish population
   const data = await auditDataPromise;
   if (!data) {
     pOpen.classList.add('hidden');
@@ -770,19 +852,19 @@ async function openVaultAudit(vault, startPos) {
   activeAuditData = data;
   populateAuditModal(data);
 
-  // Reveal left terminal as flight smoothly docks in place (700ms)
+  // Stage 3: Smooth docking reveal when unfold completes (720ms)
   setTimeout(() => {
     DOM.auditModal.classList.remove('hidden');
     pOpen.style.opacity = '0';
     setTimeout(() => {
       pOpen.classList.add('hidden');
       isTransitioningVault = false;
-    }, 250);
-  }, 690);
+    }, 220);
+  }, 710);
 }
 
 /**
- * Reverses the morphing animation: collapses left panel back into particle on the 3D sphere.
+ * Reverses the morphing animation: folds left panel into a ball and flies it back into the 3D sphere.
  */
 function closeVaultAudit() {
   if (DOM.auditModal.classList.contains('hidden')) return;
@@ -804,7 +886,7 @@ function closeVaultAudit() {
   DOM.morphProxy.style.width = `${targetWidth}px`;
   DOM.morphProxy.style.height = `${targetHeight}px`;
   DOM.morphProxy.style.borderRadius = '20px';
-  DOM.morphProxy.style.opacity = '0.85';
+  DOM.morphProxy.style.opacity = '0.88';
   DOM.morphProxy.style.background = 'rgba(9, 12, 19, 0.88)';
   DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.12)';
   DOM.morphProxy.classList.remove('hidden');
@@ -815,24 +897,30 @@ function closeVaultAudit() {
     particlePos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
   }
 
-  // 4. Force reflow, then glide back to particle (550ms)
+  // Stage 1: Fold window down into a ball at dock position (220ms)
   DOM.morphProxy.offsetHeight;
-  DOM.morphProxy.style.transition = 'all 550ms cubic-bezier(0.16, 1, 0.3, 1)';
-  DOM.morphProxy.style.left = `${particlePos.x}px`;
-  DOM.morphProxy.style.top = `${particlePos.y}px`;
-  DOM.morphProxy.style.width = '8px';
-  DOM.morphProxy.style.height = '8px';
+  DOM.morphProxy.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
+  DOM.morphProxy.style.width = '12px';
+  DOM.morphProxy.style.height = '12px';
   DOM.morphProxy.style.borderRadius = '50%';
-  DOM.morphProxy.style.opacity = '0';
   DOM.morphProxy.style.background = '#2470ff';
+  DOM.morphProxy.style.boxShadow = '0 0 20px #00e5ff';
 
+  // Stage 2: Ball shoots back into particle on the sphere (440ms)
   setTimeout(() => {
-    DOM.morphProxy.classList.add('hidden');
-    selectedVaultAddress = null;
-    sphere.setSelectedVault(null);
-    sphere.highlightVault(null);
-    isTransitioningVault = false;
-  }, 560);
+    DOM.morphProxy.style.transition = 'all 440ms cubic-bezier(0.16, 1, 0.3, 1)';
+    DOM.morphProxy.style.left = `${particlePos.x}px`;
+    DOM.morphProxy.style.top = `${particlePos.y}px`;
+    DOM.morphProxy.style.opacity = '0';
+
+    setTimeout(() => {
+      DOM.morphProxy.classList.add('hidden');
+      selectedVaultAddress = null;
+      sphere.setSelectedVault(null);
+      sphere.highlightVault(null);
+      isTransitioningVault = false;
+    }, 450);
+  }, 210);
 }
 
 /**

@@ -16,6 +16,9 @@ const clientDir = path.resolve(rootDir, 'client');
 let isSyncInProgress = false;
 let lastSyncResult = null;
 
+// In-memory cache for instant 0ms vault audit responses
+const vaultAuditCache = new Map();
+
 // MIME types dictionary for static file serving
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -169,6 +172,7 @@ async function handlePostSync(req, res, url) {
         durationSec: result.durationSec,
         summary: result
       };
+      vaultAuditCache.clear();
       return lastSyncResult;
     } catch (err) {
       lastSyncResult = {
@@ -321,6 +325,12 @@ function handleGetVaults(req, res, url) {
  */
 function handleGetVaultByAddress(req, res, address) {
   try {
+    const cacheKey = address.toLowerCase();
+    if (vaultAuditCache.has(cacheKey)) {
+      sendJson(res, 200, vaultAuditCache.get(cacheKey));
+      return;
+    }
+
     const db = getDatabase();
 
     const vault = db.prepare('SELECT * FROM vaults WHERE LOWER(address) = LOWER(?)').get(address);
@@ -396,7 +406,7 @@ function handleGetVaultByAddress(req, res, address) {
     // Compute comprehensive audit verdict
     const verdict = generateVaultVerdict(vault, allocations, reallocations);
 
-    sendJson(res, 200, {
+    const responsePayload = {
       vault: {
         address: vault.address,
         chainId: vault.chain_id,
@@ -447,7 +457,10 @@ function handleGetVaultByAddress(req, res, address) {
         assetsHuman: r.assets_human,
         lltvPercent: r.lltv_percent
       }))
-    });
+    };
+
+    vaultAuditCache.set(cacheKey, responsePayload);
+    sendJson(res, 200, responsePayload);
   } catch (err) {
     sendJson(res, 500, { error: 'Failed to compute vault audit report', details: err.message });
   }
