@@ -373,7 +373,13 @@ function handleGetVaultByAddress(req, res, address) {
         m.free_liquidity_usd,
         m.utilization,
         m.borrow_apy,
-        m.supply_apy
+        m.supply_apy,
+        m.is_listed,
+        m.oracle_type,
+        m.bad_debt_usd,
+        m.realized_bad_debt_usd,
+        m.warnings_count,
+        m.warnings_json
       FROM vault_allocations va
       JOIN markets m ON va.market_unique_key = m.unique_key
       WHERE LOWER(va.vault_address) = LOWER(?)
@@ -405,8 +411,8 @@ function handleGetVaultByAddress(req, res, address) {
       LIMIT 100
     `).all(vault.address);
 
-    // Compute comprehensive audit verdict
-    const verdict = generateVaultVerdict(vault, allocations, reallocations);
+    // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
+    const verdict = generateVaultVerdict(vault, allocations);
 
     const responsePayload = {
       vault: {
@@ -447,7 +453,10 @@ function handleGetVaultByAddress(req, res, address) {
         marketFreeLiquidityUsd: a.free_liquidity_usd,
         marketUtilization: a.utilization,
         supplyApy: a.supply_apy,
-        borrowApy: a.borrow_apy
+        borrowApy: a.borrow_apy,
+        isListed: a.is_listed !== 0,
+        oracleType: a.oracle_type || 'Unknown',
+        badDebtUsd: a.bad_debt_usd || 0
       })),
       reallocations: reallocations.slice(0, 50).map(r => ({
         id: r.id,

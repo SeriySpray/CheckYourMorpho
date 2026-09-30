@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS markets (
   utilization REAL,
   borrow_apy REAL,
   supply_apy REAL,
+  is_listed INTEGER DEFAULT 1,
+  oracle_type TEXT DEFAULT 'ChainlinkOracleV2',
+  bad_debt_usd REAL DEFAULT 0,
+  realized_bad_debt_usd REAL DEFAULT 0,
+  warnings_count INTEGER DEFAULT 0,
+  warnings_json TEXT,
   updated_at INTEGER
 );
 

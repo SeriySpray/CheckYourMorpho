@@ -161,6 +161,12 @@ export function normalizeMarket(raw) {
     utilization: utilization,
     borrow_apy: state.borrowApy ?? 0,
     supply_apy: state.supplyApy ?? 0,
+    is_listed: raw.listed !== false ? 1 : 0,
+    oracle_type: oracle.type || 'ChainlinkOracleV2',
+    bad_debt_usd: Number(raw.badDebt?.usd) || 0,
+    realized_bad_debt_usd: Number(raw.realizedBadDebt?.usd) || 0,
+    warnings_count: Array.isArray(raw.warnings) ? raw.warnings.length : 0,
+    warnings_json: JSON.stringify(raw.warnings || []),
     updated_at: Math.floor(Date.now() / 1000)
   };
 }

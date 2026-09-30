@@ -60,19 +60,18 @@ const DOM = {
   modalSpecAddress: document.getElementById('modal-spec-address'),
   modalSpecChain: document.getElementById('modal-spec-chain'),
 
-  // Panel 2: Risk
+  // Panel 2: MQI, HHI & Exit
+  riskMqiPct: document.getElementById('risk-mqi-pct'),
+  riskMqiBar: document.getElementById('risk-mqi-bar'),
+  riskMqiDesc: document.getElementById('risk-mqi-desc'),
+  riskHhiVal: document.getElementById('risk-hhi-val'),
+  riskHhiBar: document.getElementById('risk-hhi-bar'),
+  riskHhiDesc: document.getElementById('risk-hhi-desc'),
   riskExitPct: document.getElementById('risk-exit-pct'),
   riskExitBar: document.getElementById('risk-exit-bar'),
   riskExitDesc: document.getElementById('risk-exit-desc'),
-  riskDomPct: document.getElementById('risk-dom-pct'),
-  riskDomBar: document.getElementById('risk-dom-bar'),
-  riskDomDesc: document.getElementById('risk-dom-desc'),
-  riskTwr30d: document.getElementById('risk-twr-30d'),
-  riskTwr90d: document.getElementById('risk-twr-90d'),
-  riskTwrAll: document.getElementById('risk-twr-all'),
-  riskDisciplineScore: document.getElementById('risk-discipline-score'),
-  riskReallocsCount: document.getElementById('risk-reallocs-count'),
-  riskSpikesCount: document.getElementById('risk-spikes-count'),
+  riskEffectiveAssets: document.getElementById('risk-effective-assets'),
+  riskCollateralList: document.getElementById('risk-collateral-list'),
   riskFlagsList: document.getElementById('risk-flags-list'),
 
   // Panel 3: Markets & Timeline
@@ -949,16 +948,11 @@ function populateAuditModal(data) {
   DOM.modalVaultName.textContent = v.name;
   DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName, v.name);
 
-  // Safety Score & Grade
-  DOM.modalGrade.textContent = verdict.grade;
-  DOM.modalScore.textContent = `${verdict.safetyScore}/100`;
-
-  // Color grade based on safety tier
-  let gradeColor = 'var(--accent-green)';
-  if (verdict.safetyScore < 45) gradeColor = 'var(--accent-red)';
-  else if (verdict.safetyScore < 65) gradeColor = 'var(--accent-orange)';
-  else if (verdict.safetyScore < 75) gradeColor = 'var(--accent-yellow)';
-  DOM.modalGrade.style.color = gradeColor;
+  // Market Quality Index (MQI) Header Pill
+  const mqiVal = verdict.mqi?.mqiPercent ?? 100;
+  DOM.modalGrade.textContent = `${mqiVal}%`;
+  DOM.modalScore.textContent = verdict.mqi?.isAllClean ? 'Clean Capital' : 'Compromised';
+  DOM.modalGrade.style.color = mqiVal === 100 ? 'var(--accent-green)' : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
 
   // Financials
   DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
@@ -990,40 +984,79 @@ function populateAuditModal(data) {
     DOM.modalSpecChain.textContent = `${chainName} (${v.chainId || 1})`;
   }
 
-  // --- PANEL 2: RISK & EXIT CAPACITY ---
+  // --- PANEL 2: PORTFOLIO AUDIT (MQI & HHI & EXIT) ---
+  // 1. MQI
+  if (DOM.riskMqiPct) DOM.riskMqiPct.textContent = `${mqiVal}%`;
+  if (DOM.riskMqiBar) {
+    DOM.riskMqiBar.style.width = `${mqiVal}%`;
+    DOM.riskMqiBar.style.background = mqiVal === 100 ? 'var(--accent-green)' : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
+  }
+  if (DOM.riskMqiDesc) {
+    DOM.riskMqiDesc.textContent = verdict.mqi?.isAllClean
+      ? '100% of capital is deployed in verified, non-defaulted markets'
+      : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
+  }
+
+  // 2. HHI
+  const hhiVal = verdict.hhi?.hhi ?? 0;
+  if (DOM.riskHhiVal) DOM.riskHhiVal.textContent = `${hhiVal} (${verdict.hhi?.tierLabel || 'HHI'})`;
+  if (DOM.riskHhiBar) {
+    DOM.riskHhiBar.style.width = `${Math.min(100, Math.round(hhiVal * 100))}%`;
+    DOM.riskHhiBar.style.background = hhiVal > 0.50 ? 'var(--accent-red)' : (hhiVal >= 0.25 ? 'var(--accent-orange)' : 'var(--accent-blue)');
+  }
+  if (DOM.riskHhiDesc) {
+    const top = verdict.hhi?.topCollateral;
+    DOM.riskHhiDesc.textContent = top && top.symbol !== 'None'
+      ? `Top collateral: ${top.symbol} (${top.sharePercent}% of total capital)`
+      : 'Herfindahl-Hirschman single-asset concentration index';
+  }
+
+  // 3. Exit Liquidity
   const exitPct = verdict.liquidity?.instantExitCapacityPercent || 0;
-  DOM.riskExitPct.textContent = `${exitPct}%`;
-  DOM.riskExitBar.style.width = `${Math.min(100, exitPct)}%`;
-  DOM.riskExitBar.style.background = exitPct < 30 ? 'var(--accent-red)' : 'var(--accent-blue)';
-  DOM.riskExitDesc.textContent = `${formatCurrency(verdict.liquidity?.instantExitCapacityUsd || 0)} available for immediate withdrawal without locking markets`;
+  if (DOM.riskExitPct) DOM.riskExitPct.textContent = `${exitPct}%`;
+  if (DOM.riskExitBar) {
+    DOM.riskExitBar.style.width = `${Math.min(100, exitPct)}%`;
+    DOM.riskExitBar.style.background = exitPct < 20 ? 'var(--accent-red)' : 'var(--accent-blue)';
+  }
+  if (DOM.riskExitDesc) {
+    DOM.riskExitDesc.textContent = `${formatCurrency(verdict.liquidity?.instantExitCapacityUsd || 0)} available for immediate withdrawal without locking markets`;
+  }
 
-  const domPct = verdict.liquidity?.maxMarketDominancePercent || 0;
-  DOM.riskDomPct.textContent = `${domPct}%`;
-  DOM.riskDomBar.style.width = `${Math.min(100, domPct)}%`;
-  DOM.riskDomBar.style.background = domPct > 60 ? 'var(--accent-red)' : (domPct > 40 ? 'var(--accent-orange)' : 'var(--accent-blue)');
-  DOM.riskDomDesc.textContent = domPct > 60
-    ? 'High dominance: a large redemption could spike borrow utilization to 100%'
-    : 'Healthy capital dispersion across underlying credit markets';
+  // 4. Collateral Allocation Breakdown
+  if (DOM.riskEffectiveAssets) {
+    DOM.riskEffectiveAssets.textContent = `${verdict.hhi?.effectiveAssets || 1} Effective Assets`;
+  }
+  if (DOM.riskCollateralList) {
+    DOM.riskCollateralList.innerHTML = '';
+    const breakdown = verdict.hhi?.breakdown || [];
+    if (breakdown.length === 0) {
+      DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
+    } else {
+      breakdown.slice(0, 6).forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.04);';
+        row.innerHTML = `
+          <span style="font-weight:600; color:#fff;">${escapeHtml(item.symbol)}</span>
+          <span style="color:var(--text-muted);">${formatCurrency(item.usd)} <strong style="color:#fff; margin-left:6px;">${item.sharePercent}%</strong></span>
+        `;
+        DOM.riskCollateralList.appendChild(row);
+      });
+    }
+  }
 
-  DOM.riskTwr30d.textContent = verdict.risk?.twr30d?.toFixed(1) || '0.0';
-  DOM.riskTwr90d.textContent = verdict.risk?.twr90d?.toFixed(1) || '0.0';
-  DOM.riskTwrAll.textContent = verdict.risk?.twrAllTime?.toFixed(1) || '0.0';
-
-  DOM.riskDisciplineScore.textContent = `${verdict.curator?.disciplineScore || 85}/100 Score`;
-  DOM.riskReallocsCount.textContent = `${verdict.curator?.totalReallocationsRecorded || 0} reallocations indexed`;
-  DOM.riskSpikesCount.textContent = `${verdict.risk?.peakRiskSpikes?.length || 0} risk spikes detected`;
-
-  // Red Flags
-  DOM.riskFlagsList.innerHTML = '';
-  if (!verdict.redFlags || verdict.redFlags.length === 0) {
-    DOM.riskFlagsList.innerHTML = '<div class="flag-item clear">No critical risk flags detected for this vault.</div>';
-  } else {
-    verdict.redFlags.forEach(flag => {
-      const div = document.createElement('div');
-      div.className = `flag-item ${flag.level.toLowerCase()}`;
-      div.innerHTML = `<strong>${escapeHtml(flag.title)}:</strong> ${escapeHtml(flag.message)}`;
-      DOM.riskFlagsList.appendChild(div);
-    });
+  // 5. Red Flags
+  if (DOM.riskFlagsList) {
+    DOM.riskFlagsList.innerHTML = '';
+    if (!verdict.redFlags || verdict.redFlags.length === 0) {
+      DOM.riskFlagsList.innerHTML = '<div class="flag-item clear">No critical risk flags detected for this vault.</div>';
+    } else {
+      verdict.redFlags.forEach(flag => {
+        const div = document.createElement('div');
+        div.className = `flag-item ${flag.level.toLowerCase()}`;
+        div.innerHTML = `<strong>${escapeHtml(flag.title)}:</strong> ${escapeHtml(flag.message)}`;
+        DOM.riskFlagsList.appendChild(div);
+      });
+    }
   }
 
   // --- PANEL 3: MARKETS & REALLOCATIONS ---
@@ -1048,18 +1081,22 @@ function populateAuditModal(data) {
   // Populate Allocations Table
   DOM.allocationsTbody.innerHTML = '';
   if (allocations.length === 0) {
-    DOM.allocationsTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No active market allocations recorded.</td></tr>';
+    DOM.allocationsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No active market allocations recorded.</td></tr>';
   } else {
     allocations.forEach(a => {
+      const isClean = a.isListed && !a.badDebtUsd;
+      const statusBadge = isClean
+        ? '<span class="badge badge-listed" style="color:var(--accent-green); border-color:rgba(16,185,129,0.3); font-size:10px;">CLEAN</span>'
+        : '<span class="badge" style="color:var(--accent-red); border-color:rgba(239,68,68,0.3); font-size:10px;">FLAGGED</span>';
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong></td>
-        <td>${escapeHtml(a.loanSymbol || '')}</td>
         <td>${a.lltvPercent ? a.lltvPercent + '%' : '0%'}</td>
         <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>
         <td>${formatCurrency(a.marketFreeLiquidityUsd)}</td>
-        <td>${((a.marketUtilization || 0) * 100).toFixed(1)}%</td>
+        <td>${statusBadge}</td>
         <td class="green">${((a.supplyApy || 0) * 100).toFixed(2)}%</td>
       `;
       DOM.allocationsTbody.appendChild(tr);

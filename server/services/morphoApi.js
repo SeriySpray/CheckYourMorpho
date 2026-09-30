@@ -127,11 +127,22 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
             allocation {
               market {
                 marketId
+                listed
                 lltv
                 irmAddress
                 oracle {
                   address
                   type
+                }
+                warnings {
+                  type
+                  level
+                }
+                badDebt {
+                  usd
+                }
+                realizedBadDebt {
+                  usd
                 }
                 loanAsset {
                   address
@@ -328,9 +339,13 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
                 ... on MarketV1CapData {
                   market {
                     marketId
+                    listed
                     lltv
                     irmAddress
-                    oracle { address }
+                    oracle { address type }
+                    warnings { type level }
+                    badDebt { usd }
+                    realizedBadDebt { usd }
                     loanAsset { address symbol decimals priceUsd }
                     collateralAsset { address symbol decimals priceUsd }
                     state {

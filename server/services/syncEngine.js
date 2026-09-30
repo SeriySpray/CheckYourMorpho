@@ -59,7 +59,8 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
       oracle_address, irm_address, lltv, lltv_percent, total_supply_assets,
       total_supply_assets_usd, total_borrow_assets, total_borrow_assets_usd,
       free_liquidity_assets, free_liquidity_usd, utilization, borrow_apy,
-      supply_apy, updated_at
+      supply_apy, is_listed, oracle_type, bad_debt_usd, realized_bad_debt_usd,
+      warnings_count, warnings_json, updated_at
     ) VALUES (
       ?, ?, ?, ?,
       ?, ?, ?,
@@ -67,7 +68,8 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
       ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?
+      ?, ?, ?, ?, ?,
+      ?, ?, ?
     )
     ON CONFLICT(unique_key) DO UPDATE SET
       loan_asset_price_usd = excluded.loan_asset_price_usd,
@@ -83,6 +85,12 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
       utilization = excluded.utilization,
       borrow_apy = excluded.borrow_apy,
       supply_apy = excluded.supply_apy,
+      is_listed = excluded.is_listed,
+      oracle_type = excluded.oracle_type,
+      bad_debt_usd = excluded.bad_debt_usd,
+      realized_bad_debt_usd = excluded.realized_bad_debt_usd,
+      warnings_count = excluded.warnings_count,
+      warnings_json = excluded.warnings_json,
       updated_at = excluded.updated_at
   `);
 
@@ -169,7 +177,8 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
           m.oracle_address, m.irm_address, m.lltv, m.lltv_percent, m.total_supply_assets,
           m.total_supply_assets_usd, m.total_borrow_assets, m.total_borrow_assets_usd,
           m.free_liquidity_assets, m.free_liquidity_usd, m.utilization, m.borrow_apy,
-          m.supply_apy, m.updated_at
+          m.supply_apy, m.is_listed, m.oracle_type, m.bad_debt_usd, m.realized_bad_debt_usd,
+          m.warnings_count, m.warnings_json, m.updated_at
         );
         marketsCount++;
 
@@ -224,7 +233,8 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
           m.oracle_address, m.irm_address, m.lltv, m.lltv_percent, m.total_supply_assets,
           m.total_supply_assets_usd, m.total_borrow_assets, m.total_borrow_assets_usd,
           m.free_liquidity_assets, m.free_liquidity_usd, m.utilization, m.borrow_apy,
-          m.supply_apy, m.updated_at
+          m.supply_apy, m.is_listed, m.oracle_type, m.bad_debt_usd, m.realized_bad_debt_usd,
+          m.warnings_count, m.warnings_json, m.updated_at
         );
         marketsCount++;
 

@@ -271,10 +271,10 @@
         </div>
 
         <div class="safety-score-pill" id="modal-score-pill">
-          <div class="score-label">SAFETY SCORE</div>
+          <div class="score-label">MARKET QUALITY (MQI)</div>
           <div class="score-value-row">
-            <span class="score-grade" id="modal-grade">AAA</span>
-            <span class="score-number" id="modal-score">92/100</span>
+            <span class="score-grade" id="modal-grade">100%</span>
+            <span class="score-number" id="modal-score">Clean Capital</span>
           </div>
         </div>
       </div>
@@ -341,11 +341,35 @@
         </div>
       </div>
 
-      <!-- TAB 2: RISK & EXIT -->
+      <!-- TAB 2: RISK & CONCENTRATION -->
       <div class="audit-tab-panel" id="tab-risk" role="tabpanel">
-        <div class="panel-section-title">RISK & LIQUIDITY AUDIT</div>
+        <div class="panel-section-title">PORTFOLIO AUDIT: MQI & HHI</div>
 
-        <!-- Instant Exit Capacity Meter -->
+        <!-- 1. Market Quality Index (MQI) Meter -->
+        <div class="meter-box">
+          <div class="meter-header">
+            <span class="meter-label">Market Quality Index (MQI)</span>
+            <span class="meter-value" id="risk-mqi-pct">100%</span>
+          </div>
+          <div class="meter-track">
+            <div class="meter-fill" id="risk-mqi-bar" style="width: 100%;"></div>
+          </div>
+          <div class="meter-desc" id="risk-mqi-desc">Capital deployed in verified, non-defaulted markets</div>
+        </div>
+
+        <!-- 2. Collateral Concentration (HHI) Meter -->
+        <div class="meter-box">
+          <div class="meter-header">
+            <span class="meter-label">Collateral Concentration (HHI)</span>
+            <span class="meter-value" id="risk-hhi-val">0.00</span>
+          </div>
+          <div class="meter-track">
+            <div class="meter-fill" id="risk-hhi-bar" style="width: 0%;"></div>
+          </div>
+          <div class="meter-desc" id="risk-hhi-desc">Herfindahl-Hirschman single-asset risk index</div>
+        </div>
+
+        <!-- 3. Instant Exit Capacity Meter -->
         <div class="meter-box">
           <div class="meter-header">
             <span class="meter-label">Instant Exit Capacity</span>
@@ -357,47 +381,18 @@
           <div class="meter-desc" id="risk-exit-desc">Available to withdraw without liquidity lockup</div>
         </div>
 
-        <!-- Market Dominance Meter -->
-        <div class="meter-box">
-          <div class="meter-header">
-            <span class="meter-label">Max Market Dominance</span>
-            <span class="meter-value" id="risk-dom-pct">0%</span>
-          </div>
-          <div class="meter-track">
-            <div class="meter-fill yellow" id="risk-dom-bar" style="width: 0%;"></div>
-          </div>
-          <div class="meter-desc" id="risk-dom-desc">Portion of largest market supplied by this vault</div>
-        </div>
-
-        <!-- Time-Weighted Risk (TWR) Metrics -->
-        <div class="twr-metrics-grid">
-          <div class="twr-card">
-            <span class="twr-label">TWR 30D</span>
-            <span class="twr-val" id="risk-twr-30d">0.0</span>
-          </div>
-          <div class="twr-card">
-            <span class="twr-label">TWR 90D</span>
-            <span class="twr-val" id="risk-twr-90d">0.0</span>
-          </div>
-          <div class="twr-card">
-            <span class="twr-label">All-Time</span>
-            <span class="twr-val" id="risk-twr-all">0.0</span>
-          </div>
-        </div>
-
-        <!-- Curator Track Record & Discipline -->
+        <!-- 4. Collateral Concentration Breakdown Table / List -->
         <div class="curator-audit-box">
           <div class="curator-audit-header">
-            <span class="curator-audit-title">Curator Track Record</span>
-            <span class="discipline-badge" id="risk-discipline-score">85/100 Score</span>
+            <span class="curator-audit-title">Collateral Allocation Breakdown</span>
+            <span class="discipline-badge" id="risk-effective-assets">1.0 Effective Assets</span>
           </div>
-          <div class="curator-meta">
-            <span id="risk-reallocs-count">0 reallocations indexed</span>
-            <span id="risk-spikes-count">0 peak spikes detected</span>
+          <div class="collateral-breakdown-list" id="risk-collateral-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+            <!-- Rendered dynamically -->
           </div>
         </div>
 
-        <!-- Red Flags -->
+        <!-- 5. Audit Flags -->
         <div class="red-flags-section">
           <div class="red-flags-header">AUDIT FLAGS</div>
           <div class="flags-container" id="risk-flags-list">
@@ -424,7 +419,7 @@
                   <th>Weight</th>
                   <th>Supplied</th>
                   <th>Free Liq</th>
-                  <th>Util</th>
+                  <th>Status</th>
                   <th>APY</th>
                 </tr>
               </thead>
@@ -457,7 +452,7 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/sphere.js?v=20260930_monochrome"></script>
-  <script type="module" src="js/app.js?v=20260930_monochrome"></script>
+  <script type="module" src="js/sphere.js?v=20260930_mqi_hhi"></script>
+  <script type="module" src="js/app.js?v=20260930_mqi_hhi"></script>
 </body>
 </html>
