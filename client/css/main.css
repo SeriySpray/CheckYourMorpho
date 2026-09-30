@@ -105,13 +105,14 @@ body::before {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
+  right: 440px;
   height: 64px;
   padding: 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   z-index: 10;
+  pointer-events: none;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -122,6 +123,7 @@ body::before {
   align-items: center;
   gap: 16px;
   flex: 1;
+  pointer-events: auto;
 }
 
 .header-right {
