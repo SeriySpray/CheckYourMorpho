@@ -405,9 +405,9 @@ function renderVaultExplorer() {
     return;
   }
 
-  // Render top results (up to 40 items with smooth scrolling)
-  const displayLimit = Math.min(results.length, 40);
-  for (let i = 0; i < displayLimit; i++) {
+  // Render all matching vaults into a DocumentFragment for maximum performance
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < results.length; i++) {
     const v = results[i];
     const li = document.createElement('li');
     li.className = 'explorer-vault-item';
@@ -449,8 +449,9 @@ function renderVaultExplorer() {
       openVaultAudit(v, pos);
     });
 
-    DOM.explorerVaultsList.appendChild(li);
+    fragment.appendChild(li);
   }
+  DOM.explorerVaultsList.appendChild(fragment);
 }
 
 /**
