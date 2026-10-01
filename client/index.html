@@ -16,12 +16,24 @@
 
   <!-- Header & Top Navigation -->
   <header class="app-header">
-    <div class="header-left">
-      <div class="brand-logo">
-        <span class="brand-name">CheckYourMorpho</span>
-      </div>
-    </div>
+    <div class="header-left"></div>
   </header>
+
+  <!-- Left-side Pinned Vaults Widget (Favorites Watchlist) -->
+  <aside id="pinned-vaults-widget" class="pinned-vaults-widget hidden" aria-label="Pinned Vaults">
+    <div class="pinned-header">
+      <div class="pinned-tag-row">
+        <span class="pinned-tag">PINNED VAULTS</span>
+        <div class="pinned-header-actions">
+          <span id="pinned-count" class="pinned-count">0 Vaults</span>
+        </div>
+      </div>
+      <h3 class="pinned-heading">Favorites Watchlist</h3>
+    </div>
+    <ul id="pinned-vaults-list" class="pinned-vaults-list" role="list">
+      <!-- Populated dynamically by app.js -->
+    </ul>
+  </aside>
 
   <!-- Right-side Master Vault Explorer & Filter Terminal (Morpho Design) -->
   <aside id="vault-explorer-widget" class="vault-explorer-widget">
@@ -270,11 +282,18 @@
           <span class="badge badge-version" id="modal-version-badge">V2</span>
           <span class="badge badge-listed" id="modal-listed-badge">LISTED</span>
         </div>
-        <button type="button" class="audit-close-btn" id="modal-close-btn" aria-label="Close Audit View">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"></path>
-          </svg>
-        </button>
+        <div class="audit-header-actions">
+          <button type="button" class="audit-fav-btn" id="modal-fav-btn" aria-label="Pin to Favorites" title="Pin to Home">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </button>
+          <button type="button" class="audit-close-btn" id="modal-close-btn" aria-label="Close Audit View">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="audit-identity-row">
@@ -438,8 +457,8 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/sphere.js?v=20261001_threshold"></script>
-  <script type="module" src="js/app.js?v=20261001_threshold"></script>
+  <script type="module" src="js/sphere.js?v=20261001_pinned"></script>
+  <script type="module" src="js/app.js?v=20261001_pinned"></script>
 </body>
 
 
