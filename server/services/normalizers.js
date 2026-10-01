@@ -46,7 +46,7 @@ export function parseLltv(rawLltv) {
 /**
  * Normalizes vault object from GraphQL response (MetaMorpho V1)
  */
-export function normalizeVault(raw) {
+export function normalizeVault(raw, curatorMap = null) {
   const asset = raw.asset || {};
   const state = raw.state || {};
   const chain = raw.chain || {};
@@ -54,12 +54,18 @@ export function normalizeVault(raw) {
   const decimals = asset.decimals ?? 18;
   const totalAssetsHuman = formatUnits(state.totalAssets, decimals);
 
+  const rawCuratorAddr = (state.curator || '').toLowerCase();
+  let curatorName = 'Independent';
+  if (rawCuratorAddr && rawCuratorAddr !== '0x0000000000000000000000000000000000000000') {
+    curatorName = curatorMap?.get(rawCuratorAddr) || state.curator || 'Independent';
+  }
+
   return {
     address: (raw.address || '').toLowerCase(),
     chain_id: chain.id || 1,
     name: raw.name || raw.symbol || 'Unknown Vault',
     symbol: raw.symbol || '',
-    curator_name: state.curator || 'Independent',
+    curator_name: curatorName,
     asset_address: (asset.address || '').toLowerCase(),
     asset_symbol: asset.symbol || 'ASSET',
     asset_decimals: decimals,
@@ -81,19 +87,30 @@ export function normalizeVault(raw) {
 /**
  * Normalizes vault object from GraphQL response (Morpho Vaults V2)
  */
-export function normalizeVaultV2(raw) {
+export function normalizeVaultV2(raw, curatorMap = null) {
   const asset = raw.asset || {};
   const chain = raw.chain || {};
 
   const decimals = asset.decimals ?? 18;
   const totalAssetsHuman = formatUnits(raw.totalAssets, decimals);
 
+  const v2CuratorItemName = raw.curators?.items?.[0]?.name;
+  const rawCuratorAddr = (raw.curator?.address || '').toLowerCase();
+  let curatorName = 'Independent';
+  if (v2CuratorItemName) {
+    curatorName = v2CuratorItemName;
+  } else if (rawCuratorAddr && rawCuratorAddr !== '0x0000000000000000000000000000000000000000') {
+    curatorName = curatorMap?.get(rawCuratorAddr) || raw.curator?.address || 'Independent';
+  } else if ((raw.name || '').toLowerCase().startsWith('hyperevm')) {
+    curatorName = 'HyperEVM';
+  }
+
   return {
     address: (raw.address || '').toLowerCase(),
     chain_id: chain.id || 1,
     name: raw.name || raw.symbol || 'Unknown Vault V2',
     symbol: raw.symbol || '',
-    curator_name: raw.curator?.address || 'Independent',
+    curator_name: curatorName,
     asset_address: (asset.address || '').toLowerCase(),
     asset_symbol: asset.symbol || 'ASSET',
     asset_decimals: decimals,

@@ -27,26 +27,45 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     };
   }
 
-  let totalMarketAvailableUsd = 0;
+  let loanMarketsExitUsd = 0;
+  let idleAllocationsUsd = 0;
+  let totalAllocatedUsd = 0;
 
   for (const alloc of allocations) {
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
-    const marketTotalSupplyUsd = Number(alloc.total_supply_assets_usd) || 0;
-    const marketTotalBorrowUsd = Number(alloc.total_borrow_assets_usd) || 0;
-    const marketFreeLiquidityUsd = Math.max(0, marketTotalSupplyUsd - marketTotalBorrowUsd);
+    totalAllocatedUsd += supplyUsd;
 
-    // Instant exit from this market: can withdraw up to vault supply OR market free cash
-    const canExitUsd = Math.min(supplyUsd, marketFreeLiquidityUsd);
-    totalMarketAvailableUsd += canExitUsd;
+    const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
+    const isIdle = lltvNum === 0 && (!alloc.collateral_asset_symbol || alloc.collateral_asset_symbol === 'NONE');
+
+    if (isIdle) {
+      idleAllocationsUsd += supplyUsd;
+    } else {
+      const marketTotalSupplyUsd = Number(alloc.total_supply_assets_usd) || 0;
+      const marketTotalBorrowUsd = Number(alloc.total_borrow_assets_usd) || 0;
+      const marketFreeLiquidityUsd = Math.max(0, marketTotalSupplyUsd - marketTotalBorrowUsd);
+
+      // Instant exit from this loan market: limited by vault supply OR market free cash
+      const canExitUsd = Math.min(supplyUsd, marketFreeLiquidityUsd);
+      loanMarketsExitUsd += canExitUsd;
+    }
   }
 
-  // Combined exit capacity = direct unallocated cash + market free cash
-  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, directLiquidityUsd + totalMarketAvailableUsd);
+  // True unallocated cash (not at risk in loan markets):
+  // either in a 0-LLTV idle market, directly on the vault contract, or unallocated difference
+  const trueIdleCashUsd = Math.max(
+    directLiquidityUsd,
+    idleAllocationsUsd,
+    Math.max(0, totalAssetsUsd - totalAllocatedUsd)
+  );
+
+  // Combined exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
+  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsExitUsd);
   const instantExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalEffectiveExitUsd / totalAssetsUsd) * 1000) / 10));
 
   return {
-    directLiquidityUsd: Math.round(directLiquidityUsd * 100) / 100,
-    marketExitCapacityUsd: Math.round(totalMarketAvailableUsd * 100) / 100,
+    directLiquidityUsd: Math.round(trueIdleCashUsd * 100) / 100,
+    marketExitCapacityUsd: Math.round(loanMarketsExitUsd * 100) / 100,
     instantExitCapacityUsd: Math.round(totalEffectiveExitUsd * 100) / 100,
     instantExitCapacityPercent,
     isIlliquid: instantExitCapacityPercent < 20

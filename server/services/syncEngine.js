@@ -1,6 +1,6 @@
 import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
-import { fetchAllVaults, fetchAllVaultV2s } from './morphoApi.js';
+import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
 import {
   normalizeVault,
   normalizeVaultV2,
@@ -121,6 +121,11 @@ export async function syncAllVaults(options = {}) {
       updated_at = excluded.updated_at
   `);
 
+  // --- STEP 0: Fetch Curator Directory ---
+  console.log('[SyncEngine] Fetching official curator directory from Morpho GraphQL...');
+  const curatorMap = await fetchCuratorDirectory();
+  console.log(`[SyncEngine] Loaded ${curatorMap.size} curator address mappings.`);
+
   // --- STEP 1: Sync MetaMorpho V1 Vaults ---
   console.log('[SyncEngine] Fetching MetaMorpho V1 vaults...');
   const rawVaultsV1 = await fetchAllVaults(options.chainIds ?? null);
@@ -134,7 +139,7 @@ export async function syncAllVaults(options = {}) {
   db.exec('BEGIN TRANSACTION;');
   try {
     for (const rawV of rawVaultsV1) {
-      const v = normalizeVault(rawV);
+      const v = normalizeVault(rawV, curatorMap);
       upsertVault.run(
         v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
         v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
@@ -185,7 +190,7 @@ export async function syncAllVaults(options = {}) {
   db.exec('BEGIN TRANSACTION;');
   try {
     for (const rawV2 of rawVaultsV2) {
-      const v = normalizeVaultV2(rawV2);
+      const v = normalizeVaultV2(rawV2, curatorMap);
       upsertVault.run(
         v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
         v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,

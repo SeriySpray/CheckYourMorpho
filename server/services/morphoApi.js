@@ -210,6 +210,11 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
           netApy
           performanceFee
           curator { address }
+          curators {
+            items {
+              name
+            }
+          }
           owner { address }
           caps {
             items {
@@ -251,4 +256,49 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
   const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
   return await fetchPaginatedVaults(query, 'vaultV2s', filterListed, 10);
 }
+
+/**
+ * Fetches the directory of all official curators and their addresses from Morpho GraphQL.
+ * @returns {Promise<Map<string, string>>} Lowercase address -> Curator name map
+ */
+export async function fetchCuratorDirectory() {
+  const query = `
+    query GetCurators {
+      curators(first: 100) {
+        items {
+          id
+          name
+          addresses {
+            address
+            chainId
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const data = await fetchMorphoGraphQL(query);
+    const items = data?.curators?.items || [];
+    const curatorMap = new Map();
+
+    for (const c of items) {
+      if (!c.name) continue;
+      for (const a of (c.addresses || [])) {
+        if (a?.address) {
+          curatorMap.set(a.address.toLowerCase(), c.name);
+        }
+      }
+    }
+
+    // Known ecosystem addresses not yet indexed in GraphQL
+    curatorMap.set('0xdd00059904ddf45e30b4131345957f76f26b8f6c', 'HyperEVM');
+
+    return curatorMap;
+  } catch (err) {
+    console.warn('[MorphoAPI] Could not fetch curator directory, using fallbacks:', err.message);
+    return new Map();
+  }
+}
+
 
