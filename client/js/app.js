@@ -28,12 +28,8 @@ const DOM = {
   closeBtn: document.getElementById('modal-close-btn'),
   modalFavBtn: document.getElementById('modal-fav-btn'),
 
-  // Header Favorites Popover & Pills (Top-Left)
-  headerFavBtn: document.getElementById('header-fav-btn'),
-  headerFavBadge: document.getElementById('header-fav-badge'),
-  favPillsPopover: document.getElementById('fav-pills-popover'),
-  favPillsList: document.getElementById('fav-pills-list'),
-  favPillsCount: document.getElementById('fav-pills-count'),
+  // Left-side Pinned Rich Informational Pills Container
+  pinnedRichPills: document.getElementById('pinned-rich-pills'),
 
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
@@ -104,7 +100,6 @@ async function initApp() {
   // 2. Bind UI Events
   setupVaultExplorerEvents();
   setupModalEvents();
-  setupFavoritesEvents();
   setupAuditNavTabs();
 
   // 3. Fetch Vaults from REST API
@@ -116,7 +111,7 @@ async function initApp() {
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
     sphere.setVaults(allVaults);
     renderVaultExplorer();
-    renderFavoritesPills();
+    renderPinnedRichPills(true);
   } catch (err) {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
@@ -160,7 +155,7 @@ function startLivePolling() {
           if (DOM.explorerVaultsList) {
             DOM.explorerVaultsList.scrollTop = savedScrollTop;
           }
-          renderFavoritesPills();
+          renderPinnedRichPills(false);
         }
       }
 
@@ -589,7 +584,7 @@ function togglePinVault(address) {
   }
   savePinnedAddresses(pinned);
   updateFavBtnUI(addr);
-  renderFavoritesPills();
+  renderPinnedRichPills(true);
 }
 
 function updateFavBtnUI(currentAddress) {
@@ -597,72 +592,16 @@ function updateFavBtnUI(currentAddress) {
   const isPinned = isVaultPinned(currentAddress);
   DOM.modalFavBtn.classList.toggle('active', isPinned);
   DOM.modalFavBtn.setAttribute('aria-label', isPinned ? 'Unpin from Favorites' : 'Pin to Favorites');
-  DOM.modalFavBtn.title = isPinned ? 'Unpin from Favorites' : 'Pin to Home';
+  DOM.modalFavBtn.title = isPinned ? 'Unpin from Favorites' : 'Pin to Favorites';
 }
 
 /**
- * Sets up click and keyboard listeners for the top-left favorites popover.
+ * Renders the Pinned Vaults as rich informational cards/pills docked on the left.
+ * If animate is true, flies white ball proxies from 3D sphere particles to the left dock.
  */
-function setupFavoritesEvents() {
-  if (DOM.headerFavBtn) {
-    DOM.headerFavBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleFavPopover();
-    });
-  }
+function renderPinnedRichPills(animate = false) {
+  if (!DOM.pinnedRichPills) return;
 
-  // Click outside popover to close
-  document.addEventListener('click', (e) => {
-    if (DOM.favPillsPopover && !DOM.favPillsPopover.classList.contains('hidden')) {
-      if (!DOM.favPillsPopover.contains(e.target) && !DOM.headerFavBtn.contains(e.target)) {
-        closeFavPopover();
-      }
-    }
-  });
-
-  // ESC key closes popover
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (DOM.favPillsPopover && !DOM.favPillsPopover.classList.contains('hidden')) {
-        closeFavPopover();
-      }
-    }
-  });
-}
-
-function toggleFavPopover() {
-  if (!DOM.favPillsPopover) return;
-  const isHidden = DOM.favPillsPopover.classList.contains('hidden');
-  if (isHidden) {
-    openFavPopover();
-  } else {
-    closeFavPopover();
-  }
-}
-
-function openFavPopover() {
-  if (!DOM.favPillsPopover) return;
-  renderFavoritesPills();
-  DOM.favPillsPopover.classList.remove('hidden');
-  if (DOM.headerFavBtn) {
-    DOM.headerFavBtn.classList.add('active');
-    DOM.headerFavBtn.setAttribute('aria-expanded', 'true');
-  }
-}
-
-function closeFavPopover() {
-  if (!DOM.favPillsPopover) return;
-  DOM.favPillsPopover.classList.add('hidden');
-  if (DOM.headerFavBtn) {
-    DOM.headerFavBtn.classList.remove('active');
-    DOM.headerFavBtn.setAttribute('aria-expanded', 'false');
-  }
-}
-
-/**
- * Renders the favorites pills inside the dropdown popover and updates the header star badge.
- */
-function renderFavoritesPills() {
   const pinnedAddresses = getPinnedAddresses();
   const pinnedVaults = [];
   for (const addr of pinnedAddresses) {
@@ -670,73 +609,125 @@ function renderFavoritesPills() {
     if (found) pinnedVaults.push(found);
   }
 
-  const count = pinnedVaults.length;
-
-  // Header star button badge and visual state
-  if (DOM.headerFavBadge) {
-    if (count > 0) {
-      DOM.headerFavBadge.textContent = count > 99 ? '99+' : String(count);
-      DOM.headerFavBadge.classList.remove('hidden');
-    } else {
-      DOM.headerFavBadge.classList.add('hidden');
-    }
-  }
-
-  if (DOM.headerFavBtn) {
-    DOM.headerFavBtn.classList.toggle('has-pinned', count > 0);
-  }
-
-  if (DOM.favPillsCount) {
-    DOM.favPillsCount.textContent = `${count} Vault${count === 1 ? '' : 's'}`;
-  }
-
-  if (!DOM.favPillsList) return;
-  DOM.favPillsList.innerHTML = '';
-
-  if (count === 0) {
-    DOM.favPillsList.innerHTML = `
-      <div class="fav-pills-empty">
-        <div style="font-weight:600; color:#fff; margin-bottom:4px;">No pinned vaults yet</div>
-        <div style="color:var(--text-muted); font-size:11px;">Open any vault audit and click the star to pin it here.</div>
-      </div>
-    `;
+  // If no pinned vaults exist, or if audit modal is open, keep container hidden
+  const isAuditOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
+  if (pinnedVaults.length === 0 || isAuditOpen) {
+    DOM.pinnedRichPills.classList.add('hidden');
+    DOM.pinnedRichPills.innerHTML = '';
     return;
   }
 
-  pinnedVaults.forEach(v => {
+  DOM.pinnedRichPills.classList.remove('hidden');
+  DOM.pinnedRichPills.innerHTML = '';
+
+  pinnedVaults.forEach((v, index) => {
     const chainClass = getChainClass(v.chainId);
     const chainName = formatChainName(v.chainId);
+    const curator = formatCuratorName(v.curatorName, v.name);
+    const netApyFormatted = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+    const feeFormatted = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
+    const rawAssets = v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0;
+    const humanAsset = `${formatNumber(rawAssets)} ${v.asset?.symbol || ''}`;
 
-    const pill = document.createElement('div');
-    pill.className = 'vault-pill';
-    pill.dataset.address = v.address;
-    pill.innerHTML = `
-      <div class="vault-pill-left">
-        <span class="vault-pill-chain badge-chain ${chainClass}">${escapeHtml(chainName.slice(0, 4))}</span>
-        <span class="vault-pill-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
+    // Get cached audit or compute default MQI
+    const cachedAudit = clientAuditCache.get((v.address || '').toLowerCase());
+    const mqiPercent = cachedAudit?.verdict?.mqi?.mqiPercent ?? 100;
+    const isClean = mqiPercent === 100 && (cachedAudit?.verdict?.mqi?.isAllClean ?? true);
+    const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
+    const mqiClass = isClean ? 'clean' : 'flagged';
+    const exitCapPct = cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent ?? 0;
+    const exitCapText = exitCapPct > 0 ? `${exitCapPct}% Exit Cap` : 'Free Liq';
+
+    const card = document.createElement('div');
+    card.className = 'pinned-rich-pill';
+    card.dataset.address = v.address;
+    if (animate) {
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(-20px) scale(0.96)';
+    }
+
+    card.innerHTML = `
+      <div class="rich-pill-top">
+        <div class="rich-pill-meta">
+          <div class="rich-pill-title-row">
+            <span class="badge-chain ${chainClass}" style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px;">${escapeHtml(chainName.slice(0, 4).toUpperCase())}</span>
+            <span class="rich-pill-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
+          </div>
+          <div class="rich-pill-curator">${escapeHtml(curator)} • <span style="color:#ffffff;">${escapeHtml(v.asset?.symbol || '')}</span></div>
+        </div>
+        <div class="rich-pill-actions">
+          <span class="rich-pill-mqi-badge ${mqiClass}">${escapeHtml(mqiText)}</span>
+          <button type="button" class="rich-pill-star-btn" data-unpin="${v.address}" title="Unpin from favorites" aria-label="Unpin ${escapeHtml(v.name)}">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff" stroke="#ffffff" stroke-width="1.5">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </button>
+        </div>
       </div>
-      <div class="vault-pill-right">
-        <span class="vault-pill-tvl">${formatCurrency(v.totalAssetsUsd)}</span>
-        <button type="button" class="vault-pill-unpin" data-unpin="${v.address}" title="Unpin vault" aria-label="Unpin vault">
-          <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 3l10 10M13 3l-10 10" stroke-linecap="round"/>
-          </svg>
-        </button>
+      <div class="rich-pill-fin-grid">
+        <div class="rich-pill-fin-item">
+          <span class="rich-pill-fin-label">Deposits</span>
+          <span class="rich-pill-fin-val">${formatCurrency(v.totalAssetsUsd)}</span>
+          <span class="rich-pill-fin-sub">${escapeHtml(humanAsset)}</span>
+        </div>
+        <div class="rich-pill-fin-item">
+          <span class="rich-pill-fin-label">Liquidity</span>
+          <span class="rich-pill-fin-val">${formatCurrency(v.liquidityUsd)}</span>
+          <span class="rich-pill-fin-sub highlight">${escapeHtml(exitCapText)}</span>
+        </div>
+        <div class="rich-pill-fin-item">
+          <span class="rich-pill-fin-label">Net APY</span>
+          <span class="rich-pill-fin-val green">${netApyFormatted}</span>
+          <span class="rich-pill-fin-sub">${feeFormatted}</span>
+        </div>
       </div>
     `;
 
-    // Click on unpin 'x' removes the vault; click anywhere else opens audit
-    pill.addEventListener('click', (e) => {
-      if (e.target.closest('.vault-pill-unpin')) {
+    // Click on unpin white star removes vault; click anywhere else opens full audit
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.rich-pill-star-btn')) {
         e.stopPropagation();
         togglePinVault(v.address);
         return;
       }
-      closeFavPopover();
       openVaultAudit(v);
     });
 
-    DOM.favPillsList.appendChild(pill);
+    DOM.pinnedRichPills.appendChild(card);
+
+    // Ball Flight Animation if requested
+    if (animate) {
+      setTimeout(() => {
+        let pPos = sphere.getParticleScreenPos(v.address);
+        if (!pPos) {
+          pPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
+        }
+        const orb = document.createElement('div');
+        orb.className = 'rich-pill-fly-orb';
+        orb.style.left = `${pPos.x}px`;
+        orb.style.top = `${pPos.y}px`;
+        document.body.appendChild(orb);
+
+        const cardRect = card.getBoundingClientRect();
+        const targetX = cardRect.left + 24;
+        const targetY = cardRect.top + cardRect.height / 2;
+
+        requestAnimationFrame(() => {
+          orb.style.left = `${targetX}px`;
+          orb.style.top = `${targetY}px`;
+
+          setTimeout(() => {
+            orb.style.opacity = '0';
+            card.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+            card.style.opacity = '1';
+            card.style.transform = 'none';
+            setTimeout(() => {
+              orb.remove();
+            }, 300);
+          }, 420);
+        });
+      }, index * 80);
+    }
   });
 }
 
@@ -1004,8 +995,10 @@ async function openVaultAudit(vault, startPos) {
   selectedVaultAddress = vault.address;
   sphere.setSelectedVault(vault.address);
 
-  // Ensure favorites popover is closed when audit modal opens
-  closeFavPopover();
+  // Hide pinned rich pills container while audit modal is open
+  if (DOM.pinnedRichPills) {
+    DOM.pinnedRichPills.classList.add('hidden');
+  }
 
   // --- A. RETRACTING ANIMATION (If previous vault was open) ---
   if (isAlreadyOpen && DOM.morphProxyRetract) {
@@ -1188,7 +1181,7 @@ function closeVaultAudit() {
       sphere.setSelectedVault(null);
       sphere.highlightVault(null);
       isTransitioningVault = false;
-      renderFavoritesPills();
+      renderPinnedRichPills(true);
     }, 450);
   }, 210);
 }
