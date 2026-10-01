@@ -36,10 +36,8 @@ export const CONFIG = {
     host: 'localhost'
   },
   sync: {
-    intervalMs: 180000, // 3 minutes for background full sync to prevent GraphQL rate limits
+    intervalMs: 180000, // 3 minutes for background full sync
     pageSize: 100,
-    minTvlUsd: 5000,
-    reallocationThresholdPct: 1.0, // Strictly >= 1.0% of vault TVL
-    reallocationFetchLimit: 10 // Strictly last 10 transactions per specific vault
+    minTvlUsd: 5000
   }
 };

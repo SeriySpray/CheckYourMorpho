@@ -197,27 +197,6 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
 }
 
 /**
- * Normalizes vaultReallocate event
- */
-export function normalizeReallocation(raw, vaultDecimals) {
-  const assetsHuman = formatUnits(raw.assets, vaultDecimals);
-
-  return {
-    id: raw.id || `${raw.hash}_${raw.logIndex || 0}`,
-    vault_address: (raw.vault?.address || '').toLowerCase(),
-    tx_hash: raw.hash || '',
-    block_number: raw.blockNumber ? Number(raw.blockNumber) : null,
-    timestamp: raw.timestamp ? Number(raw.timestamp) : Math.floor(Date.now() / 1000),
-    type: raw.type || 'Unknown',
-    market_unique_key: (raw.market?.marketId || '').toLowerCase(),
-    assets: String(raw.assets || '0'),
-    assets_human: assetsHuman,
-    shares: String(raw.shares || '0'),
-    created_at: Math.floor(Date.now() / 1000)
-  };
-}
-
-/**
  * Normalizes VaultV2 allocation from caps
  */
 export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTotalAssetsHuman) {
@@ -244,27 +223,3 @@ export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTot
   };
 }
 
-/**
- * Normalizes VaultV2 allocation transaction event into reallocation record
- */
-export function normalizeReallocationV2(raw, vaultAddress, decimals = 18) {
-  const assetsHuman = formatUnits(raw.assets, decimals);
-  const marketKey = (raw.ids && raw.ids.length > 0) ? String(raw.ids[0]).toLowerCase() : '';
-  const logIndex = raw.logIndex || 0;
-  const txHash = (raw.txHash || '').toLowerCase();
-  const id = `${txHash}_${logIndex}`;
-
-  return {
-    id,
-    vault_address: (vaultAddress || '').toLowerCase(),
-    tx_hash: txHash,
-    block_number: raw.blockNumber ? Number(raw.blockNumber) : null,
-    timestamp: raw.timestamp ? Number(raw.timestamp) : Math.floor(Date.now() / 1000),
-    type: raw.type || 'Reallocate',
-    market_unique_key: marketKey,
-    assets: String(raw.assets || '0'),
-    assets_human: assetsHuman,
-    shares: String(raw.change || '0'),
-    created_at: Math.floor(Date.now() / 1000)
-  };
-}

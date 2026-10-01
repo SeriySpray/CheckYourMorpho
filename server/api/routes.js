@@ -7,7 +7,7 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
-import { syncAllVaults, syncVaultReallocations } from '../services/syncEngine.js';
+import { syncAllVaults } from '../services/syncEngine.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -129,7 +129,6 @@ function handleGetStatus(req, res) {
     const listedVaultsCount = db.prepare('SELECT COUNT(*) as count FROM vaults WHERE is_listed = 1').get()?.count || 0;
     const marketsCount = db.prepare('SELECT COUNT(*) as count FROM markets').get()?.count || 0;
     const allocationsCount = db.prepare('SELECT COUNT(*) as count FROM vault_allocations').get()?.count || 0;
-    const reallocationsCount = db.prepare('SELECT COUNT(*) as count FROM reallocations').get()?.count || 0;
 
     sendJson(res, 200, {
       status: 'ok',
@@ -143,8 +142,7 @@ function handleGetStatus(req, res) {
         vaultsCount,
         listedVaultsCount,
         marketsCount,
-        allocationsCount,
-        reallocationsCount
+        allocationsCount
       }
     });
   } catch (err) {
@@ -357,34 +355,6 @@ function handleGetVaults(req, res, url) {
   }
 }
 
-// Active tracking of in-flight background vault syncs to prevent duplicate external requests
-const inFlightVaultSyncs = new Set();
-
-function triggerBackgroundVaultSync(vault) {
-  if (!vault || !vault.address) return;
-  const addrKey = vault.address.toLowerCase();
-  if (inFlightVaultSyncs.has(addrKey)) return;
-
-  inFlightVaultSyncs.add(addrKey);
-  // Non-blocking fire-and-forget background revalidation
-  syncVaultReallocations(vault, {
-    fetchLimit: CONFIG.sync.reallocationFetchLimit || 10,
-    thresholdPct: CONFIG.sync.reallocationThresholdPct ?? 1.0
-  })
-    .then(materialEvents => {
-      // If new material events were saved, clear cache entry so subsequent requests see them immediately
-      if (materialEvents && materialEvents.length > 0) {
-        vaultAuditCache.delete(addrKey);
-      }
-    })
-    .catch(err => {
-      console.warn(`[API] Background vault sync failed for ${vault.address}:`, err.message);
-    })
-    .finally(() => {
-      inFlightVaultSyncs.delete(addrKey);
-    });
-}
-
 /**
  * Handler for GET /api/vaults/:address
  * Employs Stale-While-Revalidate: returns local SQLite audit metrics immediately (<1ms)
@@ -406,9 +376,6 @@ function handleGetVaultByAddress(req, res, address) {
       sendJson(res, 404, { error: `Vault with address '${address}' not found` });
       return;
     }
-
-    // Trigger non-blocking background revalidation without delaying the HTTP response
-    triggerBackgroundVaultSync(vault);
 
     // Active allocations joined with market data
     const allocations = db.prepare(`
@@ -454,78 +421,6 @@ function handleGetVaultByAddress(req, res, address) {
       WHERE LOWER(va.vault_address) = LOWER(?)
       ORDER BY va.supply_assets_usd DESC
     `).all(vault.address);
-
-    // Historical reallocation transactions:
-    // Filter from existing database history for actions >= 1.0% of total vault balance (TVL).
-    const vaultTvlUsd = Number(vault.total_assets_usd) || 0;
-    const minVolumeUsd = vaultTvlUsd * 0.01;
-    const assetPriceUsd = Number(vault.asset_price_usd) || 1;
-
-    let reallocations = db.prepare(`
-      SELECT 
-        r.id,
-        r.vault_address,
-        r.tx_hash,
-        r.block_number,
-        r.timestamp,
-        r.type,
-        r.market_unique_key,
-        r.assets,
-        r.assets_human,
-        r.shares,
-        r.created_at,
-        m.collateral_asset_symbol,
-        m.loan_asset_symbol,
-        m.loan_asset_price_usd,
-        m.lltv_percent
-      FROM reallocations r
-      LEFT JOIN markets m ON r.market_unique_key = m.unique_key
-      WHERE LOWER(r.vault_address) = LOWER(?)
-        AND (r.assets_human * COALESCE(m.loan_asset_price_usd, ?)) >= ?
-      ORDER BY r.timestamp DESC
-      LIMIT 10
-    `).all(vault.address, assetPriceUsd, minVolumeUsd);
-
-    // Fallback: If no transactions meet >= 1.0% TVL (common in massive vaults where curators move smaller tranches),
-    // retrieve the top 10 most significant reallocations recorded in the DB (excluding dust < $100)
-    if (reallocations.length === 0) {
-      reallocations = db.prepare(`
-        SELECT 
-          r.id,
-          r.vault_address,
-          r.tx_hash,
-          r.block_number,
-          r.timestamp,
-          r.type,
-          r.market_unique_key,
-          r.assets,
-          r.assets_human,
-          r.shares,
-          r.created_at,
-          m.collateral_asset_symbol,
-          m.loan_asset_symbol,
-          m.loan_asset_price_usd,
-          m.lltv_percent
-        FROM reallocations r
-        LEFT JOIN markets m ON r.market_unique_key = m.unique_key
-        WHERE LOWER(r.vault_address) = LOWER(?)
-          AND (r.assets_human * COALESCE(m.loan_asset_price_usd, ?)) >= 100
-        ORDER BY (r.assets_human * COALESCE(m.loan_asset_price_usd, ?)) DESC, r.timestamp DESC
-        LIMIT 10
-      `).all(vault.address, assetPriceUsd, assetPriceUsd);
-    }
-
-    // Build map from active allocations for market collateral symbol resolution
-    const marketInfoMap = new Map();
-    allocations.forEach(a => {
-      if (a.market_unique_key) {
-        marketInfoMap.set(a.market_unique_key.toLowerCase(), {
-          collateralSymbol: a.collateral_asset_symbol,
-          loanSymbol: a.loan_asset_symbol,
-          lltvPercent: a.lltv_percent
-        });
-      }
-    });
 
     // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
     const verdict = generateVaultVerdict(vault, allocations);
@@ -573,22 +468,7 @@ function handleGetVaultByAddress(req, res, address) {
         isListed: a.is_listed !== 0,
         oracleType: a.oracle_type || 'Unknown',
         badDebtUsd: a.bad_debt_usd || 0
-      })),
-      reallocations: reallocations.slice(0, 10).map(r => {
-        const fallbackMarket = marketInfoMap.get((r.market_unique_key || '').toLowerCase());
-        const collateral = r.collateral_asset_symbol || fallbackMarket?.collateralSymbol || (vault.version === 'v2' ? 'Multi-Market' : 'Market');
-        const lltv = r.lltv_percent ?? fallbackMarket?.lltvPercent ?? null;
-        return {
-          id: r.id,
-          txHash: r.tx_hash,
-          timestamp: r.timestamp,
-          type: r.type,
-          marketUniqueKey: r.market_unique_key,
-          collateralSymbol: collateral,
-          assetsHuman: r.assets_human,
-          lltvPercent: lltv
-        };
-      })
+      }))
     };
 
     vaultAuditCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });

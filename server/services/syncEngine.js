@@ -1,98 +1,19 @@
 import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
-import { fetchAllVaults, fetchAllVaultV2s, fetchVaultReallocates, fetchVaultV2AllocationTransactions } from './morphoApi.js';
+import { fetchAllVaults, fetchAllVaultV2s } from './morphoApi.js';
 import {
   normalizeVault,
   normalizeVaultV2,
   normalizeMarket,
   normalizeAllocation,
   normalizeAllocationV2,
-  normalizeReallocation,
-  normalizeReallocationV2,
   formatUnits
 } from './normalizers.js';
 
 /**
- * Synchronizes the latest 10 reallocation transactions for a specific vault,
- * strictly filtering for material actions where Volume USD >= 1.0% of vault TVL.
- * 
- * @param {object} vault Vault object from database
- * @param {object} options Optional parameters (fetchLimit = 10, thresholdPct = 1.0)
- * @returns {Promise<Array>} Array of material reallocation events stored
- */
-export async function syncVaultReallocations(vault, options = {}) {
-  const fetchLimit = options.fetchLimit || CONFIG.sync.reallocationFetchLimit || 10;
-  const thresholdPct = options.thresholdPct ?? CONFIG.sync.reallocationThresholdPct ?? 1.0;
-  const db = getDatabase();
-
-  const upsertReallocation = db.prepare(`
-    INSERT INTO reallocations (
-      id, vault_address, tx_hash, block_number, timestamp,
-      type, market_unique_key, assets, assets_human, shares, created_at
-    ) VALUES (
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?
-    )
-    ON CONFLICT(id) DO UPDATE SET
-      block_number = excluded.block_number,
-      timestamp = excluded.timestamp,
-      type = excluded.type,
-      assets = excluded.assets,
-      assets_human = excluded.assets_human,
-      shares = excluded.shares
-  `);
-
-  let rawEvents = [];
-  try {
-    if (vault.version === 'v2') {
-      rawEvents = await fetchVaultV2AllocationTransactions(vault.address, vault.chain_id, fetchLimit);
-    } else {
-      rawEvents = await fetchVaultReallocates(vault.address, fetchLimit);
-    }
-  } catch (err) {
-    console.warn(`[SyncEngine] Failed to fetch reallocations for ${vault.address}: ${err.message}`);
-    return [];
-  }
-
-  const materialEvents = [];
-  const vaultTvl = Number(vault.total_assets_usd) || 0;
-  const assetPrice = Number(vault.asset_price_usd) || 1;
-
-  if (rawEvents.length > 0) {
-    db.exec('BEGIN TRANSACTION;');
-    try {
-      for (const rawEv of rawEvents) {
-        const ev = vault.version === 'v2'
-          ? normalizeReallocationV2(rawEv, vault.address, vault.asset_decimals)
-          : normalizeReallocation(rawEv, vault.asset_decimals);
-
-        const eventVolumeUsd = Number(ev.assets_human || 0) * assetPrice;
-        const volumePct = vaultTvl > 0 ? (eventVolumeUsd / vaultTvl) * 100 : 0;
-
-        // Strictly Volume USD >= 1.0% of vault TVL (no $10k threshold)
-        if (volumePct >= thresholdPct) {
-          upsertReallocation.run(
-            ev.id, ev.vault_address, ev.tx_hash, ev.block_number, ev.timestamp,
-            ev.type, ev.market_unique_key, ev.assets, ev.assets_human, ev.shares, ev.created_at
-          );
-          materialEvents.push({ ...ev, eventVolumeUsd, volumePct });
-        }
-      }
-      db.exec('COMMIT;');
-    } catch (err) {
-      db.exec('ROLLBACK;');
-      console.warn(`[SyncEngine] Transaction error for ${vault.address}: ${err.message}`);
-    }
-  }
-
-  return materialEvents;
-}
-
-/**
  * Performs a complete synchronization of vaults (both V1 and V2), markets, and allocations.
- * Optionally fetches reallocation history for top vaults.
  */
-export async function syncAllVaults(options = { fetchHistoryForTop: true, minAssetsUsdForHistory: 10000 }) {
+export async function syncAllVaults() {
   console.log('[SyncEngine] Starting full synchronization from Morpho GraphQL API (V1 and V2)...');
   const startTime = Date.now();
   const db = getDatabase();
@@ -191,19 +112,6 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
       updated_at = excluded.updated_at
   `);
 
-  const upsertReallocation = db.prepare(`
-    INSERT INTO reallocations (
-      id, vault_address, tx_hash, block_number, timestamp,
-      type, market_unique_key, assets, assets_human, shares, created_at
-    ) VALUES (
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?
-    )
-    ON CONFLICT(id) DO UPDATE SET
-      assets = excluded.assets,
-      assets_human = excluded.assets_human,
-      shares = excluded.shares
-  `);
 
   const updateSyncState = db.prepare(`
     INSERT INTO sync_state (key, value, updated_at)
@@ -339,29 +247,8 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
   db.exec(`
     DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL;
     DELETE FROM vault_allocations WHERE vault_address NOT IN (SELECT address FROM vaults);
-    DELETE FROM reallocations WHERE vault_address NOT IN (SELECT address FROM vaults);
     DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
   `);
-
-  // --- STEP 3: Fetch material reallocations for published vaults on the site ---
-  let reallocationsCount = 0;
-  if (options.fetchHistoryForTop && topVaultsForHistory.length > 0) {
-    topVaultsForHistory.sort((a, b) => (b.total_assets_usd || 0) - (a.total_assets_usd || 0));
-    const activeVaultsToProcess = topVaultsForHistory.filter(v => (v.total_assets_usd || 0) > 100 || v.is_listed);
-    console.log(`[SyncEngine] Checking latest 10 transactions for ${activeVaultsToProcess.length} vaults (threshold: >= ${CONFIG.sync.reallocationThresholdPct || 1.0}% TVL)...`);
-
-    for (const v of activeVaultsToProcess) {
-      try {
-        const saved = await syncVaultReallocations(v, {
-          fetchLimit: CONFIG.sync.reallocationFetchLimit || 10,
-          thresholdPct: CONFIG.sync.reallocationThresholdPct || 1.0
-        });
-        reallocationsCount += saved.length;
-      } catch (err) {
-        console.warn(`[SyncEngine] Could not fetch reallocations for vault ${v.name} (${v.address}): ${err.message}`);
-      }
-    }
-  }
 
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`[SyncEngine] Synchronization completed in ${durationSec}s. Summary:`);
@@ -369,21 +256,19 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
   console.log(`- V2 Vaults: ${v2Count}`);
   console.log(`- Markets: ${marketsCount}`);
   console.log(`- Allocations: ${allocationsCount}`);
-  console.log(`- Reallocations processed: ${reallocationsCount}`);
 
   return {
     v1Count,
     v2Count,
     marketsCount,
     allocationsCount,
-    reallocationsCount,
     durationSec
   };
 }
 
 // Allow direct CLI execution
 if (process.argv[1] && process.argv[1].endsWith('syncEngine.js')) {
-  syncAllVaults({ fetchHistoryForTop: true, minAssetsUsdForHistory: 100 })
+  syncAllVaults()
     .then(() => process.exit(0))
     .catch((err) => {
       console.error('[SyncEngine] Fatal error during sync:', err);

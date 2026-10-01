@@ -88,24 +88,6 @@ CREATE TABLE IF NOT EXISTS vault_allocations (
 CREATE INDEX IF NOT EXISTS idx_allocations_vault ON vault_allocations(vault_address);
 CREATE INDEX IF NOT EXISTS idx_allocations_market ON vault_allocations(market_unique_key);
 
--- Reallocations table (historical curator operations)
-CREATE TABLE IF NOT EXISTS reallocations (
-  id TEXT PRIMARY KEY,
-  vault_address TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  block_number INTEGER,
-  timestamp INTEGER NOT NULL,
-  type TEXT,
-  market_unique_key TEXT NOT NULL,
-  assets TEXT,
-  assets_human REAL,
-  shares TEXT,
-  created_at INTEGER,
-  FOREIGN KEY (vault_address) REFERENCES vaults(address) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_realloc_vault_time ON reallocations(vault_address, timestamp);
-CREATE INDEX IF NOT EXISTS idx_realloc_tx ON reallocations(tx_hash);
 
 -- Daily historical APYs for backtesting and Monte Carlo calibration
 CREATE TABLE IF NOT EXISTS daily_apys (

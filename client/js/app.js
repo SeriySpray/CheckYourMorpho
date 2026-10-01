@@ -74,13 +74,8 @@ const DOM = {
   riskCollateralList: document.getElementById('risk-collateral-list'),
   riskFlagsList: document.getElementById('risk-flags-list'),
 
-  // Panel 3: Markets & Timeline
-  modalMarketsCount: document.getElementById('modal-markets-count'),
-  modalReallocsCount: document.getElementById('modal-reallocs-count'),
-  allocationsTbody: document.getElementById('allocations-tbody'),
-  reallocationsTbody: document.getElementById('reallocations-tbody'),
-  subTabs: document.querySelectorAll('.sub-tab'),
-  subTabContents: document.querySelectorAll('.sub-tab-content')
+  // Panel 3: Markets
+  allocationsTbody: document.getElementById('allocations-tbody')
 };
 
 /**
@@ -108,7 +103,6 @@ async function initApp() {
   setupVaultExplorerEvents();
   setupModalEvents();
   setupAuditNavTabs();
-  setupPanelTabEvents();
 
   // 3. Fetch Vaults from REST API
   try {
@@ -1022,7 +1016,6 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const v = data.vault;
   const verdict = data.verdict;
   const allocations = data.allocations || [];
-  const reallocations = data.reallocations || [];
 
   // --- PANEL 1: MAIN ---
   const chainName = formatChainName(v.chainId);
@@ -1178,9 +1171,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
     }
   }
 
-  // --- PANEL 3: MARKETS & REALLOCATIONS ---
-  DOM.modalMarketsCount.textContent = allocations.length;
-  DOM.modalReallocsCount.textContent = reallocations.length;
+  // --- PANEL 3: UNDERLYING MARKETS ---
   if (DOM.modalMarketsTabCount) {
     DOM.modalMarketsTabCount.textContent = allocations.length;
   }
@@ -1223,34 +1214,6 @@ function populateAuditModal(data, isQuietRefresh = false) {
       DOM.allocationsTbody.appendChild(tr);
     });
   }
-
-  // Populate Reallocations Table
-  DOM.reallocationsTbody.innerHTML = '';
-  if (reallocations.length === 0) {
-    DOM.reallocationsTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No historical curator reallocations recorded.</td></tr>';
-  } else {
-    reallocations.forEach(r => {
-      const tr = document.createElement('tr');
-      const dateStr = new Date(r.timestamp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      const isBase = v.chainId === 8453;
-      const explorerUrl = isBase ? `https://basescan.org/tx/${r.txHash}` : `https://etherscan.io/tx/${r.txHash}`;
-      const shortHash = `${r.txHash.slice(0, 6)}...${r.txHash.slice(-4)}`;
-
-      const isSupplyAction = r.type.includes('Supply') || r.type === 'Allocate';
-      const lltvStr = r.lltvPercent != null ? `${r.lltvPercent}%` : '—';
-      const assetSym = v.asset?.symbol ? ` <span style="color:var(--text-muted); font-size:10px;">${escapeHtml(v.asset.symbol)}</span>` : '';
-
-      tr.innerHTML = `
-        <td>${dateStr}</td>
-        <td><span class="badge ${isSupplyAction ? 'badge-listed' : 'badge-chain'}">${escapeHtml(r.type)}</span></td>
-        <td><strong>${escapeHtml(r.collateralSymbol || 'Market')}</strong></td>
-        <td>${lltvStr}</td>
-        <td>${formatNumber(r.assetsHuman)}${assetSym}</td>
-        <td><a class="tx-link" href="${explorerUrl}" target="_blank" rel="noopener noreferrer">${shortHash}</a></td>
-      `;
-      DOM.reallocationsTbody.appendChild(tr);
-    });
-  }
 }
 
 /**
@@ -1289,23 +1252,6 @@ function setupAuditNavTabs() {
       if (targetPanel) {
         targetPanel.classList.add('active');
       }
-    });
-  });
-}
-
-/**
- * Sets up tab switching between Underlying Markets and Curator Reallocations.
- */
-function setupPanelTabEvents() {
-  DOM.subTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      DOM.subTabs.forEach(t => t.classList.remove('active'));
-      DOM.subTabContents.forEach(c => c.classList.remove('active'));
-
-      tab.classList.add('active');
-      const targetId = tab.dataset.target;
-      const targetContent = document.getElementById(targetId);
-      if (targetContent) targetContent.classList.add('active');
     });
   });
 }
