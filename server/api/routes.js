@@ -455,12 +455,13 @@ function handleGetVaultByAddress(req, res, address) {
       ORDER BY va.supply_assets_usd DESC
     `).all(vault.address);
 
-    // Historical reallocation transactions (strictly Volume USD >= 1.0% of vault TVL, limit 10)
+    // Historical reallocation transactions:
+    // Filter from existing database history for actions >= 1.0% of total vault balance (TVL).
     const vaultTvlUsd = Number(vault.total_assets_usd) || 0;
     const minVolumeUsd = vaultTvlUsd * 0.01;
     const assetPriceUsd = Number(vault.asset_price_usd) || 1;
 
-    const reallocations = db.prepare(`
+    let reallocations = db.prepare(`
       SELECT 
         r.id,
         r.vault_address,
@@ -484,6 +485,47 @@ function handleGetVaultByAddress(req, res, address) {
       ORDER BY r.timestamp DESC
       LIMIT 10
     `).all(vault.address, assetPriceUsd, minVolumeUsd);
+
+    // Fallback: If no transactions meet >= 1.0% TVL (common in massive vaults where curators move smaller tranches),
+    // retrieve the top 10 most significant reallocations recorded in the DB (excluding dust < $100)
+    if (reallocations.length === 0) {
+      reallocations = db.prepare(`
+        SELECT 
+          r.id,
+          r.vault_address,
+          r.tx_hash,
+          r.block_number,
+          r.timestamp,
+          r.type,
+          r.market_unique_key,
+          r.assets,
+          r.assets_human,
+          r.shares,
+          r.created_at,
+          m.collateral_asset_symbol,
+          m.loan_asset_symbol,
+          m.loan_asset_price_usd,
+          m.lltv_percent
+        FROM reallocations r
+        LEFT JOIN markets m ON r.market_unique_key = m.unique_key
+        WHERE LOWER(r.vault_address) = LOWER(?)
+          AND (r.assets_human * COALESCE(m.loan_asset_price_usd, ?)) >= 100
+        ORDER BY (r.assets_human * COALESCE(m.loan_asset_price_usd, ?)) DESC, r.timestamp DESC
+        LIMIT 10
+      `).all(vault.address, assetPriceUsd, assetPriceUsd);
+    }
+
+    // Build map from active allocations for market collateral symbol resolution
+    const marketInfoMap = new Map();
+    allocations.forEach(a => {
+      if (a.market_unique_key) {
+        marketInfoMap.set(a.market_unique_key.toLowerCase(), {
+          collateralSymbol: a.collateral_asset_symbol,
+          loanSymbol: a.loan_asset_symbol,
+          lltvPercent: a.lltv_percent
+        });
+      }
+    });
 
     // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
     const verdict = generateVaultVerdict(vault, allocations);
@@ -532,16 +574,21 @@ function handleGetVaultByAddress(req, res, address) {
         oracleType: a.oracle_type || 'Unknown',
         badDebtUsd: a.bad_debt_usd || 0
       })),
-      reallocations: reallocations.slice(0, 10).map(r => ({
-        id: r.id,
-        txHash: r.tx_hash,
-        timestamp: r.timestamp,
-        type: r.type,
-        marketUniqueKey: r.market_unique_key,
-        collateralSymbol: r.collateral_asset_symbol,
-        assetsHuman: r.assets_human,
-        lltvPercent: r.lltv_percent
-      }))
+      reallocations: reallocations.slice(0, 10).map(r => {
+        const fallbackMarket = marketInfoMap.get((r.market_unique_key || '').toLowerCase());
+        const collateral = r.collateral_asset_symbol || fallbackMarket?.collateralSymbol || (vault.version === 'v2' ? 'Multi-Market' : 'Market');
+        const lltv = r.lltv_percent ?? fallbackMarket?.lltvPercent ?? null;
+        return {
+          id: r.id,
+          txHash: r.tx_hash,
+          timestamp: r.timestamp,
+          type: r.type,
+          marketUniqueKey: r.market_unique_key,
+          collateralSymbol: collateral,
+          assetsHuman: r.assets_human,
+          lltvPercent: lltv
+        };
+      })
     };
 
     vaultAuditCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });

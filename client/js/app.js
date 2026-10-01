@@ -1236,12 +1236,16 @@ function populateAuditModal(data, isQuietRefresh = false) {
       const explorerUrl = isBase ? `https://basescan.org/tx/${r.txHash}` : `https://etherscan.io/tx/${r.txHash}`;
       const shortHash = `${r.txHash.slice(0, 6)}...${r.txHash.slice(-4)}`;
 
+      const isSupplyAction = r.type.includes('Supply') || r.type === 'Allocate';
+      const lltvStr = r.lltvPercent != null ? `${r.lltvPercent}%` : '—';
+      const assetSym = v.asset?.symbol ? ` <span style="color:var(--text-muted); font-size:10px;">${escapeHtml(v.asset.symbol)}</span>` : '';
+
       tr.innerHTML = `
         <td>${dateStr}</td>
-        <td><span class="badge ${r.type.includes('Supply') ? 'badge-listed' : 'badge-chain'}">${escapeHtml(r.type)}</span></td>
-        <td><strong>${escapeHtml(r.collateralSymbol || 'None')}</strong></td>
-        <td>${r.lltvPercent ? r.lltvPercent + '%' : '0%'}</td>
-        <td>${formatNumber(r.assetsHuman)}</td>
+        <td><span class="badge ${isSupplyAction ? 'badge-listed' : 'badge-chain'}">${escapeHtml(r.type)}</span></td>
+        <td><strong>${escapeHtml(r.collateralSymbol || 'Market')}</strong></td>
+        <td>${lltvStr}</td>
+        <td>${formatNumber(r.assetsHuman)}${assetSym}</td>
         <td><a class="tx-link" href="${explorerUrl}" target="_blank" rel="noopener noreferrer">${shortHash}</a></td>
       `;
       DOM.reallocationsTbody.appendChild(tr);
