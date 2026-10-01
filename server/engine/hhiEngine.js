@@ -101,17 +101,17 @@ export function calculateHHI(vault, allocations = []) {
 
   // Determine concentration tier
   let tier = 'DIVERSIFIED';
-  let tierLabel = 'Висока диверсифікація';
+  let tierLabel = 'High Diversification';
 
   if (hhi > 0.50) {
     tier = 'EXTREME';
-    tierLabel = 'Критична концентрація (SPOF)';
+    tierLabel = 'Critical Concentration';
   } else if (hhi >= 0.25) {
     tier = 'CONCENTRATED';
-    tierLabel = 'Висока концентрація';
+    tierLabel = 'High Concentration';
   } else if (hhi >= 0.15) {
     tier = 'MODERATE';
-    tierLabel = 'Помірна концентрація';
+    tierLabel = 'Moderate Concentration';
   }
 
   const topCollateral = {
