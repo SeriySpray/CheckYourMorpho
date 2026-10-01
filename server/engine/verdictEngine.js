@@ -25,13 +25,13 @@ export function generateVaultVerdict(vault, allocations = []) {
   // 4. Objective, Fact-Based Audit Flags
   const redFlags = [];
 
-  // Flag 1: Compromised or Defaulted Markets
-  if (mqi.mqiPercent < 100) {
+  // Flag 1: Compromised or Defaulted Markets (> 1.0% TVL)
+  if (mqi.mqiPercent < 100 && mqi.compromisedMarkets.length > 0) {
     const compromisedPct = Math.round((100 - mqi.mqiPercent) * 10) / 10;
-    const reasonsSummary = mqi.compromisedMarkets.map(m => `${m.collateralSymbol}/${m.loanSymbol}: ${m.reasons.join(', ')}`).join('; ');
+    const reasonsSummary = mqi.compromisedMarkets.map(m => `${m.collateralSymbol}/${m.loanSymbol} (${m.weightPercent}% TVL): ${m.reasons.join(', ')}`).join('; ');
     redFlags.push({
       level: 'CRITICAL',
-      title: 'Compromised Market Exposure',
+      title: 'Compromised Market Exposure (>1% TVL)',
       message: `${compromisedPct}% of capital is deployed in markets with verification issues or bad debt (${reasonsSummary}).`
     });
   }

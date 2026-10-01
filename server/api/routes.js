@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
-import { calculateMQI } from '../engine/mqiEngine.js';
+import { calculateMQI, isMarketClean } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
 import { syncAllVaults } from '../services/syncEngine.js';
 
@@ -451,24 +451,35 @@ function handleGetVaultByAddress(req, res, address) {
         updatedAt: vault.metadata_updated_at
       },
       verdict,
-      allocations: allocations.map(a => ({
-        marketUniqueKey: a.market_unique_key,
-        loanSymbol: a.loan_asset_symbol,
-        collateralSymbol: a.collateral_asset_symbol,
-        lltvPercent: a.lltv_percent,
-        supplyAssetsHuman: a.supply_assets_human,
-        supplyAssetsUsd: a.supply_assets_usd,
-        weight: a.weight,
-        marketTotalSupplyUsd: a.total_supply_assets_usd,
-        marketTotalBorrowUsd: a.total_borrow_assets_usd,
-        marketFreeLiquidityUsd: a.free_liquidity_usd,
-        marketUtilization: a.utilization,
-        supplyApy: a.supply_apy,
-        borrowApy: a.borrow_apy,
-        isListed: a.is_listed !== 0,
-        oracleType: a.oracle_type || 'Unknown',
-        badDebtUsd: a.bad_debt_usd || 0
-      }))
+      allocations: allocations.map(a => {
+        const test = isMarketClean(a);
+        const supplyUsd = Number(a.supply_assets_usd) || 0;
+        const minMaterialThresholdUsd = (Number(vault.total_assets_usd) || 0) * 0.01;
+        const isMaterial = supplyUsd > minMaterialThresholdUsd;
+        const isFlagged = !test.isClean && isMaterial;
+
+        return {
+          marketUniqueKey: a.market_unique_key,
+          loanSymbol: a.loan_asset_symbol,
+          collateralSymbol: a.collateral_asset_symbol,
+          lltvPercent: a.lltv_percent,
+          supplyAssetsHuman: a.supply_assets_human,
+          supplyAssetsUsd: a.supply_assets_usd,
+          weight: a.weight,
+          marketTotalSupplyUsd: a.total_supply_assets_usd,
+          marketTotalBorrowUsd: a.total_borrow_assets_usd,
+          marketFreeLiquidityUsd: a.free_liquidity_usd,
+          marketUtilization: a.utilization,
+          supplyApy: a.supply_apy,
+          borrowApy: a.borrow_apy,
+          isListed: a.is_listed !== 0,
+          isClean: !isFlagged,
+          isFlagged,
+          oracleType: a.oracle_type || 'Unknown',
+          badDebtUsd: a.bad_debt_usd || 0,
+          warnings: test.reasons
+        };
+      })
     };
 
     vaultAuditCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });

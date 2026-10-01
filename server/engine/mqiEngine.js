@@ -108,12 +108,14 @@ export function calculateMQI(vault, allocations = []) {
   let compromisedSupplyUsd = 0;
   let cleanMarketsCount = 0;
   const compromisedMarkets = [];
+  const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
 
   for (const alloc of allocations) {
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
     const test = isMarketClean(alloc);
+    const isMaterial = supplyUsd > minMaterialThresholdUsd;
 
-    if (test.isClean || supplyUsd < 1) {
+    if (test.isClean || !isMaterial) {
       cleanSupplyUsd += supplyUsd;
       if (test.isClean && supplyUsd >= 1) cleanMarketsCount++;
     } else {

@@ -1196,10 +1196,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
     DOM.allocationsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No active market allocations recorded.</td></tr>';
   } else {
     allocations.forEach(a => {
-      const isClean = a.isListed && !a.badDebtUsd;
-      const statusBadge = isClean
-        ? '<span class="badge badge-listed" style="color:var(--accent-green); border-color:rgba(16,185,129,0.3); font-size:10px;">CLEAN</span>'
-        : '<span class="badge" style="color:var(--accent-red); border-color:rgba(239,68,68,0.3); font-size:10px;">FLAGGED</span>';
+      const isMarketFlagged = a.isFlagged === true || (a.isFlagged === undefined && !a.isClean && ((a.supplyAssetsUsd || 0) > ((v.totalAssetsUsd || 0) * 0.01)));
+      const statusBadge = isMarketFlagged
+        ? '<span class="badge" style="color:var(--accent-red); border-color:rgba(239,68,68,0.3); font-size:10px;">FLAGGED</span>'
+        : '<span class="badge badge-listed" style="color:var(--accent-green); border-color:rgba(16,185,129,0.3); font-size:10px;">CLEAN</span>';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
