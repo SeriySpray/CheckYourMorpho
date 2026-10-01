@@ -28,10 +28,12 @@ const DOM = {
   closeBtn: document.getElementById('modal-close-btn'),
   modalFavBtn: document.getElementById('modal-fav-btn'),
 
-  // Pinned Vaults Widget (Left-side)
-  pinnedVaultsWidget: document.getElementById('pinned-vaults-widget'),
-  pinnedVaultsList: document.getElementById('pinned-vaults-list'),
-  pinnedCount: document.getElementById('pinned-count'),
+  // Header Favorites Popover & Pills (Top-Left)
+  headerFavBtn: document.getElementById('header-fav-btn'),
+  headerFavBadge: document.getElementById('header-fav-badge'),
+  favPillsPopover: document.getElementById('fav-pills-popover'),
+  favPillsList: document.getElementById('fav-pills-list'),
+  favPillsCount: document.getElementById('fav-pills-count'),
 
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
@@ -102,6 +104,7 @@ async function initApp() {
   // 2. Bind UI Events
   setupVaultExplorerEvents();
   setupModalEvents();
+  setupFavoritesEvents();
   setupAuditNavTabs();
 
   // 3. Fetch Vaults from REST API
@@ -113,7 +116,7 @@ async function initApp() {
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
     sphere.setVaults(allVaults);
     renderVaultExplorer();
-    renderPinnedVaults();
+    renderFavoritesPills();
   } catch (err) {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
@@ -157,7 +160,7 @@ function startLivePolling() {
           if (DOM.explorerVaultsList) {
             DOM.explorerVaultsList.scrollTop = savedScrollTop;
           }
-          renderPinnedVaults();
+          renderFavoritesPills();
         }
       }
 
@@ -586,7 +589,7 @@ function togglePinVault(address) {
   }
   savePinnedAddresses(pinned);
   updateFavBtnUI(addr);
-  renderPinnedVaults();
+  renderFavoritesPills();
 }
 
 function updateFavBtnUI(currentAddress) {
@@ -598,11 +601,68 @@ function updateFavBtnUI(currentAddress) {
 }
 
 /**
- * Renders the Pinned Vaults list on the left side of the home screen.
+ * Sets up click and keyboard listeners for the top-left favorites popover.
  */
-function renderPinnedVaults() {
-  if (!DOM.pinnedVaultsWidget || !DOM.pinnedVaultsList) return;
+function setupFavoritesEvents() {
+  if (DOM.headerFavBtn) {
+    DOM.headerFavBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavPopover();
+    });
+  }
 
+  // Click outside popover to close
+  document.addEventListener('click', (e) => {
+    if (DOM.favPillsPopover && !DOM.favPillsPopover.classList.contains('hidden')) {
+      if (!DOM.favPillsPopover.contains(e.target) && !DOM.headerFavBtn.contains(e.target)) {
+        closeFavPopover();
+      }
+    }
+  });
+
+  // ESC key closes popover
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (DOM.favPillsPopover && !DOM.favPillsPopover.classList.contains('hidden')) {
+        closeFavPopover();
+      }
+    }
+  });
+}
+
+function toggleFavPopover() {
+  if (!DOM.favPillsPopover) return;
+  const isHidden = DOM.favPillsPopover.classList.contains('hidden');
+  if (isHidden) {
+    openFavPopover();
+  } else {
+    closeFavPopover();
+  }
+}
+
+function openFavPopover() {
+  if (!DOM.favPillsPopover) return;
+  renderFavoritesPills();
+  DOM.favPillsPopover.classList.remove('hidden');
+  if (DOM.headerFavBtn) {
+    DOM.headerFavBtn.classList.add('active');
+    DOM.headerFavBtn.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function closeFavPopover() {
+  if (!DOM.favPillsPopover) return;
+  DOM.favPillsPopover.classList.add('hidden');
+  if (DOM.headerFavBtn) {
+    DOM.headerFavBtn.classList.remove('active');
+    DOM.headerFavBtn.setAttribute('aria-expanded', 'false');
+  }
+}
+
+/**
+ * Renders the favorites pills inside the dropdown popover and updates the header star badge.
+ */
+function renderFavoritesPills() {
   const pinnedAddresses = getPinnedAddresses();
   const pinnedVaults = [];
   for (const addr of pinnedAddresses) {
@@ -610,67 +670,73 @@ function renderPinnedVaults() {
     if (found) pinnedVaults.push(found);
   }
 
-  // If no pinned vaults exist, hide the widget completely (per user requirement)
-  if (pinnedVaults.length === 0) {
-    DOM.pinnedVaultsWidget.classList.add('hidden');
-    DOM.pinnedVaultsList.innerHTML = '';
-    if (DOM.pinnedCount) DOM.pinnedCount.textContent = '0 Vaults';
+  const count = pinnedVaults.length;
+
+  // Header star button badge and visual state
+  if (DOM.headerFavBadge) {
+    if (count > 0) {
+      DOM.headerFavBadge.textContent = count > 99 ? '99+' : String(count);
+      DOM.headerFavBadge.classList.remove('hidden');
+    } else {
+      DOM.headerFavBadge.classList.add('hidden');
+    }
+  }
+
+  if (DOM.headerFavBtn) {
+    DOM.headerFavBtn.classList.toggle('has-pinned', count > 0);
+  }
+
+  if (DOM.favPillsCount) {
+    DOM.favPillsCount.textContent = `${count} Vault${count === 1 ? '' : 's'}`;
+  }
+
+  if (!DOM.favPillsList) return;
+  DOM.favPillsList.innerHTML = '';
+
+  if (count === 0) {
+    DOM.favPillsList.innerHTML = `
+      <div class="fav-pills-empty">
+        <div style="font-weight:600; color:#fff; margin-bottom:4px;">No pinned vaults yet</div>
+        <div style="color:var(--text-muted); font-size:11px;">Open any vault audit and click the star to pin it here.</div>
+      </div>
+    `;
     return;
   }
 
-  // If modal is currently open, keep it hidden (user answered: hide during audit view)
-  const isAuditOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
-  if (!isAuditOpen) {
-    DOM.pinnedVaultsWidget.classList.remove('hidden');
-  }
-
-  if (DOM.pinnedCount) {
-    DOM.pinnedCount.textContent = `${pinnedVaults.length} Vault${pinnedVaults.length === 1 ? '' : 's'}`;
-  }
-
-  DOM.pinnedVaultsList.innerHTML = '';
   pinnedVaults.forEach(v => {
     const chainClass = getChainClass(v.chainId);
-    const curator = formatCuratorName(v.curatorName, v.name);
-    const netApyFormatted = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+    const chainName = formatChainName(v.chainId);
 
-    const li = document.createElement('li');
-    li.className = 'pinned-vault-item';
-    li.dataset.address = v.address;
-    li.innerHTML = `
-      <div class="pinned-vault-left">
-        <div class="pinned-vault-title-row">
-          <span class="chain-dot ${chainClass}" title="${escapeHtml(formatChainName(v.chainId))}"></span>
-          <span class="pinned-vault-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
-        </div>
-        <div class="pinned-vault-meta">
-          <span>${escapeHtml(curator)}</span> • <span>${escapeHtml(v.asset?.symbol || '')}</span>
-        </div>
+    const pill = document.createElement('div');
+    pill.className = 'vault-pill';
+    pill.dataset.address = v.address;
+    pill.innerHTML = `
+      <div class="vault-pill-left">
+        <span class="vault-pill-chain badge-chain ${chainClass}">${escapeHtml(chainName.slice(0, 4))}</span>
+        <span class="vault-pill-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
       </div>
-      <div class="pinned-vault-right">
-        <div class="pinned-vault-fin">
-          <span class="pinned-vault-tvl">${formatCurrency(v.totalAssetsUsd)}</span>
-          <span class="pinned-vault-apy">${netApyFormatted}</span>
-        </div>
-        <button type="button" class="pinned-unpin-btn" data-unpin="${v.address}" title="Unpin vault" aria-label="Unpin vault">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="#f59e0b" stroke="#f59e0b" stroke-width="2">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+      <div class="vault-pill-right">
+        <span class="vault-pill-tvl">${formatCurrency(v.totalAssetsUsd)}</span>
+        <button type="button" class="vault-pill-unpin" data-unpin="${v.address}" title="Unpin vault" aria-label="Unpin vault">
+          <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 3l10 10M13 3l-10 10" stroke-linecap="round"/>
           </svg>
         </button>
       </div>
     `;
 
-    // Click on item opens vault audit
-    li.addEventListener('click', (e) => {
-      if (e.target.closest('.pinned-unpin-btn')) {
+    // Click on unpin 'x' removes the vault; click anywhere else opens audit
+    pill.addEventListener('click', (e) => {
+      if (e.target.closest('.vault-pill-unpin')) {
         e.stopPropagation();
         togglePinVault(v.address);
         return;
       }
+      closeFavPopover();
       openVaultAudit(v);
     });
 
-    DOM.pinnedVaultsList.appendChild(li);
+    DOM.favPillsList.appendChild(pill);
   });
 }
 
@@ -938,10 +1004,8 @@ async function openVaultAudit(vault, startPos) {
   selectedVaultAddress = vault.address;
   sphere.setSelectedVault(vault.address);
 
-  // Hide pinned vaults widget while audit modal is open
-  if (DOM.pinnedVaultsWidget) {
-    DOM.pinnedVaultsWidget.classList.add('hidden');
-  }
+  // Ensure favorites popover is closed when audit modal opens
+  closeFavPopover();
 
   // --- A. RETRACTING ANIMATION (If previous vault was open) ---
   if (isAlreadyOpen && DOM.morphProxyRetract) {
@@ -1124,7 +1188,7 @@ function closeVaultAudit() {
       sphere.setSelectedVault(null);
       sphere.highlightVault(null);
       isTransitioningVault = false;
-      renderPinnedVaults();
+      renderFavoritesPills();
     }, 450);
   }, 210);
 }

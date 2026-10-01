@@ -16,24 +16,26 @@
 
   <!-- Header & Top Navigation -->
   <header class="app-header">
-    <div class="header-left"></div>
-  </header>
+    <div class="header-left">
+      <button type="button" id="header-fav-btn" class="header-fav-btn" aria-label="Favorites Watchlist" title="Favorites Watchlist" aria-expanded="false" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        <span class="header-fav-badge hidden" id="header-fav-badge">0</span>
+      </button>
 
-  <!-- Left-side Pinned Vaults Widget (Favorites Watchlist) -->
-  <aside id="pinned-vaults-widget" class="pinned-vaults-widget hidden" aria-label="Pinned Vaults">
-    <div class="pinned-header">
-      <div class="pinned-tag-row">
-        <span class="pinned-tag">PINNED VAULTS</span>
-        <div class="pinned-header-actions">
-          <span id="pinned-count" class="pinned-count">0 Vaults</span>
+      <!-- Dropdown Popover for Favorites Pills -->
+      <div id="fav-pills-popover" class="fav-pills-popover hidden" role="dialog" aria-label="Pinned Vaults Popover">
+        <div class="fav-pills-header">
+          <span class="fav-pills-tag">PINNED VAULTS</span>
+          <span class="fav-pills-count" id="fav-pills-count">0 Vaults</span>
+        </div>
+        <div id="fav-pills-list" class="fav-pills-list" role="list">
+          <!-- Populated dynamically as pills -->
         </div>
       </div>
-      <h3 class="pinned-heading">Favorites Watchlist</h3>
     </div>
-    <ul id="pinned-vaults-list" class="pinned-vaults-list" role="list">
-      <!-- Populated dynamically by app.js -->
-    </ul>
-  </aside>
+  </header>
 
   <!-- Right-side Master Vault Explorer & Filter Terminal (Morpho Design) -->
   <aside id="vault-explorer-widget" class="vault-explorer-widget">
@@ -431,8 +433,8 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/sphere.js?v=20261001_markets_overview"></script>
-  <script type="module" src="js/app.js?v=20261001_markets_overview"></script>
+  <script type="module" src="js/sphere.js?v=20261001_fav_pills"></script>
+  <script type="module" src="js/app.js?v=20261001_fav_pills"></script>
 </body>
 
 
