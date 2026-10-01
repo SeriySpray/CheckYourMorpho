@@ -315,7 +315,6 @@
       <nav class="audit-nav-tabs" role="tablist">
         <button type="button" class="audit-nav-tab active" data-tab="tab-overview" role="tab" aria-selected="true">Overview</button>
         <button type="button" class="audit-nav-tab" data-tab="tab-risk" role="tab" aria-selected="false">Risk & Exit</button>
-        <button type="button" class="audit-nav-tab" data-tab="tab-markets" role="tab" aria-selected="false">Markets (<span id="modal-markets-tab-count">0</span>)</button>
       </nav>
     </header>
 
@@ -343,32 +342,27 @@
           </div>
         </div>
 
-        <!-- Vault Protocol Architecture & Specifications -->
-        <div class="vault-specs-section">
-          <div class="specs-header">
-            <span class="specs-title">VAULT ARCHITECTURE & SPECIFICATIONS</span>
+        <!-- Underlying Markets Section (Replaces redundant specifications) -->
+        <div class="overview-markets-section">
+          <div class="overview-markets-header" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; margin-bottom: 8px;">
+            <span class="specs-title" style="font-size: 11px; font-family: var(--font-mono); font-weight: 600; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase;">UNDERLYING MARKETS</span>
+            <span class="badge badge-version" id="overview-markets-count" style="font-size: 10px;">0 MARKETS</span>
           </div>
-          <div class="specs-grid">
-            <div class="spec-card">
-              <span class="spec-label">Underlying Loan Asset</span>
-              <span class="spec-value" id="modal-spec-asset">USDC</span>
-              <span class="spec-sub mono" id="modal-spec-asset-addr">0x...</span>
-            </div>
-            <div class="spec-card">
-              <span class="spec-label">Active Markets</span>
-              <span class="spec-value" id="modal-spec-markets">0 Markets</span>
-              <span class="spec-sub">Supplied Credit Pools</span>
-            </div>
-            <div class="spec-card">
-              <span class="spec-label">Curator Fee</span>
-              <span class="spec-value" id="modal-spec-fee">0.0%</span>
-              <span class="spec-sub">Annual Performance</span>
-            </div>
-            <div class="spec-card">
-              <span class="spec-label">Contract Address</span>
-              <span class="spec-value mono" id="modal-spec-address">0x0000...0000</span>
-              <span class="spec-sub" id="modal-spec-chain">Ethereum Mainnet</span>
-            </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="allocations-table">
+              <thead>
+                <tr>
+                  <th>Collateral</th>
+                  <th>LLTV</th>
+                  <th>Weight</th>
+                  <th>Supplied</th>
+                  <th>Free Liq</th>
+                  <th>Status</th>
+                  <th>APY</th>
+                </tr>
+              </thead>
+              <tbody id="allocations-tbody"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -433,32 +427,12 @@
         </div>
       </div>
 
-      <!-- TAB 3: UNDERLYING MARKETS -->
-      <div class="audit-tab-panel" id="tab-markets" role="tabpanel">
-        <div class="table-wrapper">
-          <table class="data-table" id="allocations-table">
-            <thead>
-              <tr>
-                <th>Collateral</th>
-                <th>LLTV</th>
-                <th>Weight</th>
-                <th>Supplied</th>
-                <th>Free Liq</th>
-                <th>Status</th>
-                <th>APY</th>
-              </tr>
-            </thead>
-            <tbody id="allocations-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
     </div>
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/sphere.js?v=20261001_pinned"></script>
-  <script type="module" src="js/app.js?v=20261001_pinned"></script>
+  <script type="module" src="js/sphere.js?v=20261001_markets_overview"></script>
+  <script type="module" src="js/app.js?v=20261001_markets_overview"></script>
 </body>
 
 

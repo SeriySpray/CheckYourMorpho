@@ -27,7 +27,6 @@ const DOM = {
   auditPanelBody: document.getElementById('audit-panel-body'),
   closeBtn: document.getElementById('modal-close-btn'),
   modalFavBtn: document.getElementById('modal-fav-btn'),
-  modalMarketsTabCount: document.getElementById('modal-markets-tab-count'),
 
   // Pinned Vaults Widget (Left-side)
   pinnedVaultsWidget: document.getElementById('pinned-vaults-widget'),
@@ -59,12 +58,7 @@ const DOM = {
   modalExitCapPct: document.getElementById('modal-exit-cap-pct'),
   modalNetApy: document.getElementById('modal-net-apy'),
   modalFee: document.getElementById('modal-fee'),
-  modalSpecAsset: document.getElementById('modal-spec-asset'),
-  modalSpecAssetAddr: document.getElementById('modal-spec-asset-addr'),
-  modalSpecMarkets: document.getElementById('modal-spec-markets'),
-  modalSpecFee: document.getElementById('modal-spec-fee'),
-  modalSpecAddress: document.getElementById('modal-spec-address'),
-  modalSpecChain: document.getElementById('modal-spec-chain'),
+  overviewMarketsCount: document.getElementById('overview-markets-count'),
 
   // Panel 2: MQI, HHI & Exit
   riskMqiPct: document.getElementById('risk-mqi-pct'),
@@ -883,23 +877,7 @@ function populateBasicVaultInfo(v) {
   if (DOM.modalNetApy) DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
 
-  // Specs Card Grid
-  if (DOM.modalSpecAsset) DOM.modalSpecAsset.textContent = v.asset?.symbol || 'Unknown';
-  if (DOM.modalSpecAssetAddr) {
-    const assetAddr = v.asset?.address || '';
-    DOM.modalSpecAssetAddr.textContent = assetAddr ? `${assetAddr.slice(0, 6)}...${assetAddr.slice(-4)}` : 'Native / Unknown';
-  }
-  if (DOM.modalSpecFee) {
-    DOM.modalSpecFee.textContent = `${((v.fee || 0) * 100).toFixed(1)}%`;
-  }
-  if (DOM.modalSpecAddress) {
-    const addr = v.address || '';
-    DOM.modalSpecAddress.textContent = addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : '0x...';
-    DOM.modalSpecAddress.title = addr;
-  }
-  if (DOM.modalSpecChain) {
-    DOM.modalSpecChain.textContent = `${chainName} (${v.chainId || 1})`;
-  }
+
 }
 
 /**
@@ -1188,26 +1166,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
   DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
   DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
 
-  // Specs Card Grid
-  if (DOM.modalSpecAsset) DOM.modalSpecAsset.textContent = v.asset?.symbol || 'Unknown';
-  if (DOM.modalSpecAssetAddr) {
-    const assetAddr = v.asset?.address || '';
-    DOM.modalSpecAssetAddr.textContent = assetAddr ? `${assetAddr.slice(0, 6)}...${assetAddr.slice(-4)}` : 'Native / Unknown';
-  }
-  if (DOM.modalSpecMarkets) {
+  // Underlying Markets Count Pill
+  if (DOM.overviewMarketsCount) {
     const count = allocations.length;
-    DOM.modalSpecMarkets.textContent = `${count} Market${count === 1 ? '' : 's'}`;
-  }
-  if (DOM.modalSpecFee) {
-    DOM.modalSpecFee.textContent = `${((v.fee || 0) * 100).toFixed(1)}%`;
-  }
-  if (DOM.modalSpecAddress) {
-    const addr = v.address || '';
-    DOM.modalSpecAddress.textContent = addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : '0x...';
-    DOM.modalSpecAddress.title = addr;
-  }
-  if (DOM.modalSpecChain) {
-    DOM.modalSpecChain.textContent = `${chainName} (${v.chainId || 1})`;
+    DOM.overviewMarketsCount.textContent = `${count} MARKET${count === 1 ? '' : 'S'}`;
   }
 
   // --- PANEL 2: PORTFOLIO AUDIT (MQI & HHI & EXIT) ---
@@ -1316,10 +1278,6 @@ function populateAuditModal(data, isQuietRefresh = false) {
     }
   }
 
-  // --- PANEL 3: UNDERLYING MARKETS ---
-  if (DOM.modalMarketsTabCount) {
-    DOM.modalMarketsTabCount.textContent = allocations.length;
-  }
 
   // Reset mini-tabs to Overview on initial open only
   if (!isQuietRefresh) {
