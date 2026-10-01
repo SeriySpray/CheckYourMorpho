@@ -13,7 +13,7 @@ import {
 /**
  * Performs a complete synchronization of vaults (both V1 and V2), markets, and allocations.
  */
-export async function syncAllVaults() {
+export async function syncAllVaults(options = {}) {
   console.log('[SyncEngine] Starting full synchronization from Morpho GraphQL API (V1 and V2)...');
   const startTime = Date.now();
   const db = getDatabase();
@@ -130,7 +130,6 @@ export async function syncAllVaults() {
   let v2Count = 0;
   let marketsCount = 0;
   let allocationsCount = 0;
-  const topVaultsForHistory = [];
 
   db.exec('BEGIN TRANSACTION;');
   try {
@@ -143,10 +142,6 @@ export async function syncAllVaults() {
         'v1', v.is_listed, v.metadata_updated_at
       );
       v1Count++;
-
-      if (v.total_assets_usd >= (options.minAssetsUsdForHistory ?? 1000) || v.is_listed) {
-        topVaultsForHistory.push(v);
-      }
 
       const rawAllocations = rawV.state?.allocation || [];
       const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
@@ -198,10 +193,6 @@ export async function syncAllVaults() {
         'v2', v.is_listed, v.metadata_updated_at
       );
       v2Count++;
-
-      if (v.total_assets_usd >= (options.minAssetsUsdForHistory ?? 1000) || v.is_listed) {
-        topVaultsForHistory.push(v);
-      }
 
       const caps = rawV2.caps?.items || [];
       const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
