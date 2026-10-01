@@ -252,7 +252,6 @@
 .audit-fav-btn.active svg {
   fill: #ffffff;
   stroke: #ffffff;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.7));
 }
 
 .audit-close-btn {
@@ -420,12 +419,13 @@
   border-radius: 4px;
 }
 
-.badge-chain {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.badge-chain.base, .badge-chain.robinhood {
+.badge-chain,
+.badge-chain.ethereum,
+.badge-chain.base,
+.badge-chain.robinhood,
+.badge-chain.arbitrum,
+.badge-chain.optimism,
+.badge-chain.polygon {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #ffffff;
@@ -894,7 +894,7 @@
   top: 18px;
   bottom: 18px;
   left: 20px;
-  width: 440px;
+  width: 480px;
   max-width: calc(50vw - 30px);
   z-index: 15;
   pointer-events: none;
@@ -1027,7 +1027,6 @@
 
 .rich-pill-star-btn svg {
   fill: #ffffff;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
 }
 
 .rich-pill-star-btn:hover {

@@ -626,17 +626,23 @@ function renderPinnedRichPills(animate = false) {
     const curator = formatCuratorName(v.curatorName, v.name);
     const netApyFormatted = `${((v.netApy || 0) * 100).toFixed(2)}%`;
     const feeFormatted = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
-    const rawAssets = v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0;
-    const humanAsset = `${formatNumber(rawAssets)} ${v.asset?.symbol || ''}`;
-
-    // Get cached audit or compute default MQI
     const cachedAudit = clientAuditCache.get((v.address || '').toLowerCase());
-    const mqiPercent = cachedAudit?.verdict?.mqi?.mqiPercent ?? 100;
-    const isClean = mqiPercent === 100 && (cachedAudit?.verdict?.mqi?.isAllClean ?? true);
+    let tokenAmount = 0;
+    if (cachedAudit?.vault?.totalAssets) {
+      tokenAmount = Number(cachedAudit.vault.totalAssets) / Math.pow(10, v.asset?.decimals || 6);
+    } else if (v.totalAssets) {
+      tokenAmount = Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6);
+    } else {
+      const price = v.asset?.priceUsd || 1;
+      tokenAmount = price > 0 ? (v.totalAssetsUsd || 0) / price : 0;
+    }
+    const humanAsset = `${formatNumber(tokenAmount)} ${v.asset?.symbol || ''}`;
+    const mqiPercent = cachedAudit?.verdict?.mqi?.mqiPercent ?? v.mqiPercent ?? 100;
+    const isClean = mqiPercent === 100 && (cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true);
     const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
     const mqiClass = isClean ? 'clean' : 'flagged';
-    const exitCapPct = cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent ?? 0;
-    const exitCapText = exitCapPct > 0 ? `${exitCapPct}% Exit Cap` : 'Free Liq';
+    const exitCapPct = cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent ?? v.exitCapPercent ?? (v.totalAssetsUsd > 0 ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : 0);
+    const exitCapText = `${exitCapPct}% Exit Cap`;
 
     const card = document.createElement('div');
     card.className = 'pinned-rich-pill';
@@ -650,7 +656,7 @@ function renderPinnedRichPills(animate = false) {
       <div class="rich-pill-top">
         <div class="rich-pill-meta">
           <div class="rich-pill-title-row">
-            <span class="badge-chain ${chainClass}" style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px;">${escapeHtml(chainName.slice(0, 4).toUpperCase())}</span>
+            <span class="badge badge-chain ${chainClass}">${escapeHtml(chainName.slice(0, 4).toUpperCase())}</span>
             <span class="rich-pill-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
           </div>
           <div class="rich-pill-curator">${escapeHtml(curator)} • <span style="color:#ffffff;">${escapeHtml(v.asset?.symbol || '')}</span></div>
@@ -693,6 +699,17 @@ function renderPinnedRichPills(animate = false) {
       openVaultAudit(v);
     });
 
+    // Highlight sphere particle on hover
+    card.addEventListener('mouseenter', () => {
+      sphere.highlightVault(v.address);
+    });
+
+    card.addEventListener('mouseleave', () => {
+      if (!selectedVaultAddress) {
+        sphere.highlightVault(null);
+      }
+    });
+
     DOM.pinnedRichPills.appendChild(card);
 
     // Ball Flight Animation if requested
@@ -727,6 +744,27 @@ function renderPinnedRichPills(animate = false) {
           }, 420);
         });
       }, index * 80);
+    }
+  });
+ 
+  // Background pre-fetch full audits for pinned vaults to warm cache and ensure exact data
+  pinnedAddresses.forEach(addr => {
+    if (!clientAuditCache.has(addr)) {
+      fetch(`/api/vaults/${addr}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(auditData => {
+          if (auditData) {
+            clientAuditCache.set(addr, auditData);
+            const card = DOM.pinnedRichPills?.querySelector(`[data-address="${addr}"]`);
+            if (card && auditData.verdict?.liquidity?.instantExitCapacityPercent !== undefined) {
+              const exitCapEl = card.querySelector('.rich-pill-fin-sub.highlight');
+              if (exitCapEl) {
+                exitCapEl.textContent = `${auditData.verdict.liquidity.instantExitCapacityPercent}% Exit Cap`;
+              }
+            }
+          }
+        })
+        .catch(() => {});
     }
   });
 }
@@ -927,8 +965,14 @@ function populateBasicVaultInfo(v) {
   // Financials
   if (DOM.modalTvl) DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
   if (DOM.modalAssetsHuman) {
-    const rawAssets = v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0;
-    DOM.modalAssetsHuman.textContent = `${formatNumber(rawAssets)} ${v.asset?.symbol || ''}`;
+    let tokenAmount = 0;
+    if (v.totalAssets) {
+      tokenAmount = Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6);
+    } else {
+      const price = v.asset?.priceUsd || 1;
+      tokenAmount = price > 0 ? (v.totalAssetsUsd || 0) / price : 0;
+    }
+    DOM.modalAssetsHuman.textContent = `${formatNumber(tokenAmount)} ${v.asset?.symbol || ''}`;
   }
   if (DOM.modalLiq) DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
   if (DOM.modalNetApy) DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;

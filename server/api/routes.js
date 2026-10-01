@@ -7,6 +7,7 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
+import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { syncAllVaults } from '../services/syncEngine.js';
 
 
@@ -313,6 +314,7 @@ function handleGetVaults(req, res, url) {
       const allocs = allocMap.get(row.address.toLowerCase()) || [];
       const mqi = calculateMQI(row, allocs);
       const hhi = calculateHHI(row, allocs);
+      const liq = calculateLiquidityMetrics(row, allocs);
 
       return {
         address: row.address,
@@ -328,8 +330,11 @@ function handleGetVaults(req, res, url) {
           decimals: row.asset_decimals,
           priceUsd: row.asset_price_usd
         },
+        totalAssets: row.total_assets,
         totalAssetsUsd: row.total_assets_usd,
         liquidityUsd: row.liquidity_usd,
+        exitCapPercent: liq.instantExitCapacityPercent,
+        exitCapUsd: liq.instantExitCapacityUsd,
         apy: row.apy,
         netApy: row.net_apy,
         fee: row.fee,
