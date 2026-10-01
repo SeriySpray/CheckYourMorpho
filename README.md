@@ -72,5 +72,3 @@ sync.bat
 
 ---
 
-## License
-[MIT](LICENSE)
