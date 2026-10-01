@@ -1,4 +1,5 @@
 import { getDatabase } from '../db/database.js';
+import { CONFIG } from '../config.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchVaultReallocates, fetchVaultV2AllocationTransactions } from './morphoApi.js';
 import {
   normalizeVault,
@@ -10,6 +11,82 @@ import {
   normalizeReallocationV2,
   formatUnits
 } from './normalizers.js';
+
+/**
+ * Synchronizes the latest 10 reallocation transactions for a specific vault,
+ * strictly filtering for material actions where Volume USD >= 1.0% of vault TVL.
+ * 
+ * @param {object} vault Vault object from database
+ * @param {object} options Optional parameters (fetchLimit = 10, thresholdPct = 1.0)
+ * @returns {Promise<Array>} Array of material reallocation events stored
+ */
+export async function syncVaultReallocations(vault, options = {}) {
+  const fetchLimit = options.fetchLimit || CONFIG.sync.reallocationFetchLimit || 10;
+  const thresholdPct = options.thresholdPct ?? CONFIG.sync.reallocationThresholdPct ?? 1.0;
+  const db = getDatabase();
+
+  const upsertReallocation = db.prepare(`
+    INSERT INTO reallocations (
+      id, vault_address, tx_hash, block_number, timestamp,
+      type, market_unique_key, assets, assets_human, shares, created_at
+    ) VALUES (
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      block_number = excluded.block_number,
+      timestamp = excluded.timestamp,
+      type = excluded.type,
+      assets = excluded.assets,
+      assets_human = excluded.assets_human,
+      shares = excluded.shares
+  `);
+
+  let rawEvents = [];
+  try {
+    if (vault.version === 'v2') {
+      rawEvents = await fetchVaultV2AllocationTransactions(vault.address, vault.chain_id, fetchLimit);
+    } else {
+      rawEvents = await fetchVaultReallocates(vault.address, fetchLimit);
+    }
+  } catch (err) {
+    console.warn(`[SyncEngine] Failed to fetch reallocations for ${vault.address}: ${err.message}`);
+    return [];
+  }
+
+  const materialEvents = [];
+  const vaultTvl = Number(vault.total_assets_usd) || 0;
+  const assetPrice = Number(vault.asset_price_usd) || 1;
+
+  if (rawEvents.length > 0) {
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      for (const rawEv of rawEvents) {
+        const ev = vault.version === 'v2'
+          ? normalizeReallocationV2(rawEv, vault.address, vault.asset_decimals)
+          : normalizeReallocation(rawEv, vault.asset_decimals);
+
+        const eventVolumeUsd = Number(ev.assets_human || 0) * assetPrice;
+        const volumePct = vaultTvl > 0 ? (eventVolumeUsd / vaultTvl) * 100 : 0;
+
+        // Strictly Volume USD >= 1.0% of vault TVL (no $10k threshold)
+        if (volumePct >= thresholdPct) {
+          upsertReallocation.run(
+            ev.id, ev.vault_address, ev.tx_hash, ev.block_number, ev.timestamp,
+            ev.type, ev.market_unique_key, ev.assets, ev.assets_human, ev.shares, ev.created_at
+          );
+          materialEvents.push({ ...ev, eventVolumeUsd, volumePct });
+        }
+      }
+      db.exec('COMMIT;');
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      console.warn(`[SyncEngine] Transaction error for ${vault.address}: ${err.message}`);
+    }
+  }
+
+  return materialEvents;
+}
 
 /**
  * Performs a complete synchronization of vaults (both V1 and V2), markets, and allocations.
@@ -266,46 +343,20 @@ export async function syncAllVaults(options = { fetchHistoryForTop: true, minAss
     DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
   `);
 
-  // --- STEP 3: Fetch reallocation history exclusively for published vaults on the site ---
+  // --- STEP 3: Fetch material reallocations for published vaults on the site ---
   let reallocationsCount = 0;
   if (options.fetchHistoryForTop && topVaultsForHistory.length > 0) {
-    // Prioritize largest vaults by TVL
     topVaultsForHistory.sort((a, b) => (b.total_assets_usd || 0) - (a.total_assets_usd || 0));
-
-    // Only process vaults with active capital or existing allocations
     const activeVaultsToProcess = topVaultsForHistory.filter(v => (v.total_assets_usd || 0) > 100 || v.is_listed);
-    console.log(`[SyncEngine] Fetching reallocation history for ${activeVaultsToProcess.length} published vaults...`);
-
-    const checkExistingCount = db.prepare('SELECT count(*) as c FROM reallocations WHERE vault_address = ?');
+    console.log(`[SyncEngine] Checking latest 10 transactions for ${activeVaultsToProcess.length} vaults (threshold: >= ${CONFIG.sync.reallocationThresholdPct || 1.0}% TVL)...`);
 
     for (const v of activeVaultsToProcess) {
       try {
-        const existingCount = checkExistingCount.get(v.address)?.c || 0;
-        // If already in DB, fetch the latest 30 transactions to capture updates quickly; if fresh, fetch up to 200
-        const fetchLimit = existingCount > 0 ? 30 : 200;
-
-        let rawEvents = [];
-        if (v.version === 'v2') {
-          rawEvents = await fetchVaultV2AllocationTransactions(v.address, v.chain_id, fetchLimit);
-        } else {
-          rawEvents = await fetchVaultReallocates(v.address, fetchLimit);
-        }
-
-        if (rawEvents.length > 0) {
-          db.exec('BEGIN TRANSACTION;');
-          for (const rawEv of rawEvents) {
-            const ev = v.version === 'v2'
-              ? normalizeReallocationV2(rawEv, v.address, v.asset_decimals)
-              : normalizeReallocation(rawEv, v.asset_decimals);
-
-            upsertReallocation.run(
-              ev.id, ev.vault_address, ev.tx_hash, ev.block_number, ev.timestamp,
-              ev.type, ev.market_unique_key, ev.assets, ev.assets_human, ev.shares, ev.created_at
-            );
-            reallocationsCount++;
-          }
-          db.exec('COMMIT;');
-        }
+        const saved = await syncVaultReallocations(v, {
+          fetchLimit: CONFIG.sync.reallocationFetchLimit || 10,
+          thresholdPct: CONFIG.sync.reallocationThresholdPct || 1.0
+        });
+        reallocationsCount += saved.length;
       } catch (err) {
         console.warn(`[SyncEngine] Could not fetch reallocations for vault ${v.name} (${v.address}): ${err.message}`);
       }

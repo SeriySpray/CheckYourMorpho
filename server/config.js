@@ -38,6 +38,8 @@ export const CONFIG = {
   sync: {
     intervalMs: 60000, // 1 minute
     pageSize: 100,
-    minTvlUsd: 5000
+    minTvlUsd: 5000,
+    reallocationThresholdPct: 1.0, // Strictly >= 1.0% of vault TVL
+    reallocationFetchLimit: 10 // Strictly last 10 transactions per specific vault
   }
 };

@@ -7,7 +7,7 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
-import { syncAllVaults } from '../services/syncEngine.js';
+import { syncAllVaults, syncVaultReallocations } from '../services/syncEngine.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,7 +19,8 @@ const clientDir = path.resolve(rootDir, 'client');
 let isSyncInProgress = false;
 let lastSyncResult = null;
 
-// In-memory cache for instant 0ms vault audit responses
+// In-memory cache for instant 0ms vault audit responses (30s TTL)
+const AUDIT_CACHE_TTL_MS = 30000;
 const vaultAuditCache = new Map();
 
 // MIME types dictionary for static file serving
@@ -359,11 +360,12 @@ function handleGetVaults(req, res, url) {
 /**
  * Handler for GET /api/vaults/:address
  */
-function handleGetVaultByAddress(req, res, address) {
+async function handleGetVaultByAddress(req, res, address) {
   try {
     const cacheKey = address.toLowerCase();
-    if (vaultAuditCache.has(cacheKey)) {
-      sendJson(res, 200, vaultAuditCache.get(cacheKey));
+    const cached = vaultAuditCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < AUDIT_CACHE_TTL_MS)) {
+      sendJson(res, 200, cached.data);
       return;
     }
 
@@ -373,6 +375,16 @@ function handleGetVaultByAddress(req, res, address) {
     if (!vault) {
       sendJson(res, 404, { error: `Vault with address '${address}' not found` });
       return;
+    }
+
+    // On-demand lightweight sync of latest 10 reallocations for this specific vault
+    try {
+      await syncVaultReallocations(vault, {
+        fetchLimit: CONFIG.sync.reallocationFetchLimit || 10,
+        thresholdPct: CONFIG.sync.reallocationThresholdPct ?? 1.0
+      });
+    } catch (syncErr) {
+      console.warn(`[API] On-demand reallocation sync failed for ${vault.address}: ${syncErr.message}`);
     }
 
     // Active allocations joined with market data
@@ -420,7 +432,11 @@ function handleGetVaultByAddress(req, res, address) {
       ORDER BY va.supply_assets_usd DESC
     `).all(vault.address);
 
-    // Historical reallocation transactions
+    // Historical reallocation transactions (strictly Volume USD >= 1.0% of vault TVL, limit 10)
+    const vaultTvlUsd = Number(vault.total_assets_usd) || 0;
+    const minVolumeUsd = vaultTvlUsd * 0.01;
+    const assetPriceUsd = Number(vault.asset_price_usd) || 1;
+
     const reallocations = db.prepare(`
       SELECT 
         r.id,
@@ -441,9 +457,10 @@ function handleGetVaultByAddress(req, res, address) {
       FROM reallocations r
       LEFT JOIN markets m ON r.market_unique_key = m.unique_key
       WHERE LOWER(r.vault_address) = LOWER(?)
+        AND (r.assets_human * COALESCE(m.loan_asset_price_usd, ?)) >= ?
       ORDER BY r.timestamp DESC
-      LIMIT 100
-    `).all(vault.address);
+      LIMIT 10
+    `).all(vault.address, assetPriceUsd, minVolumeUsd);
 
     // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
     const verdict = generateVaultVerdict(vault, allocations);
@@ -492,7 +509,7 @@ function handleGetVaultByAddress(req, res, address) {
         oracleType: a.oracle_type || 'Unknown',
         badDebtUsd: a.bad_debt_usd || 0
       })),
-      reallocations: reallocations.slice(0, 50).map(r => ({
+      reallocations: reallocations.slice(0, 10).map(r => ({
         id: r.id,
         txHash: r.tx_hash,
         timestamp: r.timestamp,
@@ -504,7 +521,7 @@ function handleGetVaultByAddress(req, res, address) {
       }))
     };
 
-    vaultAuditCache.set(cacheKey, responsePayload);
+    vaultAuditCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });
     sendJson(res, 200, responsePayload);
   } catch (err) {
     sendJson(res, 500, { error: 'Failed to compute vault audit report', details: err.message });

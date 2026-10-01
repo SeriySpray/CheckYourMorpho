@@ -2,6 +2,7 @@ import http from 'node:http';
 import { CONFIG } from './config.js';
 import { getDatabase, closeDatabase } from './db/database.js';
 import { handleRequest } from './api/routes.js';
+import { syncAllVaults } from './services/syncEngine.js';
 
 // Initialize Database connection and verify WAL mode
 const db = getDatabase();
@@ -24,9 +25,38 @@ server.listen(PORT, HOST, () => {
   console.log(`  - Static frontend assets served from client/`);
 });
 
+// Background recurring synchronization
+let syncIntervalTimer = null;
+let isBackgroundSyncRunning = false;
+
+async function runBackgroundSync() {
+  if (isBackgroundSyncRunning) return;
+  isBackgroundSyncRunning = true;
+  try {
+    console.log('[Scheduler] Running scheduled background synchronization...');
+    const result = await syncAllVaults({ fetchHistoryForTop: false });
+    const totalVaults = (result.v1Count || 0) + (result.v2Count || 0);
+    console.log(`[Scheduler] Background synchronization completed in ${result.durationSec}s: ${totalVaults} vaults (${result.v1Count} V1, ${result.v2Count} V2), ${result.marketsCount} markets, ${result.allocationsCount} allocations.`);
+  } catch (err) {
+    console.error('[Scheduler] Background sync failed:', err.message);
+  } finally {
+    isBackgroundSyncRunning = false;
+  }
+}
+
+// Start recurring background sync timer
+if (CONFIG.sync.intervalMs && CONFIG.sync.intervalMs > 0) {
+  syncIntervalTimer = setInterval(runBackgroundSync, CONFIG.sync.intervalMs);
+  console.log(`[Scheduler] Background synchronization scheduled every ${CONFIG.sync.intervalMs / 1000}s.`);
+}
+
 // Graceful shutdown handling
 function handleShutdown(signal) {
   console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
+  if (syncIntervalTimer) {
+    clearInterval(syncIntervalTimer);
+    syncIntervalTimer = null;
+  }
   server.close(() => {
     console.log('[Server] HTTP server closed.');
     try {

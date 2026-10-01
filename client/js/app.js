@@ -123,6 +123,64 @@ async function initApp() {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
   }
+
+  // 4. Start Live Periodic Polling (every 60s)
+  startLivePolling();
+}
+
+let livePollingTimer = null;
+let isPollingActive = false;
+
+/**
+ * Periodically polls the server every 60 seconds to refresh vault metrics,
+ * particle sphere, explorer list, and actively inspected audit modal.
+ */
+function startLivePolling() {
+  if (livePollingTimer) clearInterval(livePollingTimer);
+
+  livePollingTimer = setInterval(async () => {
+    if (isPollingActive) return;
+    isPollingActive = true;
+
+    try {
+      // 1. Fetch updated vaults list
+      const res = await fetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.vaults) && data.vaults.length > 0) {
+          allVaults = data.vaults;
+          if (DOM.headerStatusText) {
+            DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
+          }
+          if (sphere) {
+            sphere.setVaults(allVaults);
+          }
+
+          // Preserve scroll position in vault explorer
+          const savedScrollTop = DOM.explorerVaultsList ? DOM.explorerVaultsList.scrollTop : 0;
+          renderVaultExplorer();
+          if (DOM.explorerVaultsList) {
+            DOM.explorerVaultsList.scrollTop = savedScrollTop;
+          }
+        }
+      }
+
+      // 2. If an audit modal is currently open and not animating, quietly refresh it
+      if (selectedVaultAddress && !DOM.auditModal.classList.contains('hidden') && !isTransitioningVault) {
+        const auditRes = await fetch(`/api/vaults/${selectedVaultAddress}`);
+        if (auditRes.ok) {
+          const auditData = await auditRes.json();
+          clientAuditCache.set(selectedVaultAddress.toLowerCase(), auditData);
+          activeAuditData = auditData;
+          populateAuditModal(auditData, true);
+        }
+      }
+    } catch (pollErr) {
+      console.warn('Live polling quiet error:', pollErr.message);
+    } finally {
+      isPollingActive = false;
+    }
+  }, 60000);
 }
 
 function formatChainName(chainId) {
@@ -497,6 +555,7 @@ function matchesCuratorFilter(v, filter) {
  */
 function renderVaultExplorer() {
   if (!DOM.explorerVaultsList) return;
+  const savedScrollTop = DOM.explorerVaultsList.scrollTop;
   DOM.explorerVaultsList.innerHTML = '';
 
   const isFiltered = Boolean(
@@ -652,6 +711,7 @@ function renderVaultExplorer() {
     fragment.appendChild(li);
   }
   DOM.explorerVaultsList.appendChild(fragment);
+  DOM.explorerVaultsList.scrollTop = savedScrollTop;
 }
 
 
@@ -953,7 +1013,7 @@ function closeVaultAudit() {
 /**
  * Populates all fields across Panel 1, Panel 2, and Panel 3.
  */
-function populateAuditModal(data) {
+function populateAuditModal(data, isQuietRefresh = false) {
   const v = data.vault;
   const verdict = data.verdict;
   const allocations = data.allocations || [];
@@ -1120,17 +1180,19 @@ function populateAuditModal(data) {
     DOM.modalMarketsTabCount.textContent = allocations.length;
   }
 
-  // Reset mini-tabs to Overview
-  const navTabs = document.querySelectorAll('.audit-nav-tab');
-  const navPanels = document.querySelectorAll('.audit-tab-panel');
-  navTabs.forEach(t => {
-    const isOverview = t.dataset.tab === 'tab-overview';
-    t.classList.toggle('active', isOverview);
-    t.setAttribute('aria-selected', isOverview ? 'true' : 'false');
-  });
-  navPanels.forEach(p => {
-    p.classList.toggle('active', p.id === 'tab-overview');
-  });
+  // Reset mini-tabs to Overview on initial open only
+  if (!isQuietRefresh) {
+    const navTabs = document.querySelectorAll('.audit-nav-tab');
+    const navPanels = document.querySelectorAll('.audit-tab-panel');
+    navTabs.forEach(t => {
+      const isOverview = t.dataset.tab === 'tab-overview';
+      t.classList.toggle('active', isOverview);
+      t.setAttribute('aria-selected', isOverview ? 'true' : 'false');
+    });
+    navPanels.forEach(p => {
+      p.classList.toggle('active', p.id === 'tab-overview');
+    });
+  }
 
   // Populate Allocations Table
   DOM.allocationsTbody.innerHTML = '';
