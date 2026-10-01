@@ -1024,11 +1024,25 @@ function populateAuditModal(data) {
   const hhiVal = verdict.hhi?.hhi ?? 0;
   const isUnallocated = verdict.hhi?.tier === 'UNALLOCATED';
 
+  // Force pure English tier labels regardless of backend cache
+  let tierLabel = 'High Diversification';
+  if (isUnallocated || verdict.hhi?.tier === 'UNALLOCATED') {
+    tierLabel = 'N/A';
+  } else if (verdict.hhi?.tier === 'EXTREME' || hhiVal > 0.50) {
+    tierLabel = 'Critical Concentration';
+  } else if (verdict.hhi?.tier === 'CONCENTRATED' || hhiVal >= 0.25) {
+    tierLabel = 'High Concentration';
+  } else if (verdict.hhi?.tier === 'MODERATE' || hhiVal >= 0.15) {
+    tierLabel = 'Moderate Concentration';
+  } else {
+    tierLabel = 'High Diversification';
+  }
+
   if (DOM.riskHhiVal) {
     if (isUnallocated) {
       DOM.riskHhiVal.textContent = 'N/A';
     } else {
-      DOM.riskHhiVal.textContent = `${hhiVal} (${verdict.hhi?.tierLabel || 'HHI'})`;
+      DOM.riskHhiVal.textContent = `${hhiVal} (${tierLabel})`;
     }
   }
   if (DOM.riskHhiBar) {
