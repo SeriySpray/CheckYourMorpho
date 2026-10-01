@@ -925,6 +925,8 @@ async function openVaultAudit(vault, startPos) {
     pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08)';
   }, 420);
 
+  const animStartTime = Date.now();
+
   // Simultaneously resolve audit data and finish population
   const data = await auditDataPromise;
   if (!data) {
@@ -937,7 +939,10 @@ async function openVaultAudit(vault, startPos) {
   activeAuditData = data;
   populateAuditModal(data);
 
-  // Stage 3: Smooth docking reveal when unfold completes (720ms)
+  // Stage 3: Smooth docking reveal when unfold completes (synchronized with 720ms animation)
+  const elapsed = Date.now() - animStartTime;
+  const remainingDelay = Math.max(0, 720 - elapsed);
+
   setTimeout(() => {
     DOM.auditModal.classList.remove('hidden');
     pOpen.style.opacity = '0';
@@ -945,7 +950,7 @@ async function openVaultAudit(vault, startPos) {
       pOpen.classList.add('hidden');
       isTransitioningVault = false;
     }, 220);
-  }, 710);
+  }, remainingDelay);
 }
 
 /**

@@ -357,10 +357,40 @@ function handleGetVaults(req, res, url) {
   }
 }
 
+// Active tracking of in-flight background vault syncs to prevent duplicate external requests
+const inFlightVaultSyncs = new Set();
+
+function triggerBackgroundVaultSync(vault) {
+  if (!vault || !vault.address) return;
+  const addrKey = vault.address.toLowerCase();
+  if (inFlightVaultSyncs.has(addrKey)) return;
+
+  inFlightVaultSyncs.add(addrKey);
+  // Non-blocking fire-and-forget background revalidation
+  syncVaultReallocations(vault, {
+    fetchLimit: CONFIG.sync.reallocationFetchLimit || 10,
+    thresholdPct: CONFIG.sync.reallocationThresholdPct ?? 1.0
+  })
+    .then(materialEvents => {
+      // If new material events were saved, clear cache entry so subsequent requests see them immediately
+      if (materialEvents && materialEvents.length > 0) {
+        vaultAuditCache.delete(addrKey);
+      }
+    })
+    .catch(err => {
+      console.warn(`[API] Background vault sync failed for ${vault.address}:`, err.message);
+    })
+    .finally(() => {
+      inFlightVaultSyncs.delete(addrKey);
+    });
+}
+
 /**
  * Handler for GET /api/vaults/:address
+ * Employs Stale-While-Revalidate: returns local SQLite audit metrics immediately (<1ms)
+ * and dispatches lightweight non-blocking revalidation for the latest 10 transactions.
  */
-async function handleGetVaultByAddress(req, res, address) {
+function handleGetVaultByAddress(req, res, address) {
   try {
     const cacheKey = address.toLowerCase();
     const cached = vaultAuditCache.get(cacheKey);
@@ -377,15 +407,8 @@ async function handleGetVaultByAddress(req, res, address) {
       return;
     }
 
-    // On-demand lightweight sync of latest 10 reallocations for this specific vault
-    try {
-      await syncVaultReallocations(vault, {
-        fetchLimit: CONFIG.sync.reallocationFetchLimit || 10,
-        thresholdPct: CONFIG.sync.reallocationThresholdPct ?? 1.0
-      });
-    } catch (syncErr) {
-      console.warn(`[API] On-demand reallocation sync failed for ${vault.address}: ${syncErr.message}`);
-    }
+    // Trigger non-blocking background revalidation without delaying the HTTP response
+    triggerBackgroundVaultSync(vault);
 
     // Active allocations joined with market data
     const allocations = db.prepare(`
