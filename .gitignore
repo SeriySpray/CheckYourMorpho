@@ -8,6 +8,8 @@ data/*.db-shm
 
 # Node
 node_modules/
+.node/
+*.zip
 npm-debug.log*
 
 # Environment and OS

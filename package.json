@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Risk audit, curator track record, and protocol architecture analytics platform for MetaMorpho Vaults",
   "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "sync": "node server/services/syncEngine.js",
     "start": "node server/index.js"

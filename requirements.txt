@@ -1,0 +1,13 @@
+# ==============================================================================
+# CheckYourMorpho - Dependencies & Runtime Requirements
+# ==============================================================================
+# This file defines runtime environment requirements for CheckYourMorpho.
+# start.bat reads this file and automatically downloads the portable Node.js
+# runtime if it is missing or outdated (< v22) on the host machine.
+# ==============================================================================
+
+# Minimum required Node.js major version (required for native node:sqlite support)
+MIN_NODE_VERSION=22
+
+# Node.js LTS version to automatically download if missing
+NODE_VERSION=22.14.0
