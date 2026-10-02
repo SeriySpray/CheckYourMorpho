@@ -67,12 +67,16 @@ export function generateVaultVerdict(vault, allocations = []) {
     const crowdedSharePercent = totalAssetsUsd > 0 ? Math.round((totalCrowdedSupplyUsd / totalAssetsUsd) * 1000) / 10 : 0;
     const dropPct = Math.round((liquidity.instantExitCapacityPercent - liquidity.stressedExitCapacityPercent) * 10) / 10;
 
-    // Critical trigger: severe liquidity cliff (normal >= 20% but drops to < 10% in a run, or >= 35% TVL in crowded markets with >= 15% drop)
-    const isCritical = (liquidity.instantExitCapacityPercent >= 20 && liquidity.stressedExitCapacityPercent < 10)
-      || (crowdedSharePercent >= 35 && dropPct >= 15);
+    // Critical trigger: Stressed pro-rata exit capacity collapses into true danger zone (< 15%)
+    // with substantial drop (>= 20%) and material exposure to crowded markets
+    const isCritical = (liquidity.instantExitCapacityPercent >= 25 && liquidity.stressedExitCapacityPercent < 15 && dropPct >= 20)
+      || (crowdedSharePercent >= 35 && dropPct >= 25 && liquidity.stressedExitCapacityPercent < 15);
 
-    // High trigger: material crowded exposure (>= 10% TVL or >= $2M in crowded markets with >= 10% drop)
-    const isHigh = !isCritical && (crowdedSharePercent >= 10 || totalCrowdedSupplyUsd >= 2e6) && (dropPct >= 10 || liquidity.stressedExitCapacityPercent < 20);
+    // High trigger: Material reduction in exit capacity (stressed < 25% with drop >= 15%, or drop >= 25% with stressed < 35%)
+    const isHigh = !isCritical && crowdedSharePercent >= 15 && (
+      (liquidity.stressedExitCapacityPercent < 25 && dropPct >= 15) ||
+      (dropPct >= 25 && liquidity.stressedExitCapacityPercent < 35)
+    );
 
     const topMarket = liquidity.crowdedMarkets[0];
     const topPeersStr = topMarket.topPeers && topMarket.topPeers.length > 0 ? topMarket.topPeers.join(', ') : 'peer vaults';
@@ -81,13 +85,13 @@ export function generateVaultVerdict(vault, allocations = []) {
       redFlags.push({
         level: 'CRITICAL',
         title: 'Critical Crowded Exit Deficit',
-        message: `${crowdedSharePercent}% ($${(totalCrowdedSupplyUsd / 1e6).toFixed(1)}M) of deposits share markets with competing peer vaults (${topPeersStr}) whose claims exceed available free cash. In a concurrent run, exit capacity crashes from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}%.`
+        message: `Under concurrent withdrawals by competing peer vaults (${topPeersStr}), pro-rata exit capacity collapses from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% (${crowdedSharePercent}% of vault capital deployed in heavily contested markets).`
       });
     } else if (isHigh) {
       redFlags.push({
         level: 'HIGH',
         title: 'Elevated Crowded Exit Contagion',
-        message: `Vault shares material allocations with ${topPeersStr} in markets where competing supply exceeds free cash. Under a concurrent exit, pro-rata capacity drops from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}%.`
+        message: `Concurrent withdrawals by competing peer vaults (${topPeersStr}) reduce pro-rata exit capacity from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% across ${crowdedSharePercent}% of allocated capital.`
       });
     }
   }

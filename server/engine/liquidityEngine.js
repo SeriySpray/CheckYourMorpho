@@ -42,6 +42,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   let idleAllocationsUsd = 0;
   let totalAllocatedUsd = 0;
   const crowdedMarkets = [];
+  const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
 
   for (const alloc of allocations) {
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
@@ -74,10 +75,19 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       }
       loanMarketsStressedExitUsd += stressedExitUsd;
 
-      // Crowded market detection: Peer supply >= market free liquidity
-      // (peer vaults alone hold enough capital to drain 100% of market free liquidity)
-      const isCrowded = peerSupplyUsd > 0 && (peerSupplyUsd >= marketFreeLiquidityUsd || (marketFreeLiquidityUsd === 0 && supplyUsd > 0));
-      if (isCrowded && supplyUsd > 1000) {
+      // Crowded market detection:
+      // 1. Peer supply alone >= market free liquidity (competing claims exceed cash)
+      // 2. Peer vaults dominate this market (peerSupplyUsd > supplyUsd)
+      // 3. Competing vaults materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
+      // 4. Materiality check: vault capital must exceed 1.0% of total vault assets
+      const hasSignificantDilution = (marketFreeLiquidityUsd === 0 && supplyUsd > 0) ||
+        (canExitUsd > 0 && stressedExitUsd < canExitUsd * 0.70);
+      const isCrowded = peerSupplyUsd > 0 &&
+        (peerSupplyUsd >= marketFreeLiquidityUsd) &&
+        (peerSupplyUsd > supplyUsd) &&
+        hasSignificantDilution;
+
+      if (isCrowded && supplyUsd > minMaterialThresholdUsd) {
         const topPeersList = (alloc.peer_vaults || []).slice(0, 3).map(p => {
           const m = p.supplyUsd >= 1e6 ? `$${(p.supplyUsd / 1e6).toFixed(1)}M` : `$${(p.supplyUsd / 1e3).toFixed(0)}K`;
           return `${p.vaultName || 'Vault'} (${m})`;
@@ -99,12 +109,11 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   }
 
   // True unallocated cash (not at risk in loan markets):
-  // either in a 0-LLTV idle market, directly on the vault contract, or unallocated difference
-  const trueIdleCashUsd = Math.max(
-    directLiquidityUsd,
-    idleAllocationsUsd,
-    Math.max(0, totalAssetsUsd - totalAllocatedUsd)
-  );
+  // either in a 0-LLTV idle market or unallocated cash difference on the vault contract
+  const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd);
+  const trueIdleCashUsd = allocations.length > 0
+    ? idleAllocationsUsd + unallocatedCashUsd
+    : Math.min(totalAssetsUsd, directLiquidityUsd || totalAssetsUsd);
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
   const totalEffectiveExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsExitUsd);
@@ -126,6 +135,6 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     stressedExitCapacityPercent,
     crowdedMarkets,
     isIlliquid: instantExitCapacityPercent < 20,
-    isCrowded: crowdedMarkets.length > 0 && (instantExitCapacityPercent - stressedExitCapacityPercent >= 10)
+    isCrowded: crowdedMarkets.length > 0 && (instantExitCapacityPercent - stressedExitCapacityPercent >= 15)
   };
 }

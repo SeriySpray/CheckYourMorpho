@@ -78,15 +78,8 @@ sync.bat
 ```
 *(The server also syncs automatically in the background every 180 seconds).*
 
-### Production Deployment (Oracle Cloud)
-To deploy updates to the live Oracle Cloud VPS:
-```bash
-# On Windows:
-deploy_oracle.bat
-
-# On Linux/WSL:
-./deploy_oracle.sh
-```
-Live instance: [https://checkyourmorpho.duckdns.org](https://checkyourmorpho.duckdns.org)
+### Live Production Instance
+The public monitoring terminal is accessible at:
+- **[https://checkyourmorpho.duckdns.org](https://checkyourmorpho.duckdns.org)**
 
 

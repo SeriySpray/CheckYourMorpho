@@ -15,3 +15,16 @@ npm-debug.log*
 .env.local
 .DS_Store
 Thumbs.db
+*.log
+
+# Deployment scripts & server infrastructure
+deploy_oracle.bat
+deploy_oracle.sh
+deploy_*.bat
+deploy_*.sh
+enable_ssl.sh
+nginx_checkyourmorpho.conf
+*.conf
+
+# Development documentation, design notes, and reference photos
+docs/
