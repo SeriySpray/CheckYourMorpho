@@ -391,10 +391,25 @@
         </div>
 
         <!-- 3. Instant Exit Capacity Meter -->
-        <div class="meter-box">
+        <div class="meter-box" id="risk-exit-meter-box">
           <div class="meter-header">
-            <span class="meter-label">Instant Exit Capacity</span>
-            <span class="meter-value" id="risk-exit-pct">0%</span>
+            <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>
+            <div class="meter-val-wrap">
+              <span class="meter-value" id="risk-exit-pct">0%</span>
+              <span class="info-circle-btn" id="risk-exit-info-btn" aria-label="Stressed Pro-Rata Exit Capacity" tabindex="0">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <div class="info-popover" id="risk-exit-popover">
+                  <div class="info-popover-title">Stressed Pro-Rata Exit</div>
+                  <div class="info-popover-body" id="risk-exit-popover-body">
+                    Under a simultaneous withdrawal run across shared markets, competing vaults dilute available free cash, reducing exit capacity to <strong>0%</strong>.
+                  </div>
+                </div>
+              </span>
+            </div>
           </div>
           <div class="meter-track">
             <div class="meter-fill" id="risk-exit-bar" style="width: 0%;"></div>

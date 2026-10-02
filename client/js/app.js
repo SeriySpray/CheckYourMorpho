@@ -69,6 +69,11 @@ const DOM = {
   riskHhiVal: document.getElementById('risk-hhi-val'),
   riskHhiBar: document.getElementById('risk-hhi-bar'),
   riskHhiDesc: document.getElementById('risk-hhi-desc'),
+  riskExitMeterBox: document.getElementById('risk-exit-meter-box'),
+  riskExitLabel: document.getElementById('risk-exit-label'),
+  riskExitInfoBtn: document.getElementById('risk-exit-info-btn'),
+  riskExitPopover: document.getElementById('risk-exit-popover'),
+  riskExitPopoverBody: document.getElementById('risk-exit-popover-body'),
   riskExitPct: document.getElementById('risk-exit-pct'),
   riskExitBar: document.getElementById('risk-exit-bar'),
   riskExitDesc: document.getElementById('risk-exit-desc'),
@@ -1470,6 +1475,41 @@ function closeVaultAudit() {
 }
 
 /**
+ * Current audit modal exit capacity state for interactive stressed inspection
+ */
+let currentModalExitState = {
+  normalExitPct: 0,
+  normalExitUsd: 0,
+  stressedExitPct: 0,
+  stressedExitUsd: 0,
+  dropPct: 0,
+  topPeer: ''
+};
+
+function updateStressedExitDisplay(isStressed) {
+  if (!DOM.riskExitBar || !DOM.riskExitPct) return;
+  const { normalExitPct, normalExitUsd, stressedExitPct, stressedExitUsd, dropPct } = currentModalExitState;
+
+  if (isStressed) {
+    DOM.riskExitBar.style.width = `${Math.min(100, stressedExitPct)}%`;
+    DOM.riskExitBar.style.background = stressedExitPct < 15 ? '#ff4d4d' : (dropPct > 0 ? '#ffaa00' : '#ffffff');
+    if (dropPct > 0) {
+      DOM.riskExitPct.innerHTML = `<span style="color:#ffaa00; font-size:10px; margin-right:4px; font-weight:600;">STRESSED:</span>${stressedExitPct}%`;
+      if (DOM.riskExitDesc) {
+        DOM.riskExitDesc.innerHTML = `<span style="color:#ffaa00; font-weight:500;">${formatCurrency(stressedExitUsd)}</span> pro-rata exit capacity under concurrent bank run`;
+      }
+    }
+  } else {
+    DOM.riskExitBar.style.width = `${Math.min(100, normalExitPct)}%`;
+    DOM.riskExitBar.style.background = '#ffffff';
+    DOM.riskExitPct.textContent = `${normalExitPct}%`;
+    if (DOM.riskExitDesc) {
+      DOM.riskExitDesc.textContent = `${formatCurrency(normalExitUsd)} available for immediate withdrawal without locking markets`;
+    }
+  }
+}
+
+/**
  * Populates all fields across Panel 1, Panel 2, and Panel 3.
  */
 function populateAuditModal(data, isQuietRefresh = false) {
@@ -1565,17 +1605,38 @@ function populateAuditModal(data, isQuietRefresh = false) {
     }
   }
 
-  // 3. Exit Liquidity
-  const exitPct = verdict.liquidity?.instantExitCapacityPercent || 0;
-  if (DOM.riskExitPct) DOM.riskExitPct.textContent = `${exitPct}%`;
-  if (DOM.riskExitBar) {
-    DOM.riskExitBar.style.width = `${Math.min(100, exitPct)}%`;
-    DOM.riskExitBar.style.background = '#ffffff';
+  // 3. Exit Liquidity & Stressed Interaction
+  const normalExitPct = verdict.liquidity?.instantExitCapacityPercent || 0;
+  const normalExitUsd = verdict.liquidity?.instantExitCapacityUsd || 0;
+  const stressedExitPct = verdict.liquidity?.stressedExitCapacityPercent ?? normalExitPct;
+  const stressedExitUsd = verdict.liquidity?.stressedExitCapacityUsd ?? normalExitUsd;
+  const dropPct = Math.max(0, Math.round((normalExitPct - stressedExitPct) * 10) / 10);
+  const topPeer = verdict.liquidity?.crowdedMarkets?.[0]?.topPeers?.[0] || 'competing vaults';
+
+  currentModalExitState = {
+    normalExitPct,
+    normalExitUsd,
+    stressedExitPct,
+    stressedExitUsd,
+    dropPct,
+    topPeer
+  };
+
+  if (DOM.riskExitInfoBtn) {
+    DOM.riskExitInfoBtn.classList.remove('active');
   }
 
-  if (DOM.riskExitDesc) {
-    DOM.riskExitDesc.textContent = `${formatCurrency(verdict.liquidity?.instantExitCapacityUsd || 0)} available for immediate withdrawal without locking markets`;
+  // Update Popover content
+  if (DOM.riskExitPopoverBody) {
+    if (dropPct > 0) {
+      DOM.riskExitPopoverBody.innerHTML = `Under a simultaneous withdrawal run across shared markets, competing vaults (${escapeHtml(topPeer)}) dilute available free cash, reducing pro-rata exit capacity from <strong>${normalExitPct}%</strong> to <strong>${stressedExitPct}%</strong> (${formatCurrency(stressedExitUsd)}).`;
+    } else {
+      DOM.riskExitPopoverBody.innerHTML = `Under a simultaneous withdrawal run, pro-rata exit capacity remains preserved at <strong>${normalExitPct}%</strong> (${formatCurrency(normalExitUsd)}) with no significant competition dilution.`;
+    }
   }
+
+  // Initial standard exit display
+  updateStressedExitDisplay(false);
 
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
@@ -1672,6 +1733,39 @@ function setupModalEvents() {
       }
     });
   }
+
+  // Interactive Stressed Exit Capacity hover & click handlers
+  if (DOM.riskExitInfoBtn) {
+    DOM.riskExitInfoBtn.addEventListener('mouseenter', () => updateStressedExitDisplay(true));
+    DOM.riskExitInfoBtn.addEventListener('mouseleave', () => {
+      if (!DOM.riskExitInfoBtn.classList.contains('active')) {
+        updateStressedExitDisplay(false);
+      }
+    });
+    DOM.riskExitInfoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isActive = DOM.riskExitInfoBtn.classList.toggle('active');
+      updateStressedExitDisplay(isActive);
+    });
+  }
+
+  if (DOM.riskExitLabel) {
+    DOM.riskExitLabel.addEventListener('mouseenter', () => updateStressedExitDisplay(true));
+    DOM.riskExitLabel.addEventListener('mouseleave', () => {
+      if (!DOM.riskExitInfoBtn || !DOM.riskExitInfoBtn.classList.contains('active')) {
+        updateStressedExitDisplay(false);
+      }
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (DOM.riskExitInfoBtn && !DOM.riskExitInfoBtn.contains(e.target)) {
+      if (DOM.riskExitInfoBtn.classList.contains('active')) {
+        DOM.riskExitInfoBtn.classList.remove('active');
+        updateStressedExitDisplay(false);
+      }
+    }
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !DOM.auditModal.classList.contains('hidden')) {
