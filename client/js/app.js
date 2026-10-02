@@ -1023,13 +1023,16 @@ async function openVaultAudit(vault, startPos) {
 
   isTransitioningVault = true;
 
-  // Target coordinates for Left Floating Terminal
-  const targetLeft = 20;
-  const targetTop = 18;
-  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
-  const targetHeight = window.innerHeight - 36;
+  const isMobile = window.innerWidth <= 768;
+
+  // Target coordinates for Left Floating Terminal (Desktop) or Bottom Sheet (Mobile)
+  const targetLeft = isMobile ? 0 : 20;
+  const targetTop = isMobile ? Math.floor(window.innerHeight * 0.12) : 18;
+  const targetWidth = isMobile ? window.innerWidth : Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetHeight = isMobile ? Math.floor(window.innerHeight * 0.88) : window.innerHeight - 36;
   const targetCenterX = targetLeft + targetWidth / 2;
   const targetCenterY = targetTop + targetHeight / 2;
+  const targetRadius = isMobile ? '24px 24px 0 0' : '20px';
 
   // Check if a vault window is ALREADY open
   const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
@@ -1048,7 +1051,10 @@ async function openVaultAudit(vault, startPos) {
   if (isAlreadyOpen && DOM.morphProxyRetract) {
     let prevPos = prevVaultAddress ? sphere.getParticleScreenPos(prevVaultAddress) : null;
     if (!prevPos) {
-      prevPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
+      prevPos = {
+        x: isMobile ? window.innerWidth * 0.5 : window.innerWidth * 0.45,
+        y: isMobile ? window.innerHeight * 0.28 : window.innerHeight * 0.5
+      };
     }
 
     // Hide static panel immediately so user sees the folding proxy
@@ -1060,7 +1066,7 @@ async function openVaultAudit(vault, startPos) {
     pRetract.style.top = `${targetCenterY}px`;
     pRetract.style.width = `${targetWidth}px`;
     pRetract.style.height = `${targetHeight}px`;
-    pRetract.style.borderRadius = '20px';
+    pRetract.style.borderRadius = targetRadius;
     pRetract.style.opacity = '0.88';
     pRetract.style.background = 'rgba(14, 14, 14, 0.88)';
     pRetract.style.border = '1px solid rgba(255, 255, 255, 0.12)';
@@ -1102,8 +1108,8 @@ async function openVaultAudit(vault, startPos) {
       startX = pPos.x;
       startY = pPos.y;
     } else {
-      startX = window.innerWidth * 0.45;
-      startY = window.innerHeight * 0.5;
+      startX = isMobile ? window.innerWidth * 0.5 : window.innerWidth * 0.45;
+      startY = isMobile ? window.innerHeight * 0.28 : window.innerHeight * 0.5;
     }
   }
 
@@ -1133,7 +1139,7 @@ async function openVaultAudit(vault, startPos) {
     pOpen.style.transition = 'width 300ms cubic-bezier(0.16, 1, 0.3, 1), height 300ms cubic-bezier(0.16, 1, 0.3, 1), border-radius 300ms cubic-bezier(0.16, 1, 0.3, 1), background 300ms, border-color 300ms, box-shadow 300ms';
     pOpen.style.width = `${targetWidth}px`;
     pOpen.style.height = `${targetHeight}px`;
-    pOpen.style.borderRadius = '20px';
+    pOpen.style.borderRadius = targetRadius;
     pOpen.style.background = 'rgba(14, 14, 14, 0.88)';
     pOpen.style.border = '1px solid rgba(255, 255, 255, 0.14)';
     pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08)';
@@ -1173,10 +1179,14 @@ async function openVaultAudit(vault, startPos) {
 function closeVaultAudit() {
   if (DOM.auditModal.classList.contains('hidden')) return;
 
-  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
-  const targetHeight = window.innerHeight - 36;
-  const targetCenterX = 20 + targetWidth / 2;
-  const targetCenterY = 18 + targetHeight / 2;
+  const isMobile = window.innerWidth <= 768;
+  const targetLeft = isMobile ? 0 : 20;
+  const targetTop = isMobile ? Math.floor(window.innerHeight * 0.12) : 18;
+  const targetWidth = isMobile ? window.innerWidth : Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetHeight = isMobile ? Math.floor(window.innerHeight * 0.88) : window.innerHeight - 36;
+  const targetCenterX = targetLeft + targetWidth / 2;
+  const targetCenterY = targetTop + targetHeight / 2;
+  const targetRadius = isMobile ? '24px 24px 0 0' : '20px';
 
   const closingAddress = selectedVaultAddress;
 
@@ -1189,7 +1199,7 @@ function closeVaultAudit() {
   DOM.morphProxy.style.top = `${targetCenterY}px`;
   DOM.morphProxy.style.width = `${targetWidth}px`;
   DOM.morphProxy.style.height = `${targetHeight}px`;
-  DOM.morphProxy.style.borderRadius = '20px';
+  DOM.morphProxy.style.borderRadius = targetRadius;
   DOM.morphProxy.style.opacity = '0.88';
   DOM.morphProxy.style.background = 'rgba(14, 14, 14, 0.88)';
   DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.14)';
@@ -1198,7 +1208,10 @@ function closeVaultAudit() {
   // 3. Determine return coordinates of the particle on the 3D sphere
   let particlePos = closingAddress ? sphere.getParticleScreenPos(closingAddress) : null;
   if (!particlePos) {
-    particlePos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
+    particlePos = {
+      x: isMobile ? window.innerWidth * 0.5 : window.innerWidth * 0.45,
+      y: isMobile ? window.innerHeight * 0.28 : window.innerHeight * 0.5
+    };
   }
 
   // Stage 1: Fold window down into a ball at dock position (220ms)

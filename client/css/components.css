@@ -1707,16 +1707,237 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-@media (max-width: 900px) {
+/* --- 6. TABLET RESPONSIVE (769px - 1024px) --- */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .vault-explorer-widget,
+  .audit-panel-widget,
+  .pinned-rich-pills-container {
+    width: 440px;
+    max-width: calc(50vw - 20px);
+  }
+}
+
+/* --- 7. MOBILE RESPONSIVE (<= 768px: iPhone, Android, Compact Screens) --- */
+@media (max-width: 768px) {
+  /* Lift 3D particle sphere slightly into upper screen half */
+  .sphere-wrapper {
+    transform: translateY(-8vh);
+  }
+
+  /* Compact Mobile Header */
+  .app-header {
+    right: 0 !important;
+    left: 0 !important;
+    height: 48px;
+    padding: 0 16px;
+  }
+
+  /* Pinned Vaults (Left Dock) -> Mobile Top Cards */
+  .pinned-rich-pills-container {
+    top: 12px;
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    max-height: 32vh;
+    gap: 8px;
+    padding-right: 0;
+  }
+
+  .pinned-rich-pill {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .rich-pill-name {
+    font-size: 13px;
+  }
+
+  .rich-pill-fin-val {
+    font-size: 12px;
+  }
+
+  /* Master Vault Explorer -> Bottom Sheet Drawer */
   .vault-explorer-widget {
     top: auto;
     bottom: 0;
     left: 0;
     right: 0;
-    width: 100vw;
-    height: 72vh;
-    border-radius: 20px 20px 0 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
+    max-width: 100% !important;
+    height: 60vh;
+    border-radius: 22px 22px 0 0;
     border-left: none;
+    border-right: none;
+    border-bottom: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 10px 16px 16px 16px;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 320ms ease;
+  }
+
+  /* Mobile Sheet Drag Handle Indicator */
+  .vault-explorer-widget::before {
+    content: "";
+    display: block;
+    width: 38px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.24);
+    margin: 0 auto 10px auto;
+    flex-shrink: 0;
+  }
+
+  .vault-explorer-widget.hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .explorer-header {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+  }
+
+  .explorer-heading {
+    font-size: 15px;
+  }
+
+  .explorer-search-box {
+    height: 38px;
+    margin-bottom: 8px;
+    padding: 0 10px;
+  }
+
+  .search-shortcut {
+    display: none !important;
+  }
+
+  .explorer-filters-grid {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .dropdown-trigger {
+    padding: 5px 8px;
+  }
+
+  .trigger-label {
+    font-size: 8px;
+  }
+
+  .trigger-value {
+    font-size: 10.5px;
+  }
+
+  .explorer-vaults-list {
+    gap: 6px;
+    padding-right: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .explorer-vault-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+
+  .vault-item-name {
+    font-size: 12.5px;
+  }
+
+  .vault-item-sub {
+    font-size: 10px;
+  }
+
+  .vault-item-fin-val {
+    font-size: 12.5px;
+  }
+
+  .vault-item-fin-sub {
+    font-size: 10px;
+  }
+
+  /* Floating Audit Terminal -> Full Mobile Bottom Sheet */
+  .audit-panel-widget {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100% !important;
+    height: 88vh;
+    border-radius: 24px 24px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    padding: 10px 16px 20px 16px;
+    z-index: 50;
+    box-shadow: 0 -16px 50px rgba(0, 0, 0, 0.95);
+    transition: transform 340ms cubic-bezier(0.16, 1, 0.3, 1), opacity 340ms ease;
+  }
+
+  /* Audit Mobile Sheet Drag Handle */
+  .audit-panel-widget::before {
+    content: "";
+    display: block;
+    width: 38px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.24);
+    margin: 0 auto 10px auto;
+    flex-shrink: 0;
+  }
+
+  .audit-panel-widget.hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .audit-panel-header {
+    padding-bottom: 10px;
+  }
+
+  .audit-hero-info {
+    margin-bottom: 8px;
+  }
+
+  .audit-vault-name {
+    font-size: 16px;
+  }
+
+  .audit-panel-body {
+    padding: 10px 0 6px 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .compact-financials-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 10px 8px;
+  }
+
+  .compact-financials-grid .fin-value {
+    font-size: 13.5px;
+  }
+
+  .compact-financials-grid .fin-label {
+    font-size: 8.5px;
+  }
+
+  .compact-financials-grid .fin-sub {
+    font-size: 9px;
+  }
+
+  .table-wrapper {
+    max-height: 40vh;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table th, .data-table td {
+    padding: 5px 6px;
   }
 }
+
