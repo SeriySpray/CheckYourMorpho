@@ -49,8 +49,10 @@ sudo systemctl enable checkyourmorpho
 sudo systemctl restart checkyourmorpho
 "
 
-echo "[4/5] Configuring Nginx reverse proxy..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no $REMOTE_USER@$SERVER_IP "sudo tee /etc/nginx/sites-available/checkyourmorpho > /dev/null << 'EOF'
+echo "[4/5] Checking Nginx configuration..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no $REMOTE_USER@$SERVER_IP "
+if [ ! -f /etc/nginx/sites-available/checkyourmorpho ]; then
+  sudo tee /etc/nginx/sites-available/checkyourmorpho > /dev/null << 'EOF'
 server {
     listen 80;
     server_name checkyourmorpho.duckdns.org;
@@ -68,15 +70,18 @@ server {
     }
 }
 EOF
-sudo ln -sf /etc/nginx/sites-available/checkyourmorpho /etc/nginx/sites-enabled/checkyourmorpho
-sudo nginx -t && sudo systemctl reload nginx
+  sudo ln -sf /etc/nginx/sites-available/checkyourmorpho /etc/nginx/sites-enabled/checkyourmorpho
+  sudo nginx -t && sudo systemctl reload nginx
+else
+  echo 'Nginx configuration already exists (preserving SSL configuration).'
+fi
 "
 
 echo "[5/5] Verifying service status..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no $REMOTE_USER@$SERVER_IP "sudo systemctl status checkyourmorpho --no-pager; curl -s http://127.0.0.1:3000/api/status"
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no $REMOTE_USER@$SERVER_IP "sudo systemctl status checkyourmorpho --no-pager | head -n 12; curl -s http://127.0.0.1:3000/api/status"
 
 echo ""
 echo "==============================================================================="
 echo "Deployment finished!"
-echo "Web access: http://checkyourmorpho.duckdns.org"
+echo "Web access: https://checkyourmorpho.duckdns.org"
 echo "==============================================================================="

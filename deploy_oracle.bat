@@ -30,8 +30,8 @@ scp -r -i "%SSH_KEY%" -o StrictHostKeyChecking=no client %REMOTE_USER%@%SERVER_I
 scp -i "%SSH_KEY%" -o StrictHostKeyChecking=no data/morpho.db %REMOTE_USER%@%SERVER_IP%:%REMOTE_DIR%/data/morpho.db
 scp -i "%SSH_KEY%" -o StrictHostKeyChecking=no nginx_checkyourmorpho.conf %REMOTE_USER%@%SERVER_IP%:%REMOTE_DIR%/nginx.conf
 
-echo [3/4] Updating Nginx and restarting systemd service...
-ssh -i "%SSH_KEY%" -o StrictHostKeyChecking=no %REMOTE_USER%@%SERVER_IP% "sudo cp %REMOTE_DIR%/nginx.conf /etc/nginx/sites-available/checkyourmorpho && sudo ln -sf /etc/nginx/sites-available/checkyourmorpho /etc/nginx/sites-enabled/checkyourmorpho && sudo nginx -t && sudo systemctl reload nginx && sudo systemctl restart checkyourmorpho"
+echo [3/4] Restarting systemd service...
+ssh -i "%SSH_KEY%" -o StrictHostKeyChecking=no %REMOTE_USER%@%SERVER_IP% "sudo systemctl restart checkyourmorpho"
 
 echo [4/4] Verifying service status...
 ssh -i "%SSH_KEY%" -o StrictHostKeyChecking=no %REMOTE_USER%@%SERVER_IP% "sudo systemctl status checkyourmorpho --no-pager | head -n 12; curl -s http://127.0.0.1:3000/api/status"
@@ -39,6 +39,6 @@ ssh -i "%SSH_KEY%" -o StrictHostKeyChecking=no %REMOTE_USER%@%SERVER_IP% "sudo s
 echo.
 echo ===============================================================================
 echo Deployment finished!
-echo Domain: http://%DOMAIN%
+echo Domain: https://%DOMAIN%
 echo ===============================================================================
 pause
