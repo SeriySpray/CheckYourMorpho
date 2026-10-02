@@ -53,30 +53,37 @@ $$\text{ExitCapacity} = \frac{\text{Direct Cash} + \sum \min(\text{Supply}_i, \t
 ## Quick Start
 
 ### Prerequisites
-- Node.js v24.0.0 or higher
+- Node.js v22.0.0+ LTS (or Windows automatic portable setup via `sync.bat`)
 - Modern web browser with WebGL 2 support
 
-### Run Application
+### 1. Clone Repository
 ```bash
-# Clone repository
 git clone https://github.com/SeriySpray/CheckYourMorpho.git
 cd CheckYourMorpho
-
-# Start server
-npm start
-# or on Windows:
-start.bat
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### On-Chain Data Sync
-To manually sync market data from Morpho GraphQL:
+### 2. Initial Setup & Data Sync (Run First)
+Before starting the server for the first time, run `sync.bat` (or `npm run sync`). This automatically configures the Node.js runtime if missing and downloads live on-chain vaults, markets, and allocations into the local SQLite database:
 ```bash
-npm run sync
-# or on Windows:
+# On Windows:
 sync.bat
+
+# Or via npm:
+npm run sync
 ```
-*(The server also syncs automatically in the background every 180 seconds).*
+
+### 3. Launch Application
+Once the initial sync completes, start the server:
+```bash
+# On Windows:
+start.bat
+
+# Or via npm:
+npm start
+```
+The interface will automatically open at [http://localhost:3000](http://localhost:3000).
+
+*(Note: Once launched, the server keeps on-chain data updated in the background every 180 seconds).*
 
 ### Live Production Instance
 The public monitoring terminal is accessible at:
