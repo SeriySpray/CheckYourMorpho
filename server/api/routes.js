@@ -427,6 +427,49 @@ function handleGetVaultByAddress(req, res, address) {
       ORDER BY va.supply_assets_usd DESC
     `).all(vault.address);
 
+    // Aggregate competing peer vaults across shared markets for Crowded Exit analysis
+    const marketKeys = allocations.map(a => a.market_unique_key);
+    const peerMap = new Map();
+    if (marketKeys.length > 0) {
+      const placeholders = marketKeys.map(() => '?').join(',');
+      const peerRows = db.prepare(`
+        SELECT 
+          va.market_unique_key,
+          va.vault_address,
+          v.name as vault_name,
+          va.supply_assets_usd
+        FROM vault_allocations va
+        JOIN vaults v ON va.vault_address = v.address
+        WHERE va.market_unique_key IN (${placeholders})
+          AND LOWER(va.vault_address) != LOWER(?)
+          AND va.supply_assets_usd > 1000
+        ORDER BY va.supply_assets_usd DESC
+      `).all(...marketKeys, vault.address);
+
+      for (const row of peerRows) {
+        const k = row.market_unique_key.toLowerCase();
+        if (!peerMap.has(k)) {
+          peerMap.set(k, { totalPeerSupplyUsd: 0, peers: [] });
+        }
+        const entry = peerMap.get(k);
+        entry.totalPeerSupplyUsd += Number(row.supply_assets_usd) || 0;
+        if (entry.peers.length < 5) {
+          entry.peers.push({
+            vaultAddress: row.vault_address,
+            vaultName: row.vault_name,
+            supplyUsd: Number(row.supply_assets_usd) || 0
+          });
+        }
+      }
+    }
+
+    for (const alloc of allocations) {
+      const k = (alloc.market_unique_key || '').toLowerCase();
+      const peerData = peerMap.get(k) || { totalPeerSupplyUsd: 0, peers: [] };
+      alloc.peer_supply_usd = peerData.totalPeerSupplyUsd;
+      alloc.peer_vaults = peerData.peers;
+    }
+
     // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
     const verdict = generateVaultVerdict(vault, allocations);
 

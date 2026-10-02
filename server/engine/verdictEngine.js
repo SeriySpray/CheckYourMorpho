@@ -60,10 +60,46 @@ export function generateVaultVerdict(vault, allocations = []) {
     });
   }
 
+  // Flag 4: Crowded Exit Contagion / Shared Market Overhang
+  if (liquidity.crowdedMarkets && liquidity.crowdedMarkets.length > 0) {
+    const totalCrowdedSupplyUsd = liquidity.crowdedMarkets.reduce((sum, m) => sum + m.vaultSupplyUsd, 0);
+    const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
+    const crowdedSharePercent = totalAssetsUsd > 0 ? Math.round((totalCrowdedSupplyUsd / totalAssetsUsd) * 1000) / 10 : 0;
+    const dropPct = Math.round((liquidity.instantExitCapacityPercent - liquidity.stressedExitCapacityPercent) * 10) / 10;
+
+    // Critical trigger: severe liquidity cliff (normal >= 20% but drops to < 10% in a run, or >= 35% TVL in crowded markets with >= 15% drop)
+    const isCritical = (liquidity.instantExitCapacityPercent >= 20 && liquidity.stressedExitCapacityPercent < 10)
+      || (crowdedSharePercent >= 35 && dropPct >= 15);
+
+    // High trigger: material crowded exposure (>= 10% TVL or >= $2M in crowded markets with >= 10% drop)
+    const isHigh = !isCritical && (crowdedSharePercent >= 10 || totalCrowdedSupplyUsd >= 2e6) && (dropPct >= 10 || liquidity.stressedExitCapacityPercent < 20);
+
+    const topMarket = liquidity.crowdedMarkets[0];
+    const topPeersStr = topMarket.topPeers && topMarket.topPeers.length > 0 ? topMarket.topPeers.join(', ') : 'peer vaults';
+
+    if (isCritical) {
+      redFlags.push({
+        level: 'CRITICAL',
+        title: 'Critical Crowded Exit Deficit',
+        message: `${crowdedSharePercent}% ($${(totalCrowdedSupplyUsd / 1e6).toFixed(1)}M) of deposits share markets with competing peer vaults (${topPeersStr}) whose claims exceed available free cash. In a concurrent run, exit capacity crashes from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}%.`
+      });
+    } else if (isHigh) {
+      redFlags.push({
+        level: 'HIGH',
+        title: 'Elevated Crowded Exit Contagion',
+        message: `Vault shares material allocations with ${topPeersStr} in markets where competing supply exceeds free cash. Under a concurrent exit, pro-rata capacity drops from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}%.`
+      });
+    }
+  }
+
   // 5. Plaintext Objective Summary
+  let exitSummary = `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%`;
+  if (liquidity.isCrowded) {
+    exitSummary += ` (stressed pro-rata: ${liquidity.stressedExitCapacityPercent}%)`;
+  }
   let summary = hhi.tier === 'UNALLOCATED'
-    ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: N/A. Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`
-    : `MQI: ${mqi.mqiPercent}% clean capital. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). Exit Liquidity: ${liquidity.instantExitCapacityPercent}%.`;
+    ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: N/A. ${exitSummary}.`
+    : `MQI: ${mqi.mqiPercent}% clean capital. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;
 
   return {
     vaultAddress: vault.address,
