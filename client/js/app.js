@@ -34,6 +34,8 @@ const DOM = {
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
+  explorerFavFilterBtn: document.getElementById('explorer-fav-filter-btn'),
+  explorerFavCount: document.getElementById('explorer-fav-count'),
   explorerResetBtn: document.getElementById('explorer-reset-btn'),
   searchInput: document.getElementById('vault-search-input'),
   searchClearBtn: document.getElementById('search-clear-btn'),
@@ -238,7 +240,8 @@ const explorerFilters = {
   network: 'all',
   asset: 'all',
   curator: 'all',
-  sort: 'tvl_desc'
+  sort: 'tvl_desc',
+  pinnedOnly: false
 };
 
 /**
@@ -365,6 +368,15 @@ function updateActiveFilterChips() {
     `;
   }
 
+  if (explorerFilters.pinnedOnly) {
+    chipsHtml += `
+      <span class="filter-chip" data-type="pinnedOnly">
+        <span class="chip-label">&#9733; Favorites</span>
+        <button type="button" class="chip-remove" data-clear="pinnedOnly" aria-label="Remove favorites filter" title="Remove">&times;</button>
+      </span>
+    `;
+  }
+
   DOM.chipsContainer.innerHTML = chipsHtml;
 
   // Bind individual chip remove buttons
@@ -372,7 +384,12 @@ function updateActiveFilterChips() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const toClear = btn.getAttribute('data-clear');
-      if (toClear === 'sort') {
+      if (toClear === 'pinnedOnly') {
+        explorerFilters.pinnedOnly = false;
+        if (DOM.explorerFavFilterBtn) {
+          DOM.explorerFavFilterBtn.classList.remove('active');
+        }
+      } else if (toClear === 'sort') {
         explorerFilters.sort = 'tvl_desc';
         updateDropdownUI('sort', 'tvl_desc');
       } else {
@@ -488,6 +505,14 @@ function setupVaultExplorerEvents() {
     }
   });
 
+  if (DOM.explorerFavFilterBtn) {
+    DOM.explorerFavFilterBtn.addEventListener('click', () => {
+      explorerFilters.pinnedOnly = !explorerFilters.pinnedOnly;
+      DOM.explorerFavFilterBtn.classList.toggle('active', explorerFilters.pinnedOnly);
+      renderVaultExplorer();
+    });
+  }
+
   if (DOM.explorerResetBtn) {
     DOM.explorerResetBtn.addEventListener('click', () => {
       resetDropdownFilters();
@@ -500,6 +525,11 @@ function resetDropdownFilters() {
   explorerFilters.asset = 'all';
   explorerFilters.curator = 'all';
   explorerFilters.sort = 'tvl_desc';
+  explorerFilters.pinnedOnly = false;
+
+  if (DOM.explorerFavFilterBtn) {
+    DOM.explorerFavFilterBtn.classList.remove('active');
+  }
 
   updateDropdownUI('network', 'all');
   updateDropdownUI('asset', 'all');
@@ -585,6 +615,7 @@ function togglePinVault(address) {
   savePinnedAddresses(pinned);
   updateFavBtnUI(addr);
   renderPinnedRichPills(true);
+  renderVaultExplorer();
 }
 
 function updateFavBtnUI(currentAddress) {
@@ -777,17 +808,31 @@ function renderVaultExplorer() {
   const savedScrollTop = DOM.explorerVaultsList.scrollTop;
   DOM.explorerVaultsList.innerHTML = '';
 
+  const pinnedList = getPinnedAddresses();
+  if (DOM.explorerFavCount) {
+    DOM.explorerFavCount.textContent = pinnedList.length;
+  }
+  if (DOM.explorerFavFilterBtn) {
+    DOM.explorerFavFilterBtn.classList.toggle('active', explorerFilters.pinnedOnly);
+  }
+
   const isFiltered = Boolean(
     explorerFilters.query ||
     explorerFilters.network !== 'all' ||
     explorerFilters.asset !== 'all' ||
     explorerFilters.curator !== 'all' ||
-    explorerFilters.sort !== 'tvl_desc'
+    explorerFilters.sort !== 'tvl_desc' ||
+    explorerFilters.pinnedOnly
   );
 
   updateActiveFilterChips();
 
   let results = allVaults.filter(v => {
+    // 0. Pinned / Favorites Filter
+    if (explorerFilters.pinnedOnly) {
+      if (!isVaultPinned(v.address)) return false;
+    }
+
     // 1. Text Query Filter
     if (explorerFilters.query) {
       const terms = explorerFilters.query.split(/\s+/).filter(Boolean);
@@ -867,9 +912,12 @@ function renderVaultExplorer() {
   }
 
   if (results.length === 0) {
+    const emptyMsg = explorerFilters.pinnedOnly
+      ? 'No pinned vaults yet. Tap the star icon on any vault card or in the audit view to add it to favorites.'
+      : 'No vaults match your filter criteria. Try resetting filters.';
     DOM.explorerVaultsList.innerHTML = `
-      <li class="explorer-vault-item" style="color:var(--text-muted); justify-content:center; padding:24px 12px; font-size:12px;">
-        No vaults match your filter criteria. Try resetting filters.
+      <li class="explorer-vault-item" style="color:var(--text-muted); justify-content:center; padding:24px 12px; font-size:12px; text-align:center;">
+        ${emptyMsg}
       </li>
     `;
     return;
@@ -891,6 +939,7 @@ function renderVaultExplorer() {
     const apy = v.netApy || 0;
     const mqi = v.mqiPercent ?? 100;
     const isClean = v.isAllClean ?? (mqi === 100);
+    const isPinned = isVaultPinned(v.address);
 
     const flaggedBadgeHtml = (!isClean && mqi < 100)
       ? ` • <span class="vault-mini-badge flagged">${(100 - mqi).toFixed(1)}% Flagged</span>`
@@ -899,6 +948,11 @@ function renderVaultExplorer() {
     li.innerHTML = `
       <div class="vault-item-left">
         <div class="vault-item-title-row">
+          <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${v.address}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="Toggle favorite">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="${isPinned ? '#ffffff' : 'none'}" stroke="${isPinned ? '#ffffff' : 'rgba(255,255,255,0.35)'}" stroke-width="1.75">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </button>
           <span class="vault-chain-badge ${chainClass}">${chainName}</span>
           <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
         </div>
@@ -910,7 +964,13 @@ function renderVaultExplorer() {
       </div>
     `;
 
-
+    const starBtn = li.querySelector('.vault-item-star-btn');
+    if (starBtn) {
+      starBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePinVault(v.address);
+      });
+    }
 
     li.addEventListener('mouseenter', () => {
       sphere.highlightVault(v.address);
@@ -1025,14 +1085,35 @@ async function openVaultAudit(vault, startPos) {
 
   const isMobile = window.innerWidth <= 768;
 
-  // Target coordinates for Left Floating Terminal (Desktop) or Bottom Sheet (Mobile)
-  const targetLeft = isMobile ? 0 : 20;
-  const targetTop = isMobile ? Math.floor(window.innerHeight * 0.12) : 18;
-  const targetWidth = isMobile ? window.innerWidth : Math.min(480, Math.floor(window.innerWidth * 0.45));
-  const targetHeight = isMobile ? Math.floor(window.innerHeight * 0.88) : window.innerHeight - 36;
+  // On Mobile: Directly load and slide up the bottom sheet modal with zero lag (no 3D sphere proxy animation)
+  if (isMobile) {
+    selectedVaultAddress = vault.address;
+    if (DOM.pinnedRichPills) {
+      DOM.pinnedRichPills.classList.add('hidden');
+    }
+
+    const data = await auditDataPromise;
+    if (!data) {
+      isTransitioningVault = false;
+      closeVaultAudit();
+      return;
+    }
+
+    activeAuditData = data;
+    populateAuditModal(data);
+    DOM.auditModal.classList.remove('hidden');
+    isTransitioningVault = false;
+    return;
+  }
+
+  // Target coordinates for Left Floating Terminal (Desktop)
+  const targetLeft = 20;
+  const targetTop = 18;
+  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetHeight = window.innerHeight - 36;
   const targetCenterX = targetLeft + targetWidth / 2;
   const targetCenterY = targetTop + targetHeight / 2;
-  const targetRadius = isMobile ? '24px 24px 0 0' : '20px';
+  const targetRadius = '20px';
 
   // Check if a vault window is ALREADY open
   const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
@@ -1180,13 +1261,18 @@ function closeVaultAudit() {
   if (DOM.auditModal.classList.contains('hidden')) return;
 
   const isMobile = window.innerWidth <= 768;
-  const targetLeft = isMobile ? 0 : 20;
-  const targetTop = isMobile ? Math.floor(window.innerHeight * 0.12) : 18;
-  const targetWidth = isMobile ? window.innerWidth : Math.min(480, Math.floor(window.innerWidth * 0.45));
-  const targetHeight = isMobile ? Math.floor(window.innerHeight * 0.88) : window.innerHeight - 36;
-  const targetCenterX = targetLeft + targetWidth / 2;
-  const targetCenterY = targetTop + targetHeight / 2;
-  const targetRadius = isMobile ? '24px 24px 0 0' : '20px';
+  if (isMobile) {
+    DOM.auditModal.classList.add('hidden');
+    selectedVaultAddress = null;
+    isTransitioningVault = false;
+    return;
+  }
+
+  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetHeight = window.innerHeight - 36;
+  const targetCenterX = 20 + targetWidth / 2;
+  const targetCenterY = 18 + targetHeight / 2;
+  const targetRadius = '20px';
 
   const closingAddress = selectedVaultAddress;
 

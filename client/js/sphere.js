@@ -298,13 +298,38 @@ export class ParticleSphere {
     this.onLogoClick = options.onLogoClick || null;
 
     this.animFrameId = null;
+    this.isMobile = window.innerWidth <= 768;
 
-    // Initialize WebGL 2 pipeline
-    this.initWebGL();
-    this.initEvents();
-    this.resize();
-    this.generateParticles();
-    this.animate();
+    // Initialize WebGL 2 pipeline only on desktop/tablet (> 768px)
+    if (!this.isMobile) {
+      this.initWebGL();
+      this.initEvents();
+      this.resize();
+      this.generateParticles();
+      this.animate();
+    } else {
+      this.resize();
+      window.addEventListener('resize', () => {
+        const wasMobile = this.isMobile;
+        this.isMobile = window.innerWidth <= 768;
+        if (wasMobile && !this.isMobile) {
+          if (!this.gl) {
+            this.initWebGL();
+            this.initEvents();
+            this.generateParticles();
+          }
+          this.resize();
+          if (!this.animFrameId) {
+            this.animate();
+          }
+        } else if (!wasMobile && this.isMobile) {
+          if (this.animFrameId) {
+            cancelAnimationFrame(this.animFrameId);
+            this.animFrameId = null;
+          }
+        }
+      });
+    }
   }
 
   initWebGL() {
@@ -427,6 +452,7 @@ export class ParticleSphere {
 
   setVaults(vaultsList) {
     this.vaults = vaultsList || [];
+    if (this.isMobile || !this.gl) return;
     this.generateParticles();
   }
 
@@ -745,7 +771,7 @@ export class ParticleSphere {
   }
 
   getParticleScreenPos(vaultAddress) {
-    if (!vaultAddress) return { x: this.cx, y: this.cy, radius: 4 };
+    if (this.isMobile || !vaultAddress) return { x: this.cx, y: this.cy, radius: 4 };
     const addrLower = vaultAddress.toLowerCase().trim();
     const p = this.vaultMap.get(addrLower);
 

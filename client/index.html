@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="stylesheet" href="css/main.css?v=20261001_english">
-  <link rel="stylesheet" href="css/components.css?v=20261002_mobile">
+  <link rel="stylesheet" href="css/components.css?v=20261002_mobile_perf">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -31,6 +31,12 @@
       <div class="explorer-tag-row">
         <span class="explorer-tag">MORPHO VAULTS</span>
         <div class="explorer-header-actions">
+          <button type="button" id="explorer-fav-filter-btn" class="explorer-fav-filter-btn" title="Filter Pinned Favorites" aria-label="Filter Pinned Favorites">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <span id="explorer-fav-count" class="fav-filter-count">0</span>
+          </button>
           <span id="explorer-count" class="explorer-count">311 Vaults</span>
         </div>
       </div>
@@ -420,8 +426,8 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/sphere.js?v=20261001_exit_cap"></script>
-  <script type="module" src="js/app.js?v=20261002_mobile"></script>
+  <script type="module" src="js/sphere.js?v=20261002_mobile_perf"></script>
+  <script type="module" src="js/app.js?v=20261002_mobile_perf"></script>
 </body>
 
 
