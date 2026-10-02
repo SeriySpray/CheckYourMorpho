@@ -1,10 +1,18 @@
 # CheckYourMorpho
 
-Risk intelligence, collateral concentration auditing, and real-time visualization terminal for MetaMorpho Vaults.
+> **Live Application**: [https://checkyourmorpho.duckdns.org](https://checkyourmorpho.duckdns.org)
+>
+> Risk intelligence, collateral concentration auditing, and real-time visualization terminal for MetaMorpho Vaults.
 
-Zero npm runtime dependencies (native Node.js 24 + SQLite WAL).
+[![Live](https://img.shields.io/badge/Live-checkyourmorpho.duckdns.org-2470FF?style=flat-square&logo=googlechrome&logoColor=white)](https://checkyourmorpho.duckdns.org)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B%20LTS-161B22?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![SQLite](https://img.shields.io/badge/SQLite-WAL%20Native-161B22?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
+[![Morpho Blue](https://img.shields.io/badge/Morpho-Blue%20%26%20Vaults-161B22?style=flat-square)](https://morpho.org)
+
+Zero npm runtime dependencies (native Node.js 22+ & SQLite WAL).
 
 ---
+
 
 ## Core Metrics & Formulas
 
@@ -69,4 +77,16 @@ npm run sync
 sync.bat
 ```
 *(The server also syncs automatically in the background every 180 seconds).*
+
+### Production Deployment (Oracle Cloud)
+To deploy updates to the live Oracle Cloud VPS:
+```bash
+# On Windows:
+deploy_oracle.bat
+
+# On Linux/WSL:
+./deploy_oracle.sh
+```
+Live instance: [https://checkyourmorpho.duckdns.org](https://checkyourmorpho.duckdns.org)
+
 
