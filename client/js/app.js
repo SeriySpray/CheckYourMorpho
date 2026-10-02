@@ -1496,7 +1496,7 @@ function updateStressedExitDisplay(isStressed) {
     if (dropPct > 0) {
       DOM.riskExitPct.innerHTML = `<span style="color:#ffaa00; font-size:10px; margin-right:4px; font-weight:600;">STRESSED:</span>${stressedExitPct}%`;
       if (DOM.riskExitDesc) {
-        DOM.riskExitDesc.innerHTML = `<span style="color:#ffaa00; font-weight:500;">${formatCurrency(stressedExitUsd)}</span> pro-rata exit capacity under concurrent bank run`;
+        DOM.riskExitDesc.innerHTML = `<span style="color:#ffaa00; font-weight:500;">${formatCurrency(stressedExitUsd)}</span> available during a mass withdrawal (bank run)`;
       }
     }
   } else {
@@ -1629,9 +1629,9 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // Update Popover content
   if (DOM.riskExitPopoverBody) {
     if (dropPct > 0) {
-      DOM.riskExitPopoverBody.innerHTML = `Under a simultaneous withdrawal run across shared markets, competing vaults (${escapeHtml(topPeer)}) dilute available free cash, reducing pro-rata exit capacity from <strong>${normalExitPct}%</strong> to <strong>${stressedExitPct}%</strong> (${formatCurrency(stressedExitUsd)}).`;
+      DOM.riskExitPopoverBody.innerHTML = `During a mass withdrawal (bank run), competing vaults (${escapeHtml(topPeer)}) claim shared cash, reducing available exit from <strong>${normalExitPct}%</strong> to <strong>${stressedExitPct}%</strong> (${formatCurrency(stressedExitUsd)}).`;
     } else {
-      DOM.riskExitPopoverBody.innerHTML = `Under a simultaneous withdrawal run, pro-rata exit capacity remains preserved at <strong>${normalExitPct}%</strong> (${formatCurrency(normalExitUsd)}) with no significant competition dilution.`;
+      DOM.riskExitPopoverBody.innerHTML = `During a mass withdrawal, available exit remains fully preserved at <strong>${normalExitPct}%</strong> (${formatCurrency(normalExitUsd)}) with no competing vault crowding.`;
     }
   }
 

@@ -396,16 +396,16 @@
             <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>
             <div class="meter-val-wrap">
               <span class="meter-value" id="risk-exit-pct">0%</span>
-              <span class="info-circle-btn" id="risk-exit-info-btn" aria-label="Stressed Pro-Rata Exit Capacity" tabindex="0">
+              <span class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" tabindex="0">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="12" y1="16" x2="12" y2="12"></line>
                   <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
                 <div class="info-popover" id="risk-exit-popover">
-                  <div class="info-popover-title">Stressed Pro-Rata Exit</div>
+                  <div class="info-popover-title">Worst-Case Exit (Bank Run)</div>
                   <div class="info-popover-body" id="risk-exit-popover-body">
-                    Under a simultaneous withdrawal run across shared markets, competing vaults dilute available free cash, reducing exit capacity to <strong>0%</strong>.
+                    In a mass withdrawal across shared markets, competing vaults take their share of cash, reducing available exit to <strong>0%</strong>.
                   </div>
                 </div>
               </span>

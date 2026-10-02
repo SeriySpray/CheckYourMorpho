@@ -85,13 +85,13 @@ export function generateVaultVerdict(vault, allocations = []) {
       redFlags.push({
         level: 'CRITICAL',
         title: 'Critical Crowded Exit Deficit',
-        message: `Under concurrent withdrawals by competing peer vaults (${topPeersStr}), pro-rata exit capacity collapses from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% (${crowdedSharePercent}% of vault capital deployed in heavily contested markets).`
+        message: `In a mass withdrawal by competing peer vaults (${topPeersStr}), available exit drops from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% (${crowdedSharePercent}% of vault capital in heavily contested markets).`
       });
     } else if (isHigh) {
       redFlags.push({
         level: 'HIGH',
         title: 'Elevated Crowded Exit Contagion',
-        message: `Concurrent withdrawals by competing peer vaults (${topPeersStr}) reduce pro-rata exit capacity from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% across ${crowdedSharePercent}% of allocated capital.`
+        message: `Competing peer vaults (${topPeersStr}) reduce available exit from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% across ${crowdedSharePercent}% of allocated capital during a mass withdrawal.`
       });
     }
   }
@@ -99,7 +99,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   // 5. Plaintext Objective Summary
   let exitSummary = `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%`;
   if (liquidity.isCrowded) {
-    exitSummary += ` (stressed pro-rata: ${liquidity.stressedExitCapacityPercent}%)`;
+    exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
   }
   let summary = hhi.tier === 'UNALLOCATED'
     ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: N/A. ${exitSummary}.`
