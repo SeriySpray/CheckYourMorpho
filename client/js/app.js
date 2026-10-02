@@ -9,6 +9,8 @@ let sphere = null;
 let allVaults = [];
 let selectedVaultAddress = null;
 let activeAuditData = null;
+let isTransitioningVault = false;
+const clientAuditCache = new Map();
 
 // DOM Elements cache
 const DOM = {
@@ -161,14 +163,23 @@ function startLivePolling() {
         }
       }
 
-      // 2. If an audit modal is currently open and not animating, quietly refresh it
+      // 2. Quietly refresh full audits for all pinned vaults so they never lag
+      const pinnedList = getPinnedAddresses();
+      pinnedList.forEach(addr => {
+        fetch(`/api/vaults/${addr}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(auditData => {
+            if (auditData) applyVaultAuditData(addr, auditData);
+          })
+          .catch(() => {});
+      });
+
+      // 3. If an audit modal is currently open and not animating, quietly refresh it
       if (selectedVaultAddress && !DOM.auditModal.classList.contains('hidden') && !isTransitioningVault) {
         const auditRes = await fetch(`/api/vaults/${selectedVaultAddress}`);
         if (auditRes.ok) {
           const auditData = await auditRes.json();
-          clientAuditCache.set(selectedVaultAddress.toLowerCase(), auditData);
-          activeAuditData = auditData;
-          populateAuditModal(auditData, true);
+          applyVaultAuditData(selectedVaultAddress, auditData);
         }
       }
     } catch (pollErr) {
@@ -627,6 +638,123 @@ function updateFavBtnUI(currentAddress) {
 }
 
 /**
+ * Synchronizes fresh vault audit data across clientAuditCache, allVaults,
+ * the active audit modal (if open for this vault), the pinned rich pills,
+ * and the vault explorer list.
+ */
+function applyVaultAuditData(vaultAddress, auditData) {
+  if (!vaultAddress || !auditData) return;
+  const lowerAddr = vaultAddress.toLowerCase();
+  clientAuditCache.set(lowerAddr, auditData);
+
+  const v = auditData.vault;
+  const verdict = auditData.verdict;
+
+  // 1. Synchronize into allVaults item
+  const matchingVault = allVaults.find(item => (item.address || '').toLowerCase() === lowerAddr);
+  if (matchingVault) {
+    if (v) {
+      if (v.totalAssetsUsd !== undefined) matchingVault.totalAssetsUsd = v.totalAssetsUsd;
+      if (v.totalAssets !== undefined) matchingVault.totalAssets = v.totalAssets;
+      if (v.liquidityUsd !== undefined) matchingVault.liquidityUsd = v.liquidityUsd;
+      if (v.netApy !== undefined) matchingVault.netApy = v.netApy;
+      if (v.apy !== undefined) matchingVault.apy = v.apy;
+      if (v.fee !== undefined) matchingVault.fee = v.fee;
+      if (v.name) matchingVault.name = v.name;
+      if (v.curatorName) matchingVault.curatorName = v.curatorName;
+      if (v.asset) {
+        matchingVault.asset = Object.assign({}, matchingVault.asset || {}, v.asset);
+      }
+    }
+    if (verdict) {
+      if (verdict.mqi?.mqiPercent !== undefined) matchingVault.mqiPercent = verdict.mqi.mqiPercent;
+      if (verdict.mqi?.isAllClean !== undefined) matchingVault.isAllClean = verdict.mqi.isAllClean;
+      if (verdict.liquidity?.instantExitCapacityPercent !== undefined) {
+        matchingVault.exitCapPercent = verdict.liquidity.instantExitCapacityPercent;
+      }
+      if (verdict.liquidity?.instantExitCapacityUsd !== undefined) {
+        matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
+      }
+      if (verdict.hhi?.hhi !== undefined) matchingVault.hhi = verdict.hhi.hhi;
+      if (verdict.hhi?.tier !== undefined) matchingVault.hhiTier = verdict.hhi.tier;
+    }
+  }
+
+  // 2. Synchronize active audit modal if this vault is currently open and displayed
+  if (selectedVaultAddress && selectedVaultAddress.toLowerCase() === lowerAddr && !DOM.auditModal.classList.contains('hidden')) {
+    activeAuditData = auditData;
+    populateAuditModal(auditData, true);
+  }
+
+  // 3. Synchronize pinned rich pill in DOM immediately with exact matching values
+  const pinnedList = getPinnedAddresses();
+  if (pinnedList.includes(lowerAddr)) {
+    const card = DOM.pinnedRichPills?.querySelector(`[data-address="${v?.address || vaultAddress}"]`)
+      || DOM.pinnedRichPills?.querySelector(`[data-address="${lowerAddr}"]`);
+    if (card && v) {
+      const netApyFormatted = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+      const feeFormatted = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
+      const decimals = v.asset?.decimals || matchingVault?.asset?.decimals || 6;
+      let tokenAmount = 0;
+      if (v.totalAssets) {
+        tokenAmount = Number(v.totalAssets) / Math.pow(10, decimals);
+      } else {
+        const price = v.asset?.priceUsd || matchingVault?.asset?.priceUsd || 1;
+        tokenAmount = price > 0 ? (v.totalAssetsUsd || 0) / price : 0;
+      }
+      const symbol = v.asset?.symbol || matchingVault?.asset?.symbol || '';
+      const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
+
+      const mqiPercent = verdict?.mqi?.mqiPercent ?? matchingVault?.mqiPercent ?? 100;
+      const isClean = mqiPercent === 100 && (verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true);
+      const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
+      const mqiClass = isClean ? 'clean' : 'flagged';
+      const exitCapPct = verdict?.liquidity?.instantExitCapacityPercent ?? matchingVault?.exitCapPercent ?? (v.totalAssetsUsd > 0 ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : 0);
+      const exitCapText = `${exitCapPct}% Exit Cap`;
+
+      // Update MQI badge
+      const mqiBadge = card.querySelector('.rich-pill-mqi-badge');
+      if (mqiBadge) {
+        mqiBadge.className = `rich-pill-mqi-badge ${mqiClass}`;
+        mqiBadge.textContent = mqiText;
+      }
+
+      // Update Financials
+      const finItems = card.querySelectorAll('.rich-pill-fin-item');
+      if (finItems.length >= 3) {
+        // Deposits
+        const depVal = finItems[0].querySelector('.rich-pill-fin-val');
+        const depSub = finItems[0].querySelector('.rich-pill-fin-sub');
+        if (depVal) depVal.textContent = formatCurrency(v.totalAssetsUsd);
+        if (depSub) depSub.textContent = humanAsset;
+
+        // Liquidity
+        const liqVal = finItems[1].querySelector('.rich-pill-fin-val');
+        const liqSub = finItems[1].querySelector('.rich-pill-fin-sub');
+        if (liqVal) liqVal.textContent = formatCurrency(v.liquidityUsd);
+        if (liqSub) liqSub.textContent = exitCapText;
+
+        // Net APY
+        const apyVal = finItems[2].querySelector('.rich-pill-fin-val');
+        const apySub = finItems[2].querySelector('.rich-pill-fin-sub');
+        if (apyVal) apyVal.textContent = netApyFormatted;
+        if (apySub) apySub.textContent = feeFormatted;
+      }
+    }
+  }
+
+  // 4. Synchronize Vault Explorer list item if present
+  const expItem = DOM.explorerVaultsList?.querySelector(`[data-address="${v?.address || vaultAddress}"]`)
+    || DOM.explorerVaultsList?.querySelector(`[data-address="${lowerAddr}"]`);
+  if (expItem && v) {
+    const tvlEl = expItem.querySelector('.vault-item-tvl');
+    const apyEl = expItem.querySelector('.vault-item-apy');
+    if (tvlEl) tvlEl.textContent = formatCurrency(v.totalAssetsUsd || v.liquidityUsd || 0);
+    if (apyEl) apyEl.textContent = `${((v.netApy || 0) * 100).toFixed(2)}% APY`;
+  }
+}
+
+/**
  * Renders the Pinned Vaults as rich informational cards/pills docked on the left.
  * If animate is true, flies white ball proxies from 3D sphere particles to the left dock.
  */
@@ -636,7 +764,7 @@ function renderPinnedRichPills(animate = false) {
   const pinnedAddresses = getPinnedAddresses();
   const pinnedVaults = [];
   for (const addr of pinnedAddresses) {
-    const found = allVaults.find(v => (v.address || '').toLowerCase() === addr);
+    const found = allVaults.find(v => (v.address || '').toLowerCase() === addr) || clientAuditCache.get(addr)?.vault;
     if (found) pinnedVaults.push(found);
   }
 
@@ -655,24 +783,32 @@ function renderPinnedRichPills(animate = false) {
     const chainClass = getChainClass(v.chainId);
     const chainName = formatChainName(v.chainId);
     const curator = formatCuratorName(v.curatorName, v.name);
-    const netApyFormatted = `${((v.netApy || 0) * 100).toFixed(2)}%`;
-    const feeFormatted = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
     const cachedAudit = clientAuditCache.get((v.address || '').toLowerCase());
+
+    const totalAssetsUsd = cachedAudit?.vault?.totalAssetsUsd ?? v.totalAssetsUsd ?? 0;
+    const liquidityUsd = cachedAudit?.vault?.liquidityUsd ?? v.liquidityUsd ?? 0;
+    const netApy = cachedAudit?.vault?.netApy ?? v.netApy ?? 0;
+    const fee = cachedAudit?.vault?.fee ?? v.fee ?? 0;
+    const totalAssets = cachedAudit?.vault?.totalAssets ?? v.totalAssets;
+
+    const netApyFormatted = `${((netApy || 0) * 100).toFixed(2)}%`;
+    const feeFormatted = `Fee: ${((fee || 0) * 100).toFixed(1)}%`;
+
+    const decimals = cachedAudit?.vault?.asset?.decimals ?? v.asset?.decimals ?? 6;
+    const symbol = cachedAudit?.vault?.asset?.symbol ?? v.asset?.symbol ?? '';
     let tokenAmount = 0;
-    if (cachedAudit?.vault?.totalAssets) {
-      tokenAmount = Number(cachedAudit.vault.totalAssets) / Math.pow(10, v.asset?.decimals || 6);
-    } else if (v.totalAssets) {
-      tokenAmount = Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6);
+    if (totalAssets) {
+      tokenAmount = Number(totalAssets) / Math.pow(10, decimals);
     } else {
-      const price = v.asset?.priceUsd || 1;
-      tokenAmount = price > 0 ? (v.totalAssetsUsd || 0) / price : 0;
+      const price = cachedAudit?.vault?.asset?.priceUsd ?? v.asset?.priceUsd ?? 1;
+      tokenAmount = price > 0 ? (totalAssetsUsd / price) : 0;
     }
-    const humanAsset = `${formatNumber(tokenAmount)} ${v.asset?.symbol || ''}`;
+    const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
     const mqiPercent = cachedAudit?.verdict?.mqi?.mqiPercent ?? v.mqiPercent ?? 100;
     const isClean = mqiPercent === 100 && (cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true);
     const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
     const mqiClass = isClean ? 'clean' : 'flagged';
-    const exitCapPct = cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent ?? v.exitCapPercent ?? (v.totalAssetsUsd > 0 ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : 0);
+    const exitCapPct = cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent ?? v.exitCapPercent ?? (totalAssetsUsd > 0 ? Number(((liquidityUsd / totalAssetsUsd) * 100).toFixed(1)) : 0);
     const exitCapText = `${exitCapPct}% Exit Cap`;
 
     const card = document.createElement('div');
@@ -690,7 +826,7 @@ function renderPinnedRichPills(animate = false) {
             <span class="badge badge-chain ${chainClass}">${escapeHtml(chainName.slice(0, 4).toUpperCase())}</span>
             <span class="rich-pill-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
           </div>
-          <div class="rich-pill-curator">${escapeHtml(curator)} • <span style="color:#ffffff;">${escapeHtml(v.asset?.symbol || '')}</span></div>
+          <div class="rich-pill-curator">${escapeHtml(curator)} • <span style="color:#ffffff;">${escapeHtml(symbol)}</span></div>
         </div>
         <div class="rich-pill-actions">
           <span class="rich-pill-mqi-badge ${mqiClass}">${escapeHtml(mqiText)}</span>
@@ -704,12 +840,12 @@ function renderPinnedRichPills(animate = false) {
       <div class="rich-pill-fin-grid">
         <div class="rich-pill-fin-item">
           <span class="rich-pill-fin-label">Deposits</span>
-          <span class="rich-pill-fin-val">${formatCurrency(v.totalAssetsUsd)}</span>
+          <span class="rich-pill-fin-val">${formatCurrency(totalAssetsUsd)}</span>
           <span class="rich-pill-fin-sub">${escapeHtml(humanAsset)}</span>
         </div>
         <div class="rich-pill-fin-item">
           <span class="rich-pill-fin-label">Liquidity</span>
-          <span class="rich-pill-fin-val">${formatCurrency(v.liquidityUsd)}</span>
+          <span class="rich-pill-fin-val">${formatCurrency(liquidityUsd)}</span>
           <span class="rich-pill-fin-sub highlight">${escapeHtml(exitCapText)}</span>
         </div>
         <div class="rich-pill-fin-item">
@@ -777,26 +913,17 @@ function renderPinnedRichPills(animate = false) {
       }, index * 80);
     }
   });
- 
+
   // Background pre-fetch full audits for pinned vaults to warm cache and ensure exact data
   pinnedAddresses.forEach(addr => {
-    if (!clientAuditCache.has(addr)) {
-      fetch(`/api/vaults/${addr}`)
-        .then(res => res.ok ? res.json() : null)
-        .then(auditData => {
-          if (auditData) {
-            clientAuditCache.set(addr, auditData);
-            const card = DOM.pinnedRichPills?.querySelector(`[data-address="${addr}"]`);
-            if (card && auditData.verdict?.liquidity?.instantExitCapacityPercent !== undefined) {
-              const exitCapEl = card.querySelector('.rich-pill-fin-sub.highlight');
-              if (exitCapEl) {
-                exitCapEl.textContent = `${auditData.verdict.liquidity.instantExitCapacityPercent}% Exit Cap`;
-              }
-            }
-          }
-        })
-        .catch(() => {});
-    }
+    fetch(`/api/vaults/${addr}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(auditData => {
+        if (auditData) {
+          applyVaultAuditData(addr, auditData);
+        }
+      })
+      .catch(() => {});
   });
 }
 
@@ -994,9 +1121,6 @@ function renderVaultExplorer() {
 }
 
 
-let isTransitioningVault = false;
-const clientAuditCache = new Map();
-
 /**
  * Instantly pre-populates vault identity, badges, financials, and specifications
  * from the client-cached vault object so UI never opens empty or delayed.
@@ -1035,10 +1159,15 @@ function populateBasicVaultInfo(v) {
     DOM.modalAssetsHuman.textContent = `${formatNumber(tokenAmount)} ${v.asset?.symbol || ''}`;
   }
   if (DOM.modalLiq) DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
+  if (DOM.modalExitCapPct && v.exitCapPercent !== undefined) {
+    DOM.modalExitCapPct.textContent = `${v.exitCapPercent}% Exit Cap`;
+  }
   if (DOM.modalNetApy) DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
-
-
+  if (DOM.modalGrade && v.mqiPercent !== undefined) {
+    DOM.modalGrade.textContent = `${v.mqiPercent}%`;
+    DOM.modalGrade.style.color = v.mqiPercent === 100 ? 'var(--accent-green)' : (v.mqiPercent >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
+  }
 }
 
 /**
@@ -1058,13 +1187,24 @@ async function openVaultAudit(vault, startPos) {
   DOM.tooltip.classList.add('hidden');
 
   // 1. Instant Synchronous Pre-population (0ms latency: badges, TVL, APY, specs appear immediately)
-  populateBasicVaultInfo(vault);
-
-  // 2. Fetch full audit data with client-side in-memory caching
   const cacheKey = (vault.address || '').toLowerCase();
+  const cachedData = clientAuditCache.get(cacheKey);
+  const initialVaultObj = cachedData?.vault ? Object.assign({}, vault, cachedData.vault, {
+    mqiPercent: cachedData.verdict?.mqi?.mqiPercent ?? vault.mqiPercent,
+    exitCapPercent: cachedData.verdict?.liquidity?.instantExitCapacityPercent ?? vault.exitCapPercent
+  }) : vault;
+  populateBasicVaultInfo(initialVaultObj);
+
+  // 2. Fetch full audit data with client-side in-memory caching and background revalidation
   let auditDataPromise;
-  if (clientAuditCache.has(cacheKey)) {
-    auditDataPromise = Promise.resolve(clientAuditCache.get(cacheKey));
+  if (cachedData) {
+    auditDataPromise = Promise.resolve(cachedData);
+    fetch(`/api/vaults/${vault.address}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(freshData => {
+        if (freshData) applyVaultAuditData(vault.address, freshData);
+      })
+      .catch(() => {});
   } else {
     auditDataPromise = fetch(`/api/vaults/${vault.address}`)
       .then(res => {
@@ -1072,7 +1212,7 @@ async function openVaultAudit(vault, startPos) {
         return res.json();
       })
       .then(data => {
-        clientAuditCache.set(cacheKey, data);
+        applyVaultAuditData(vault.address, data);
         return data;
       })
       .catch(err => {
@@ -1592,6 +1732,19 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+// Handle viewport resize between desktop and mobile seamlessly
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    if (!selectedVaultAddress || DOM.auditModal?.classList.contains('hidden')) {
+      renderPinnedRichPills(false);
+    }
+  } else {
+    if (DOM.pinnedRichPills) {
+      DOM.pinnedRichPills.classList.add('hidden');
+    }
+  }
+});
 
 // Boot up app on DOM ready
 document.addEventListener('DOMContentLoaded', initApp);
