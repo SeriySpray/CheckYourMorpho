@@ -69,3 +69,4 @@ npm run sync
 sync.bat
 ```
 *(The server also syncs automatically in the background every 180 seconds).*
+
