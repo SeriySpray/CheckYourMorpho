@@ -51,8 +51,11 @@ export function calculateHHI(vault, allocations = []) {
   // Any vault capital not deployed into active collateral is unallocated cash / idle reserve
   const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalActiveCollateralUsd);
 
-  // If there is no active collateral backing at all (100% idle cash or empty vault)
-  if (totalAssetsUsd <= 0 || totalActiveCollateralUsd <= 0 || collateralMap.size === 0) {
+  // Materiality threshold: at least 1.0% of total vault capital must be deployed into active collateral
+  const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
+
+  // If there is no material active collateral backing (< 1.0% of TVL, 100% idle cash or empty vault)
+  if (totalAssetsUsd <= 0 || totalActiveCollateralUsd < minMaterialThresholdUsd || collateralMap.size === 0) {
     return {
       hhi: 0,
       effectiveAssets: 0,
@@ -80,11 +83,14 @@ export function calculateHHI(vault, allocations = []) {
 
     // In breakdown, show the fraction of total vault capital (TVL)
     const tvlShare = Math.max(0, Math.min(1.0, usd / totalAssetsUsd));
-    breakdown.push({
-      symbol,
-      usd: Math.round(usd * 100) / 100,
-      sharePercent: Math.round(tvlShare * 1000) / 10
-    });
+    const sharePercent = Math.round(tvlShare * 1000) / 10;
+    if (usd >= 0.01 || sharePercent > 0) {
+      breakdown.push({
+        symbol,
+        usd: Math.round(usd * 100) / 100,
+        sharePercent
+      });
+    }
   }
 
   // Top collateral asset by USD volume
