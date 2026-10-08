@@ -430,7 +430,8 @@ export class ParticleSphere {
   }
 
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
+    this.dpr = dpr;
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
@@ -975,7 +976,7 @@ export class ParticleSphere {
       gl.uniformMatrix4fv(this.uniforms.uProjection, false, this.projectionMatrix);
       gl.uniformMatrix4fv(this.uniforms.uModelView, false, modelView);
       gl.uniform1f(this.uniforms.uTime, this.elapsedFrames * 0.015);
-      gl.uniform1f(this.uniforms.uPointSize, this.height / 1024.0);
+      gl.uniform1f(this.uniforms.uPointSize, (this.height / 1024.0) * (this.dpr || 1));
       gl.uniform2f(this.uniforms.uMousePosition, 2.0 * this.normMouseX, -2.0 * this.normMouseY);
       gl.uniform1i(this.uniforms.uHasMouseMoved, this.hasMouseMoved ? 1 : 0);
 

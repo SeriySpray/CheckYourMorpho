@@ -19,10 +19,9 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
   while (attempt <= maxRetries) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CONFIG.api.requestTimeoutMs);
-    let res;
 
     try {
-      res = await fetch(CONFIG.api.morphoGraphqlUrl, {
+      const res = await fetch(CONFIG.api.morphoGraphqlUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -32,27 +31,16 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
         body: JSON.stringify({ query, variables }),
         signal: controller.signal
       });
-    } catch (err) {
-      attempt++;
-      if (attempt > maxRetries) {
-        throw new Error(`Morpho API request failed after ${maxRetries} retries: ${err.message}`);
-      }
-      const backoff = 800 * attempt;
-      console.warn(`[MorphoAPI] Request error: ${err.message}. Retrying in ${backoff}ms...`);
-      await sleep(backoff);
-      continue;
-    } finally {
-      clearTimeout(timer);
-    }
 
-    try {
       if (res.status === 429) {
-        // Rate limited
         attempt++;
         if (attempt > maxRetries) {
           throw new Error(`Morpho API rate limit (429) exceeded after ${maxRetries} retries`);
         }
-        const backoff = 1000 * Math.pow(2, attempt);
+        const retryAfterSec = parseInt(res.headers.get('retry-after') || '0', 10);
+        const backoff = retryAfterSec > 0
+          ? retryAfterSec * 1000
+          : (1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 500);
         console.warn(`[MorphoAPI] Rate limited (429). Retrying in ${backoff}ms (attempt ${attempt}/${maxRetries})...`);
         await sleep(backoff);
         continue;
@@ -64,18 +52,31 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
 
       const json = await res.json();
       if (json.errors && json.errors.length > 0) {
-        throw new Error(`GraphQL Error: ${json.errors[0].message}`);
+        const firstErrMsg = json.errors[0]?.message || 'Unknown GraphQL Error';
+        const isTransient = json.errors.some(e => {
+          const m = (e.message || '').toLowerCase();
+          return m.includes('timeout') || m.includes('rate') || m.includes('try again') || m.includes('overloaded');
+        });
+        if (!isTransient) {
+          throw new Error(`Fatal GraphQL Error: ${firstErrMsg}`);
+        }
+        throw new Error(`Transient GraphQL Error: ${firstErrMsg}`);
       }
 
       return json.data;
     } catch (err) {
+      if (err.message && err.message.startsWith('Fatal GraphQL Error:')) {
+        throw err;
+      }
       attempt++;
       if (attempt > maxRetries) {
         throw new Error(`Morpho API request failed after ${maxRetries} retries: ${err.message}`);
       }
-      const backoff = 800 * attempt;
-      console.warn(`[MorphoAPI] Request error: ${err.message}. Retrying in ${backoff}ms...`);
+      const backoff = (1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 500);
+      console.warn(`[MorphoAPI] Request error: ${err.message}. Retrying in ${backoff}ms (attempt ${attempt}/${maxRetries})...`);
       await sleep(backoff);
+    } finally {
+      clearTimeout(timer);
     }
   }
 

@@ -7,7 +7,12 @@
 export function formatUnits(raw, decimals = 18) {
   if (raw === null || raw === undefined || raw === '') return 0;
   try {
-    const str = String(raw).trim();
+    if (typeof raw === 'number') {
+      if (!Number.isFinite(raw)) return 0;
+      if (Math.abs(raw) < 1e15) return raw / (10 ** decimals);
+      raw = BigInt(Math.trunc(raw));
+    }
+    const str = String(raw).trim().split('.')[0];
     if (str === '0') return 0;
     
     // For small decimals and standard numbers
@@ -178,7 +183,7 @@ export function normalizeMarket(raw) {
     utilization: utilization,
     borrow_apy: state.borrowApy ?? 0,
     supply_apy: state.supplyApy ?? 0,
-    is_listed: raw.listed !== false ? 1 : 0,
+    is_listed: raw.listed === true ? 1 : 0,
     oracle_type: oracle.type || 'ChainlinkOracleV2',
     bad_debt_usd: Number(raw.badDebt?.usd) || 0,
     realized_bad_debt_usd: Number(raw.realizedBadDebt?.usd) || 0,
@@ -191,7 +196,7 @@ export function normalizeMarket(raw) {
 /**
  * Normalizes vault allocation item
  */
-export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vaultTotalAssetsHuman) {
+export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vaultTotalAssetsHuman, vaultAssetPriceUsd = 1) {
   const supplyHuman = formatUnits(rawAlloc.supplyAssets, vaultDecimals);
   const capHuman = formatUnits(rawAlloc.supplyCap, vaultDecimals);
 
@@ -200,12 +205,16 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
     weight = Math.min(1, supplyHuman / vaultTotalAssetsHuman);
   }
 
+  const calculatedUsd = (rawAlloc.supplyAssetsUsd !== null && rawAlloc.supplyAssetsUsd !== undefined && rawAlloc.supplyAssetsUsd > 0)
+    ? rawAlloc.supplyAssetsUsd
+    : (supplyHuman * (rawAlloc.market?.loanAsset?.priceUsd ?? vaultAssetPriceUsd ?? 1));
+
   return {
     vault_address: vaultAddress.toLowerCase(),
     market_unique_key: (rawAlloc.market?.marketId || '').toLowerCase(),
     supply_assets: String(rawAlloc.supplyAssets || '0'),
     supply_assets_human: supplyHuman,
-    supply_assets_usd: rawAlloc.supplyAssetsUsd ?? 0,
+    supply_assets_usd: calculatedUsd,
     supply_cap: String(rawAlloc.supplyCap || '0'),
     supply_cap_human: capHuman,
     weight: weight,

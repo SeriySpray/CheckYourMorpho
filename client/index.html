@@ -16,7 +16,9 @@
 
   <!-- Header & Top Navigation -->
   <header class="app-header">
-    <div class="header-left"></div>
+    <div class="header-left">
+      <span id="header-status-text" class="status-indicator"></span>
+    </div>
   </header>
 
   <!-- Left-side Pinned Vaults Rich Pills Container -->
@@ -267,7 +269,7 @@
   <div id="morph-proxy" class="morph-proxy hidden"></div>
 
   <!-- Floating Left Audit Terminal (Morphs from the 3D particle) -->
-  <aside id="audit-modal" class="audit-panel-widget hidden" role="region" aria-label="Vault Audit Details">
+  <aside id="audit-modal" class="audit-panel-widget hidden" role="dialog" aria-modal="true" aria-labelledby="modal-vault-name">
     
     <!-- Panel Header: Badges, Close Button, Vault Title, Curator, Safety Score, Mini-Tabs -->
     <header class="audit-panel-header">
@@ -396,7 +398,7 @@
             <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>
             <div class="meter-val-wrap">
               <span class="meter-value" id="risk-exit-pct">0%</span>
-              <span class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" tabindex="0">
+              <button type="button" class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" aria-expanded="false">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -408,7 +410,7 @@
                     In a mass withdrawal across shared markets, competing vaults take their share of cash, reducing available exit to <strong>0%</strong>.
                   </div>
                 </div>
-              </span>
+              </button>
             </div>
           </div>
           <div class="meter-track">

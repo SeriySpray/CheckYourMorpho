@@ -42,7 +42,7 @@ const MIME_TYPES = {
 /**
  * Sends a standardized JSON response.
  */
-function sendJson(res, statusCode, data) {
+function sendJson(res, statusCode, data, req = null) {
   const json = JSON.stringify(data);
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -54,6 +54,10 @@ function sendJson(res, statusCode, data) {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   });
+  if (req && req.method === 'HEAD') {
+    res.end();
+    return;
+  }
   res.end(json);
 }
 
@@ -112,29 +116,34 @@ function serveStaticFile(req, res, pathname) {
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
-      // Fallback: if requesting non-existent path and not starting with /api, serve index.html if it exists
-      const fallbackPath = path.join(clientDir, 'index.html');
-      fs.stat(fallbackPath, (fbErr, fbStats) => {
-        if (!fbErr && fbStats.isFile()) {
-          serveFile(fallbackPath, res);
-        } else {
-          sendJson(res, 404, { error: 'Resource not found' });
-        }
-      });
+      const ext = path.extname(pathname);
+      const acceptsHtml = (req.headers.accept || '').includes('text/html');
+      if (!ext && acceptsHtml) {
+        const fallbackPath = path.join(clientDir, 'index.html');
+        fs.stat(fallbackPath, (fbErr, fbStats) => {
+          if (!fbErr && fbStats.isFile()) {
+            serveFile(fallbackPath, req, res);
+          } else {
+            sendJson(res, 404, { error: 'Resource not found' }, req);
+          }
+        });
+        return;
+      }
+      sendJson(res, 404, { error: 'Resource not found' }, req);
       return;
     }
 
-    serveFile(filePath, res);
+    serveFile(filePath, req, res);
   });
 }
 
-function serveFile(filePath, res) {
+function serveFile(filePath, req, res) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
   fs.readFile(filePath, (err, content) => {
     if (err) {
-      sendJson(res, 500, { error: 'Internal server error reading asset' });
+      sendJson(res, 500, { error: 'Internal server error reading asset' }, req);
       return;
     }
     res.writeHead(200, {
@@ -147,6 +156,10 @@ function serveFile(filePath, res) {
       'Pragma': 'no-cache',
       'Expires': '0'
     });
+    if (req && req.method === 'HEAD') {
+      res.end();
+      return;
+    }
     res.end(content);
   });
 }
@@ -260,7 +273,7 @@ function handleGetVaults(req, res, url) {
     const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
     const rawChainId = url.searchParams.get('chainId');
     const parsedChainId = rawChainId ? parseInt(rawChainId, 10) : null;
-    const chainId = (parsedChainId !== null && Number.isFinite(parsedChainId)) ? parsedChainId : null;
+    const chainId = (parsedChainId !== null && Number.isFinite(parsedChainId) && parsedChainId > 0) ? parsedChainId : null;
     const listedOnly = url.searchParams.get('listedOnly') === '1' || url.searchParams.get('listedOnly') === 'true';
     const rawSearch = (url.searchParams.get('search') || '').trim();
     const search = rawSearch.slice(0, 64);
@@ -281,7 +294,7 @@ function handleGetVaults(req, res, url) {
     const whereConditions = [];
     const params = [];
 
-    if (chainId) {
+    if (chainId !== null) {
       whereConditions.push('chain_id = ?');
       params.push(chainId);
     }
@@ -291,8 +304,9 @@ function handleGetVaults(req, res, url) {
     }
 
     if (search) {
-      whereConditions.push('(name LIKE ? OR symbol LIKE ? OR address LIKE ? OR curator_name LIKE ? OR asset_symbol LIKE ?)');
-      const pattern = `%${search}%`;
+      const escapedSearch = search.replace(/([%_\\])/g, '\\$1');
+      whereConditions.push('(name LIKE ? ESCAPE "\\" OR symbol LIKE ? ESCAPE "\\" OR address LIKE ? ESCAPE "\\" OR curator_name LIKE ? ESCAPE "\\" OR asset_symbol LIKE ? ESCAPE "\\")');
+      const pattern = `%${escapedSearch}%`;
       params.push(pattern, pattern, pattern, pattern, pattern);
     }
 

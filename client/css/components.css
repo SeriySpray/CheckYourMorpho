@@ -1851,6 +1851,10 @@
   color: #30d158;
 }
 
+.vault-item-apy.negative {
+  color: #ff453a;
+}
+
 .vault-mini-badge {
   display: inline-block;
   font-size: 9.5px;

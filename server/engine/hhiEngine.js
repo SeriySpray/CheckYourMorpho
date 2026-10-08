@@ -129,7 +129,11 @@ export function calculateHHI(vault, allocations = []) {
   let tier = 'DIVERSIFIED';
   let tierLabel = 'High Diversification';
 
-  if (hhi > 0.50 && topCollatShare >= 40) {
+  if (activeCollateralExposure < 0.30) {
+    // Very low active collateral exposure (e.g. >70% cash reserves)
+    tier = 'DIVERSIFIED';
+    tierLabel = 'Low Exposure (High Cash)';
+  } else if (hhi > 0.50 && topCollatShare >= 40) {
     tier = 'EXTREME';
     tierLabel = 'Critical Concentration';
   } else if ((hhi > 0.50 && topCollatShare >= 20) || (hhi >= 0.25 && topCollatShare >= 20)) {
@@ -138,10 +142,6 @@ export function calculateHHI(vault, allocations = []) {
   } else if (hhi >= 0.15 && topCollatShare >= 10) {
     tier = 'MODERATE';
     tierLabel = 'Moderate Concentration';
-  } else if (activeCollateralExposure < 0.30) {
-    // Very low active collateral exposure (e.g. >70% cash reserves)
-    tier = 'DIVERSIFIED';
-    tierLabel = 'Low Exposure (High Cash)';
   }
 
   const topCollateral = {

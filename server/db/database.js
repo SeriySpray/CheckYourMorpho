@@ -17,7 +17,10 @@ export function getDatabase() {
   }
 
   dbInstance = new DatabaseSync(CONFIG.db.path);
+  dbInstance.exec('PRAGMA foreign_keys = ON;');
   dbInstance.exec('PRAGMA busy_timeout = 5000;');
+  dbInstance.exec('PRAGMA temp_store = MEMORY;');
+  dbInstance.exec('PRAGMA cache_size = -16000;');
   
   // Safe migrations for newly added columns if table already existed from an older schema
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN version TEXT DEFAULT 'v1';"); } catch {}
@@ -39,11 +42,19 @@ export function getDatabase() {
 export function checkpointDatabase() {
   if (dbInstance) {
     try {
-      dbInstance.exec('PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize;');
-      console.log('[Database] WAL checkpoint (TRUNCATE) and optimize completed.');
+      dbInstance.exec('PRAGMA wal_checkpoint(PASSIVE); PRAGMA optimize;');
+      console.log('[Database] WAL passive checkpoint and optimize completed.');
     } catch (err) {
       console.warn('[Database] WAL checkpoint warning:', err.message);
     }
+  }
+}
+
+export function checkpointDatabaseTruncate() {
+  if (dbInstance) {
+    try {
+      dbInstance.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    } catch {}
   }
 }
 

@@ -127,10 +127,10 @@ export function calculateMQI(vault, allocations = []) {
   // Materiality evaluation:
   // If individual allocation > 1% TVL OR cumulative compromised supply > 1% TVL,
   // classify as compromised. Otherwise, treat isolated sub-1% dust as clean.
-  const isCumulativeCompromisedMaterial = totalCompromisedRawUsd > minMaterialThresholdUsd;
+  const isCumulativeCompromisedMaterial = totalCompromisedRawUsd >= minMaterialThresholdUsd;
 
   for (const item of rawCompromisedItems) {
-    const isMaterial = item.supplyUsd > minMaterialThresholdUsd || isCumulativeCompromisedMaterial;
+    const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || isCumulativeCompromisedMaterial;
     if (isMaterial) {
       compromisedSupplyUsd += item.supplyUsd;
       const weight = totalAssetsUsd > 0 ? item.supplyUsd / totalAssetsUsd : 0;

@@ -1080,6 +1080,8 @@ function renderVaultExplorer() {
     const li = document.createElement('li');
     li.className = 'explorer-vault-item';
     li.setAttribute('data-address', v.address);
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
 
     const chainName = formatChainName(v.chainId);
     const chainClass = getChainClass(v.chainId);
@@ -1090,6 +1092,9 @@ function renderVaultExplorer() {
     const mqi = v.mqiPercent ?? 100;
     const isClean = v.isAllClean ?? (mqi === 100);
     const isPinned = isVaultPinned(v.address);
+    const apyClass = apy < 0 ? 'negative' : '';
+
+    li.setAttribute('aria-label', `${v.name}, ${formatCurrency(tvl)} deposits`);
 
     const flaggedBadgeHtml = (!isClean && mqi < 100)
       ? ` • <span class="vault-mini-badge flagged">${(100 - mqi).toFixed(1)}% Flagged</span>`
@@ -1110,7 +1115,7 @@ function renderVaultExplorer() {
       </div>
       <div class="vault-item-right">
         <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
-        <span class="vault-item-apy">${(apy * 100).toFixed(2)}% APY</span>
+        <span class="vault-item-apy ${apyClass}">${(apy * 100).toFixed(2)}% APY</span>
       </div>
     `;
 
@@ -1135,6 +1140,14 @@ function renderVaultExplorer() {
     li.addEventListener('click', () => {
       const pos = sphere.getParticleScreenPos(v.address);
       openVaultAudit(v, pos);
+    });
+
+    li.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const pos = sphere.getParticleScreenPos(v.address);
+        openVaultAudit(v, pos);
+      }
     });
 
     fragment.appendChild(li);
@@ -1782,7 +1795,34 @@ function setupModalEvents() {
   });
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !DOM.auditModal.classList.contains('hidden')) {
+    if (e.key !== 'Escape') return;
+
+    // 1. Dismiss worst-case exit popover if open
+    if (DOM.riskExitInfoBtn && DOM.riskExitInfoBtn.classList.contains('active')) {
+      DOM.riskExitInfoBtn.classList.remove('active');
+      DOM.riskExitInfoBtn.setAttribute('aria-expanded', 'false');
+      updateStressedExitDisplay(false);
+      return;
+    }
+
+    // 2. Dismiss any open filter dropdowns
+    const openDropdown = document.querySelector('.custom-dropdown.open');
+    if (openDropdown) {
+      closeAllDropdowns();
+      return;
+    }
+
+    // 3. Clear search query if input is focused and contains text
+    if (document.activeElement === DOM.searchInput && DOM.searchInput.value) {
+      DOM.searchInput.value = '';
+      if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
+      explorerFilters.query = '';
+      renderVaultExplorer();
+      return;
+    }
+
+    // 4. Close audit modal if open
+    if (selectedVaultAddress || !DOM.auditModal.classList.contains('hidden') || isTransitioningVault) {
       closeVaultAudit();
     }
   });
@@ -1816,25 +1856,40 @@ function setupAuditNavTabs() {
 }
 
 // Utility Formatter Functions
-function formatCurrency(val) {
-  const num = Number(val) || 0;
+function formatCurrency(val, fallback = '—') {
+  if (val === null || val === undefined || val === '') return fallback;
+  const num = Number(val);
+  if (!Number.isFinite(num)) return fallback;
   const isNegative = num < 0;
   const abs = Math.abs(num);
   const prefix = isNegative ? '-$' : '$';
-  if (abs >= 1e9) return `${prefix}${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
+  if (abs >= 999.95e9) return `${prefix}${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 999.95e6) return `${prefix}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 999.95e3) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 999.95) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
+  if (abs > 0 && abs < 0.01) return `< ${prefix}0.01`;
   return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatNumber(val) {
-  const num = Number(val) || 0;
+function formatNumber(val, fallback = '—') {
+  if (val === null || val === undefined || val === '') return fallback;
+  const num = Number(val);
+  if (!Number.isFinite(num)) return fallback;
   const isNegative = num < 0;
   const abs = Math.abs(num);
   const prefix = isNegative ? '-' : '';
-  if (abs >= 1e6) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
+  if (abs >= 999.95e9) return `${prefix}${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 999.95e6) return `${prefix}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 999.95e3) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 999.95) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
   return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatPercent(val, decimals = 2, fallback = '—') {
+  if (val === null || val === undefined || val === '') return fallback;
+  const num = Number(val);
+  if (!Number.isFinite(num)) return fallback;
+  return `${(num * 100).toFixed(decimals)}%`;
 }
 
 function escapeHtml(str) {

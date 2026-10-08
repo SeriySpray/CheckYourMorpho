@@ -22,8 +22,8 @@ import { isIdleReserveMarket } from './hhiEngine.js';
  * @returns {object} Liquidity analytics
  */
 export function calculateLiquidityMetrics(vault, allocations = []) {
-  const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
-  const directLiquidityUsd = Number(vault.liquidity_usd) || 0;
+  const totalAssetsUsd = Number(vault.total_assets_usd ?? vault.totalAssetsUsd) || 0;
+  const directLiquidityUsd = Number(vault.liquidity_usd ?? vault.liquidityUsd) || 0;
 
   if (totalAssetsUsd <= 0) {
     return {
@@ -77,13 +77,15 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       loanMarketsStressedExitUsd += stressedExitUsd;
 
       // Crowded market detection:
-      // 1. Peer supply alone >= market free liquidity (competing claims exceed cash)
-      // 2. Competing vaults materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
+      // 1. External supply (competing vaults or direct market lenders) >= market free liquidity
+      // 2. Competing lenders materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
       // 3. Materiality check: vault capital must exceed 1.0% of total vault assets
+      const nonVaultSupplyUsd = Math.max(0, marketTotalSupplyUsd - supplyUsd);
+      const totalContestedClaimsUsd = Math.max(peerSupplyUsd, nonVaultSupplyUsd);
       const hasSignificantDilution = (marketFreeLiquidityUsd === 0 && supplyUsd > 0) ||
         (canExitUsd > 0 && stressedExitUsd < canExitUsd * 0.70);
-      const isCrowded = peerSupplyUsd > 0 &&
-        (peerSupplyUsd >= marketFreeLiquidityUsd) &&
+      const isCrowded = totalContestedClaimsUsd > 0 &&
+        (totalContestedClaimsUsd >= marketFreeLiquidityUsd) &&
         hasSignificantDilution;
 
       if (isCrowded && supplyUsd > minMaterialThresholdUsd) {
@@ -91,6 +93,10 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
           const m = p.supplyUsd >= 1e6 ? `$${(p.supplyUsd / 1e6).toFixed(1)}M` : `$${(p.supplyUsd / 1e3).toFixed(0)}K`;
           return `${p.vaultName || 'Vault'} (${m})`;
         });
+        if (topPeersList.length === 0 && nonVaultSupplyUsd > 0) {
+          const m = nonVaultSupplyUsd >= 1e6 ? `$${(nonVaultSupplyUsd / 1e6).toFixed(1)}M` : `$${(nonVaultSupplyUsd / 1e3).toFixed(0)}K`;
+          topPeersList.push(`Direct Market Lenders (${m})`);
+        }
 
         crowdedMarkets.push({
           marketUniqueKey: alloc.market_unique_key,
@@ -112,7 +118,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd);
   const trueIdleCashUsd = allocations.length > 0
     ? idleAllocationsUsd + unallocatedCashUsd
-    : (directLiquidityUsd > 0 ? Math.min(totalAssetsUsd, directLiquidityUsd) : totalAssetsUsd);
+    : (directLiquidityUsd > 0 ? Math.min(totalAssetsUsd, directLiquidityUsd) : 0);
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
   const totalEffectiveExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsExitUsd);

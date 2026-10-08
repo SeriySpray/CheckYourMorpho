@@ -37,7 +37,9 @@ CREATE INDEX IF NOT EXISTS idx_vaults_total_assets ON vaults(total_assets_usd DE
 CREATE INDEX IF NOT EXISTS idx_vaults_liquidity ON vaults(liquidity_usd DESC);
 CREATE INDEX IF NOT EXISTS idx_vaults_listed_liq ON vaults(is_listed, liquidity_usd DESC);
 CREATE INDEX IF NOT EXISTS idx_vaults_listed_assets ON vaults(is_listed, total_assets_usd DESC);
+CREATE INDEX IF NOT EXISTS idx_vaults_listed_net_apy ON vaults(is_listed, net_apy DESC);
 CREATE INDEX IF NOT EXISTS idx_vaults_listed_chain_liq ON vaults(is_listed, chain_id, liquidity_usd DESC);
+CREATE INDEX IF NOT EXISTS idx_vaults_listed_chain_assets ON vaults(is_listed, chain_id, total_assets_usd DESC);
 
 -- Markets table
 CREATE TABLE IF NOT EXISTS markets (
@@ -92,6 +94,7 @@ CREATE TABLE IF NOT EXISTS vault_allocations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_allocations_vault ON vault_allocations(vault_address);
+CREATE INDEX IF NOT EXISTS idx_allocations_vault_supply ON vault_allocations(vault_address, supply_assets_usd DESC);
 CREATE INDEX IF NOT EXISTS idx_allocations_market ON vault_allocations(market_unique_key);
 
 
