@@ -81,7 +81,6 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
 
   throw new Error(`Morpho API request failed: maximum retries (${maxRetries}) exceeded`);
 }
-}
 
 /**
  * Helper to fetch paginated vault items
