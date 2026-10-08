@@ -621,6 +621,26 @@ export class ParticleSphere {
   initEvents() {
     window.addEventListener('resize', () => this.resize());
 
+    // Gracefully handle WebGL context loss and restoration (e.g. system sleep or GPU reset)
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      if (this.animFrameId) {
+        cancelAnimationFrame(this.animFrameId);
+        this.animFrameId = null;
+      }
+      console.warn('[Sphere] WebGL context lost. Rendering paused.');
+    }, false);
+
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      console.log('[Sphere] WebGL context restored. Reinitializing pipeline...');
+      this.initWebGL();
+      this.generateParticles();
+      this.resize();
+      if (!this.animFrameId) {
+        this.animate();
+      }
+    }, false);
+
     // Mouse drag rotation is strictly initiated on the 3D canvas only
     this.canvas.addEventListener('mousedown', (e) => {
       this.isDragging = true;

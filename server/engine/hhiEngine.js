@@ -15,6 +15,18 @@
  */
 
 /**
+ * Checks if an allocation points to an idle/cash reserve market (0 LLTV or uncollateralized).
+ * @param {object} alloc Allocation record
+ * @returns {boolean}
+ */
+export function isIdleReserveMarket(alloc) {
+  const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
+  const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
+  const colAddr = (alloc.collateral_asset_address || '').trim().toLowerCase();
+  return !symbol || symbol === 'NONE' || symbol === 'IDLE' || lltvNum === 0 || !colAddr || colAddr === '0x0000000000000000000000000000000000000000';
+}
+
+/**
  * Calculates HHI and collateral concentration metrics for a vault.
  * 
  * @param {object} vault Vault row from database
@@ -33,13 +45,12 @@ export function calculateHHI(vault, allocations = []) {
 
   for (const alloc of allocations) {
     const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
-    const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
 
     // Check if this market has active collateral backing
-    const isIdleMarket = !symbol || symbol === 'NONE' || lltvNum === 0 || !alloc.collateral_asset_address || alloc.collateral_asset_address === '0x0000000000000000000000000000000000000000';
+    const isIdle = isIdleReserveMarket(alloc);
 
-    if (isIdleMarket) {
+    if (isIdle) {
       idleAllocationsUsd += supplyUsd;
     } else if (supplyUsd > 0) {
       const current = collateralMap.get(symbol) || 0;

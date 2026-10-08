@@ -2,7 +2,16 @@ import http from 'node:http';
 import { CONFIG } from './config.js';
 import { getDatabase, closeDatabase } from './db/database.js';
 import { handleRequest } from './api/routes.js';
-import { syncAllVaults } from './services/syncEngine.js';
+import { syncAllVaults, isSyncing } from './services/syncEngine.js';
+
+// Global process error safety guards
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 // Initialize Database connection and verify WAL mode
 const db = getDatabase();
@@ -27,11 +36,12 @@ server.listen(PORT, HOST, () => {
 
 // Background recurring synchronization
 let syncIntervalTimer = null;
-let isBackgroundSyncRunning = false;
 
 async function runBackgroundSync() {
-  if (isBackgroundSyncRunning) return;
-  isBackgroundSyncRunning = true;
+  if (isSyncing()) {
+    console.log('[Scheduler] Background sync skipped (synchronization already in progress).');
+    return;
+  }
   try {
     console.log('[Scheduler] Running scheduled background synchronization...');
     const result = await syncAllVaults({ fetchHistoryForTop: false });
@@ -39,8 +49,6 @@ async function runBackgroundSync() {
     console.log(`[Scheduler] Background synchronization completed in ${result.durationSec}s: ${totalVaults} vaults (${result.v1Count} V1, ${result.v2Count} V2), ${result.marketsCount} markets, ${result.allocationsCount} allocations.`);
   } catch (err) {
     console.error('[Scheduler] Background sync failed:', err.message);
-  } finally {
-    isBackgroundSyncRunning = false;
   }
 }
 

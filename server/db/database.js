@@ -17,6 +17,7 @@ export function getDatabase() {
   }
 
   dbInstance = new DatabaseSync(CONFIG.db.path);
+  dbInstance.exec('PRAGMA busy_timeout = 5000;');
   
   // Safe migrations for newly added columns if table already existed from an older schema
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN version TEXT DEFAULT 'v1';"); } catch {}

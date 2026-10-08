@@ -10,15 +10,30 @@ import {
   formatUnits
 } from './normalizers.js';
 
+let isSyncLocked = false;
+
+/**
+ * Returns true if synchronization is currently active.
+ */
+export function isSyncing() {
+  return isSyncLocked;
+}
+
 /**
  * Performs a complete synchronization of vaults (both V1 and V2), markets, and allocations.
  */
 export async function syncAllVaults(options = {}) {
+  if (isSyncLocked) {
+    throw new Error('Synchronization is already in progress');
+  }
+  isSyncLocked = true;
+
   console.log('[SyncEngine] Starting full synchronization from Morpho GraphQL API (V1 and V2)...');
   const startTime = Date.now();
   const db = getDatabase();
 
-  // Prepared statements for upserts
+  // Prepared statements for upserts and allocation purging
+  const deleteVaultAllocations = db.prepare('DELETE FROM vault_allocations WHERE vault_address = ?');
   const upsertVault = db.prepare(`
     INSERT INTO vaults (
       address, chain_id, name, symbol, curator_name, asset_address,
@@ -126,140 +141,150 @@ export async function syncAllVaults(options = {}) {
   const curatorMap = await fetchCuratorDirectory();
   console.log(`[SyncEngine] Loaded ${curatorMap.size} curator address mappings.`);
 
-  // --- STEP 1: Sync MetaMorpho V1 Vaults ---
-  console.log('[SyncEngine] Fetching MetaMorpho V1 vaults...');
-  const rawVaultsV1 = await fetchAllVaults(options.chainIds ?? null);
-  console.log(`[SyncEngine] Fetched ${rawVaultsV1.length} V1 vaults from Morpho GraphQL.`);
-
-  let v1Count = 0;
-  let v2Count = 0;
-  let marketsCount = 0;
-  let allocationsCount = 0;
-
-  db.exec('BEGIN TRANSACTION;');
   try {
-    for (const rawV of rawVaultsV1) {
-      const v = normalizeVault(rawV, curatorMap);
-      upsertVault.run(
-        v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
-        v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
-        v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
-        'v1', v.is_listed, v.metadata_updated_at
-      );
-      v1Count++;
+    // --- STEP 1: Sync MetaMorpho V1 Vaults ---
+    console.log('[SyncEngine] Fetching MetaMorpho V1 vaults...');
+    const rawVaultsV1 = await fetchAllVaults(options.chainIds ?? null);
+    console.log(`[SyncEngine] Fetched ${rawVaultsV1.length} V1 vaults from Morpho GraphQL.`);
 
-      const rawAllocations = rawV.state?.allocation || [];
-      const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
+    let v1Count = 0;
+    let v2Count = 0;
+    let marketsCount = 0;
+    let allocationsCount = 0;
 
-      for (const rawAlloc of rawAllocations) {
-        if (!rawAlloc.market) continue;
-
-        const m = normalizeMarket(rawAlloc.market);
-        upsertMarket.run(
-          m.unique_key, m.chain_id, m.loan_asset_address, m.loan_asset_symbol,
-          m.loan_asset_decimals, m.loan_asset_price_usd, m.collateral_asset_address,
-          m.collateral_asset_symbol, m.collateral_asset_decimals, m.collateral_asset_price_usd,
-          m.oracle_address, m.irm_address, m.lltv, m.lltv_percent, m.total_supply_assets,
-          m.total_supply_assets_usd, m.total_borrow_assets, m.total_borrow_assets_usd,
-          m.free_liquidity_assets, m.free_liquidity_usd, m.utilization, m.borrow_apy,
-          m.supply_apy, m.is_listed, m.oracle_type, m.bad_debt_usd, m.realized_bad_debt_usd,
-          m.warnings_count, m.warnings_json, m.updated_at
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      for (const rawV of rawVaultsV1) {
+        const v = normalizeVault(rawV, curatorMap);
+        upsertVault.run(
+          v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
+          v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
+          v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
+          'v1', v.is_listed, v.metadata_updated_at
         );
-        marketsCount++;
+        v1Count++;
 
-        const alloc = normalizeAllocation(rawAlloc, v.address, v.asset_decimals, vaultTotalAssetsHuman);
-        upsertAllocation.run(
-          alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
-          alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,
-          alloc.supply_cap_human, alloc.weight, alloc.updated_at
-        );
-        allocationsCount++;
+        // Purge previous allocations for this vault to prevent ghost/stale allocations
+        deleteVaultAllocations.run(v.address);
+
+        const rawAllocations = rawV.state?.allocation || [];
+        const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
+
+        for (const rawAlloc of rawAllocations) {
+          if (!rawAlloc.market) continue;
+
+          const m = normalizeMarket(rawAlloc.market);
+          upsertMarket.run(
+            m.unique_key, m.chain_id, m.loan_asset_address, m.loan_asset_symbol,
+            m.loan_asset_decimals, m.loan_asset_price_usd, m.collateral_asset_address,
+            m.collateral_asset_symbol, m.collateral_asset_decimals, m.collateral_asset_price_usd,
+            m.oracle_address, m.irm_address, m.lltv, m.lltv_percent, m.total_supply_assets,
+            m.total_supply_assets_usd, m.total_borrow_assets, m.total_borrow_assets_usd,
+            m.free_liquidity_assets, m.free_liquidity_usd, m.utilization, m.borrow_apy,
+            m.supply_apy, m.is_listed, m.oracle_type, m.bad_debt_usd, m.realized_bad_debt_usd,
+            m.warnings_count, m.warnings_json, m.updated_at
+          );
+          marketsCount++;
+
+          const alloc = normalizeAllocation(rawAlloc, v.address, v.asset_decimals, vaultTotalAssetsHuman);
+          upsertAllocation.run(
+            alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
+            alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,
+            alloc.supply_cap_human, alloc.weight, alloc.updated_at
+          );
+          allocationsCount++;
+        }
       }
-    }
-    db.exec('COMMIT;');
-  } catch (err) {
-    db.exec('ROLLBACK;');
-    throw err;
-  }
-
-  // --- STEP 2: Sync Morpho Vaults V2 ---
-  console.log('[SyncEngine] Fetching Morpho Vaults V2...');
-  const rawVaultsV2 = await fetchAllVaultV2s(options.chainIds ?? null);
-  console.log(`[SyncEngine] Fetched ${rawVaultsV2.length} V2 vaults from Morpho GraphQL.`);
-
-  db.exec('BEGIN TRANSACTION;');
-  try {
-    for (const rawV2 of rawVaultsV2) {
-      const v = normalizeVaultV2(rawV2, curatorMap);
-      upsertVault.run(
-        v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
-        v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
-        v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
-        'v2', v.is_listed, v.metadata_updated_at
-      );
-      v2Count++;
-
-      const caps = rawV2.caps?.items || [];
-      const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
-
-      for (const cap of caps) {
-        const rawMarket = cap.data?.market;
-        if (!rawMarket) continue;
-
-        const m = normalizeMarket(rawMarket);
-        upsertMarket.run(
-          m.unique_key, m.chain_id, m.loan_asset_address, m.loan_asset_symbol,
-          m.loan_asset_decimals, m.loan_asset_price_usd, m.collateral_asset_address,
-          m.collateral_asset_symbol, m.collateral_asset_decimals, m.collateral_asset_price_usd,
-          m.oracle_address, m.irm_address, m.lltv, m.lltv_percent, m.total_supply_assets,
-          m.total_supply_assets_usd, m.total_borrow_assets, m.total_borrow_assets_usd,
-          m.free_liquidity_assets, m.free_liquidity_usd, m.utilization, m.borrow_apy,
-          m.supply_apy, m.is_listed, m.oracle_type, m.bad_debt_usd, m.realized_bad_debt_usd,
-          m.warnings_count, m.warnings_json, m.updated_at
-        );
-        marketsCount++;
-
-        const alloc = normalizeAllocationV2(cap, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd);
-        upsertAllocation.run(
-          alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
-          alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,
-          alloc.supply_cap_human, alloc.weight, alloc.updated_at
-        );
-        allocationsCount++;
-      }
+      db.exec('COMMIT;');
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      throw err;
     }
 
-    updateSyncState.run('last_sync_all', String(Math.floor(Date.now() / 1000)), Math.floor(Date.now() / 1000));
-    db.exec('COMMIT;');
-  } catch (err) {
-    db.exec('ROLLBACK;');
-    throw err;
+    // --- STEP 2: Sync Morpho Vaults V2 ---
+    console.log('[SyncEngine] Fetching Morpho Vaults V2...');
+    const rawVaultsV2 = await fetchAllVaultV2s(options.chainIds ?? null);
+    console.log(`[SyncEngine] Fetched ${rawVaultsV2.length} V2 vaults from Morpho GraphQL.`);
+
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      for (const rawV2 of rawVaultsV2) {
+        const v = normalizeVaultV2(rawV2, curatorMap);
+        upsertVault.run(
+          v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
+          v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
+          v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
+          'v2', v.is_listed, v.metadata_updated_at
+        );
+        v2Count++;
+
+        // Purge previous allocations for this vault to prevent ghost/stale allocations
+        deleteVaultAllocations.run(v.address);
+
+        const caps = rawV2.caps?.items || [];
+        const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
+
+        for (const cap of caps) {
+          const rawMarket = cap.data?.market;
+          if (!rawMarket) continue;
+
+          const m = normalizeMarket(rawMarket);
+          upsertMarket.run(
+            m.unique_key, m.chain_id, m.loan_asset_address, m.loan_asset_symbol,
+            m.loan_asset_decimals, m.loan_asset_price_usd, m.collateral_asset_address,
+            m.collateral_asset_symbol, m.collateral_asset_decimals, m.collateral_asset_price_usd,
+            m.oracle_address, m.irm_address, m.lltv, m.lltv_percent, m.total_supply_assets,
+            m.total_supply_assets_usd, m.total_borrow_assets, m.total_borrow_assets_usd,
+            m.free_liquidity_assets, m.free_liquidity_usd, m.utilization, m.borrow_apy,
+            m.supply_apy, m.is_listed, m.oracle_type, m.bad_debt_usd, m.realized_bad_debt_usd,
+            m.warnings_count, m.warnings_json, m.updated_at
+          );
+          marketsCount++;
+
+          const alloc = normalizeAllocationV2(cap, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd);
+          upsertAllocation.run(
+            alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
+            alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,
+            alloc.supply_cap_human, alloc.weight, alloc.updated_at
+          );
+          allocationsCount++;
+        }
+      }
+
+      updateSyncState.run('last_sync_all', String(Math.floor(Date.now() / 1000)), Math.floor(Date.now() / 1000));
+      db.exec('COMMIT;');
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      throw err;
+    }
+
+    console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
+
+    // --- Clean up unlisted vaults & orphan data from database ---
+    console.log('[SyncEngine] Purging unlisted vaults and orphan data from database...');
+    db.exec(`
+      DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL;
+      DELETE FROM vault_allocations WHERE vault_address NOT IN (SELECT address FROM vaults);
+      DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
+    `);
+
+    const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[SyncEngine] Synchronization completed in ${durationSec}s. Summary:`);
+    console.log(`- V1 Vaults: ${v1Count}`);
+    console.log(`- V2 Vaults: ${v2Count}`);
+    console.log(`- Markets: ${marketsCount}`);
+    console.log(`- Allocations: ${allocationsCount}`);
+
+    return {
+      v1Count,
+      v2Count,
+      marketsCount,
+      allocationsCount,
+      durationSec
+    };
+  } finally {
+    isSyncLocked = false;
   }
-
-  console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
-
-  // --- Clean up unlisted vaults & orphan data from database ---
-  console.log('[SyncEngine] Purging unlisted vaults and orphan data from database...');
-  db.exec(`
-    DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL;
-    DELETE FROM vault_allocations WHERE vault_address NOT IN (SELECT address FROM vaults);
-    DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
-  `);
-
-  const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`[SyncEngine] Synchronization completed in ${durationSec}s. Summary:`);
-  console.log(`- V1 Vaults: ${v1Count}`);
-  console.log(`- V2 Vaults: ${v2Count}`);
-  console.log(`- Markets: ${marketsCount}`);
-  console.log(`- Allocations: ${allocationsCount}`);
-
-  return {
-    v1Count,
-    v2Count,
-    marketsCount,
-    allocationsCount,
-    durationSec
-  };
 }
 
 // Allow direct CLI execution

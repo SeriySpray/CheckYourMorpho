@@ -17,11 +17,12 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
   const maxRetries = CONFIG.api.maxRetries;
 
   while (attempt <= maxRetries) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), CONFIG.api.requestTimeoutMs);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CONFIG.api.requestTimeoutMs);
+    let res;
 
-      const res = await fetch(CONFIG.api.morphoGraphqlUrl, {
+    try {
+      res = await fetch(CONFIG.api.morphoGraphqlUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,12 +32,26 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
         body: JSON.stringify({ query, variables }),
         signal: controller.signal
       });
-
+    } catch (err) {
+      attempt++;
+      if (attempt > maxRetries) {
+        throw new Error(`Morpho API request failed after ${maxRetries} retries: ${err.message}`);
+      }
+      const backoff = 800 * attempt;
+      console.warn(`[MorphoAPI] Request error: ${err.message}. Retrying in ${backoff}ms...`);
+      await sleep(backoff);
+      continue;
+    } finally {
       clearTimeout(timer);
+    }
 
+    try {
       if (res.status === 429) {
         // Rate limited
         attempt++;
+        if (attempt > maxRetries) {
+          throw new Error(`Morpho API rate limit (429) exceeded after ${maxRetries} retries`);
+        }
         const backoff = 1000 * Math.pow(2, attempt);
         console.warn(`[MorphoAPI] Rate limited (429). Retrying in ${backoff}ms (attempt ${attempt}/${maxRetries})...`);
         await sleep(backoff);
@@ -63,6 +78,9 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
       await sleep(backoff);
     }
   }
+
+  throw new Error(`Morpho API request failed: maximum retries (${maxRetries}) exceeded`);
+}
 }
 
 /**

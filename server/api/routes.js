@@ -8,7 +8,7 @@ import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
-import { syncAllVaults } from '../services/syncEngine.js';
+import { syncAllVaults, isSyncing } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
 
 
@@ -17,12 +17,12 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..');
 const clientDir = path.resolve(rootDir, 'client');
 
-// Global synchronization state flag
-let isSyncInProgress = false;
+// Global synchronization state tracking
 let lastSyncResult = null;
 
-// In-memory cache for instant 0ms vault audit responses (30s TTL)
+// In-memory cache for instant 0ms vault audit responses (30s TTL, bounded to 500 entries)
 const AUDIT_CACHE_TTL_MS = 30000;
+const AUDIT_CACHE_MAX_SIZE = 500;
 const vaultAuditCache = new Map();
 
 // MIME types dictionary for static file serving
@@ -68,16 +68,41 @@ function handleCors(req, res) {
 }
 
 /**
- * Serves static assets from the client directory.
+ * Serves static assets from the client directory safely.
  */
 function serveStaticFile(req, res, pathname) {
-  let relativePath = pathname === '/' || pathname === '' ? 'index.html' : pathname;
-  
-  // Normalize and prevent path traversal
-  const safePath = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, '');
-  const filePath = path.join(clientDir, safePath);
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    sendJson(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
 
-  if (!filePath.startsWith(clientDir)) {
+  // Null byte or poison injection check
+  if (!pathname || pathname.includes('\0') || pathname.includes('%00')) {
+    sendJson(res, 400, { error: 'Bad Request' });
+    return;
+  }
+
+  let decodedPathname;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    sendJson(res, 400, { error: 'Bad Request: Malformed URI component' });
+    return;
+  }
+
+  let relativePath = decodedPathname === '/' || decodedPathname === '' ? 'index.html' : decodedPathname;
+  
+  // Normalize and prevent path traversal or dotfiles (.git, .env)
+  const normalized = path.normalize(relativePath);
+  const segments = normalized.split(path.sep);
+  if (segments.some(s => s.startsWith('.'))) {
+    sendJson(res, 403, { error: 'Access denied' });
+    return;
+  }
+
+  const filePath = path.resolve(clientDir, '.' + path.sep + normalized);
+  const relFromClient = path.relative(clientDir, filePath);
+  if (relFromClient.startsWith('..') || path.isAbsolute(relFromClient)) {
     sendJson(res, 403, { error: 'Access denied' });
     return;
   }
@@ -112,6 +137,9 @@ function serveFile(filePath, res) {
     res.writeHead(200, {
       'Content-Type': contentType,
       'Content-Length': content.length,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
       'Pragma': 'no-cache',
       'Expires': '0'
@@ -134,7 +162,7 @@ function handleGetStatus(req, res) {
 
     sendJson(res, 200, {
       status: 'ok',
-      isSyncInProgress,
+      isSyncInProgress: isSyncing(),
       lastSync: {
         timestamp: syncRow ? Number(syncRow.value) : null,
         updatedAt: syncRow ? syncRow.updated_at : null
@@ -156,15 +184,13 @@ function handleGetStatus(req, res) {
  * Handler for POST /api/sync
  */
 async function handlePostSync(req, res, url) {
-  if (isSyncInProgress) {
+  if (isSyncing()) {
     sendJson(res, 409, { error: 'Synchronization is already in progress' });
     return;
   }
 
   const awaitSync = url.searchParams.get('await') === '1' || url.searchParams.get('await') === 'true';
   const fetchHistory = url.searchParams.get('fetchHistory') === '1' || url.searchParams.get('fetchHistory') === 'true';
-
-  isSyncInProgress = true;
 
   const runSync = async () => {
     try {
@@ -188,8 +214,6 @@ async function handlePostSync(req, res, url) {
       };
       console.error('[API] Synchronization failed:', err);
       throw err;
-    } finally {
-      isSyncInProgress = false;
     }
   };
 
@@ -218,10 +242,14 @@ function handleGetVaults(req, res, url) {
   try {
     const db = getDatabase();
 
-    // Query parameters
-    const limit = Math.min(1000, Math.max(1, parseInt(url.searchParams.get('limit') || '500', 10)));
-    const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
-    const chainId = url.searchParams.get('chainId') ? parseInt(url.searchParams.get('chainId'), 10) : null;
+    // Query parameters with strict validation
+    const rawLimit = parseInt(url.searchParams.get('limit') || '500', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(1000, Math.max(1, rawLimit)) : 500;
+    const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+    const rawChainId = url.searchParams.get('chainId');
+    const parsedChainId = rawChainId ? parseInt(rawChainId, 10) : null;
+    const chainId = (parsedChainId !== null && Number.isFinite(parsedChainId)) ? parsedChainId : null;
     const listedOnly = url.searchParams.get('listedOnly') === '1' || url.searchParams.get('listedOnly') === 'true';
     const search = (url.searchParams.get('search') || '').trim();
     const sortBy = url.searchParams.get('sortBy') || 'liquidity_usd';
@@ -293,7 +321,7 @@ function handleGetVaults(req, res, url) {
 
     const rows = db.prepare(selectSql).all(...params, limit, offset);
 
-    // Batch load allocations for returned vaults to compute MQI & HHI
+    // Batch load allocations for returned vaults to compute MQI, HHI, and Crowded Exit metrics
     const vaultAddresses = rows.map(r => r.address);
     const allocMap = new Map();
     if (vaultAddresses.length > 0) {
@@ -304,6 +332,32 @@ function handleGetVaults(req, res, url) {
         JOIN markets m ON va.market_unique_key = m.unique_key 
         WHERE va.vault_address IN (${placeholders})
       `).all(...vaultAddresses);
+
+      // Collect unique market keys to batch aggregate peer supplies
+      const marketKeys = Array.from(new Set(allocRows.map(a => a.market_unique_key)));
+      if (marketKeys.length > 0) {
+        const mPlaceholders = marketKeys.map(() => '?').join(',');
+        const peerTotals = db.prepare(`
+          SELECT market_unique_key, vault_address, supply_assets_usd
+          FROM vault_allocations
+          WHERE market_unique_key IN (${mPlaceholders})
+            AND supply_assets_usd > 1000
+        `).all(...marketKeys);
+
+        const marketTotalSupply = new Map();
+        for (const pt of peerTotals) {
+          const mk = (pt.market_unique_key || '').toLowerCase();
+          marketTotalSupply.set(mk, (marketTotalSupply.get(mk) || 0) + (Number(pt.supply_assets_usd) || 0));
+        }
+
+        for (const a of allocRows) {
+          const mk = (a.market_unique_key || '').toLowerCase();
+          const totalInMarket = marketTotalSupply.get(mk) || 0;
+          const selfSupply = Number(a.supply_assets_usd) || 0;
+          a.peer_supply_usd = Math.max(0, totalInMarket - selfSupply);
+        }
+      }
+
       for (const a of allocRows) {
         const k = a.vault_address.toLowerCase();
         if (!allocMap.has(k)) allocMap.set(k, []);
@@ -337,6 +391,10 @@ function handleGetVaults(req, res, url) {
         liquidityUsd: row.liquidity_usd,
         exitCapPercent: liq.instantExitCapacityPercent,
         exitCapUsd: liq.instantExitCapacityUsd,
+        stressedExitCapPercent: liq.stressedExitCapacityPercent,
+        stressedExitCapUsd: liq.stressedExitCapacityUsd,
+        isCrowded: liq.isCrowded,
+        crowdedMarketsCount: liq.crowdedMarkets?.length || 0,
         apy: row.apy,
         netApy: row.net_apy,
         fee: row.fee,
@@ -533,6 +591,10 @@ function handleGetVaultByAddress(req, res, address) {
       })
     };
 
+    if (vaultAuditCache.size >= AUDIT_CACHE_MAX_SIZE) {
+      const oldestKey = vaultAuditCache.keys().next().value;
+      if (oldestKey) vaultAuditCache.delete(oldestKey);
+    }
     vaultAuditCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });
     sendJson(res, 200, responsePayload);
   } catch (err) {
@@ -549,7 +611,16 @@ export function handleRequest(req, res) {
     return;
   }
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  let parsedUrl;
+  try {
+    const rawHost = req.headers.host || 'localhost';
+    const sanitizedHost = /^[a-zA-Z0-9.:_-]+$/.test(rawHost) ? rawHost : 'localhost';
+    parsedUrl = new URL(req.url, `http://${sanitizedHost}`);
+  } catch {
+    sendJson(res, 400, { error: 'Bad Request: Malformed URL or Host header' });
+    return;
+  }
+
   const pathname = parsedUrl.pathname;
 
   // REST API Routes

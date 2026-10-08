@@ -181,10 +181,14 @@ function startLivePolling() {
 
       // 3. If an audit modal is currently open and not animating, quietly refresh it
       if (selectedVaultAddress && !DOM.auditModal.classList.contains('hidden') && !isTransitioningVault) {
-        const auditRes = await fetch(`/api/vaults/${selectedVaultAddress}`);
+        const pollingAddr = selectedVaultAddress;
+        const auditRes = await fetch(`/api/vaults/${pollingAddr}`);
         if (auditRes.ok) {
           const auditData = await auditRes.json();
-          applyVaultAuditData(selectedVaultAddress, auditData);
+          // Ensure user hasn't switched vaults or closed modal during fetch
+          if (selectedVaultAddress === pollingAddr && !DOM.auditModal.classList.contains('hidden')) {
+            applyVaultAuditData(pollingAddr, auditData);
+          }
         }
       }
     } catch (pollErr) {
@@ -422,13 +426,17 @@ function updateActiveFilterChips() {
  */
 function setupVaultExplorerEvents() {
   if (DOM.searchInput) {
+    let searchDebounceTimer = null;
     DOM.searchInput.addEventListener('input', () => {
       const val = DOM.searchInput.value.trim();
       if (DOM.searchClearBtn) {
         DOM.searchClearBtn.classList.toggle('hidden', val.length === 0);
       }
-      explorerFilters.query = val.toLowerCase();
-      renderVaultExplorer();
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        explorerFilters.query = val.toLowerCase();
+        renderVaultExplorer();
+      }, 120);
     });
 
     DOM.searchInput.addEventListener('keydown', (e) => {
@@ -531,7 +539,7 @@ function setupVaultExplorerEvents() {
 
   if (DOM.explorerResetBtn) {
     DOM.explorerResetBtn.addEventListener('click', () => {
-      resetDropdownFilters();
+      resetAllFilters();
     });
   }
 }
@@ -1799,17 +1807,23 @@ function setupAuditNavTabs() {
 // Utility Formatter Functions
 function formatCurrency(val) {
   const num = Number(val) || 0;
-  if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-  if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-  if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
-  return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const isNegative = num < 0;
+  const abs = Math.abs(num);
+  const prefix = isNegative ? '-$' : '$';
+  if (abs >= 1e9) return `${prefix}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
+  return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatNumber(val) {
   const num = Number(val) || 0;
-  if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
-  if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
-  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isNegative = num < 0;
+  const abs = Math.abs(num);
+  const prefix = isNegative ? '-' : '';
+  if (abs >= 1e6) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
+  return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function escapeHtml(str) {

@@ -3,6 +3,7 @@ export const SCHEMA_SQL = `
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
 
 -- Vaults table
 CREATE TABLE IF NOT EXISTS vaults (

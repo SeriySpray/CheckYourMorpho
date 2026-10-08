@@ -15,6 +15,8 @@
  */
 
 
+import { isIdleReserveMarket } from './hhiEngine.js';
+
 /**
  * Evaluates whether a market passes the strict binary clean test.
  * @param {object} market Market record from database
@@ -29,19 +31,16 @@ export function isMarketClean(market) {
     reasons.push('Unlisted market (not verified by Morpho)');
   }
 
-  // Check 2: Bad Debt & Realized Bad Debt
+  // Check 2: Bad Debt & Realized Bad Debt (ignore sub-$10 dust from complete liquidation rounding)
   const badDebtUsd = Number(market.bad_debt_usd || 0);
   const realizedBadDebtUsd = Number(market.realized_bad_debt_usd || 0);
-  if (badDebtUsd > 0 || realizedBadDebtUsd > 0) {
+  if (badDebtUsd > 10 || realizedBadDebtUsd > 10) {
     const totalBadDebt = badDebtUsd + realizedBadDebtUsd;
     reasons.push(`Bad debt detected ($${totalBadDebt.toLocaleString('en-US', { maximumFractionDigits: 0 })})`);
   }
 
-  // Check: Idle / 0-LLTV reserve markets (no collateral, no borrowing)
-  const lltvNum = Number(market.lltv_percent || 0);
-  const isIdleReserve = lltvNum === 0 && (!market.collateral_asset_address || market.collateral_asset_symbol === 'NONE');
-
-  // Check 3: Oracle Verification (only required for borrowing markets with collateral)
+  // Check 3: Oracle Verification (only required for borrowing markets with collateral, not 0-LLTV idle cash)
+  const isIdleReserve = isIdleReserveMarket(market);
   if (!isIdleReserve) {
     const oracleAddr = (market.oracle_address || '').toLowerCase();
     const isZeroAddress = !oracleAddr || oracleAddr === '0x0000000000000000000000000000000000000000';

@@ -1,3 +1,5 @@
+import { isIdleReserveMarket } from './hhiEngine.js';
+
 /**
  * Liquidity & Exit Capacity Engine
  * Calculates both normal instant exit capacity and stressed pro-rata exit capacity
@@ -48,8 +50,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
     totalAllocatedUsd += supplyUsd;
 
-    const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
-    const isIdle = lltvNum === 0 && (!alloc.collateral_asset_symbol || alloc.collateral_asset_symbol === 'NONE');
+    const isIdle = isIdleReserveMarket(alloc);
 
     if (isIdle) {
       idleAllocationsUsd += supplyUsd;
@@ -111,7 +112,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd);
   const trueIdleCashUsd = allocations.length > 0
     ? idleAllocationsUsd + unallocatedCashUsd
-    : Math.min(totalAssetsUsd, directLiquidityUsd || totalAssetsUsd);
+    : Math.min(totalAssetsUsd, Math.max(0, directLiquidityUsd));
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
   const totalEffectiveExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsExitUsd);
@@ -124,6 +125,14 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   // Sort crowded markets descending by vault's exposed capital
   crowdedMarkets.sort((a, b) => b.vaultSupplyUsd - a.vaultSupplyUsd);
 
+  const capacityDrop = instantExitCapacityPercent - stressedExitCapacityPercent;
+  const relativeDrop = instantExitCapacityPercent > 0 ? capacityDrop / instantExitCapacityPercent : 0;
+  const isCrowded = crowdedMarkets.length > 0 && (
+    capacityDrop >= 15 ||
+    (instantExitCapacityPercent >= 10 && stressedExitCapacityPercent < 10) ||
+    (instantExitCapacityPercent > 0 && relativeDrop >= 0.50)
+  );
+
   return {
     directLiquidityUsd: Math.round(trueIdleCashUsd * 100) / 100,
     marketExitCapacityUsd: Math.round(loanMarketsExitUsd * 100) / 100,
@@ -133,6 +142,6 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     stressedExitCapacityPercent,
     crowdedMarkets,
     isIlliquid: instantExitCapacityPercent < 20,
-    isCrowded: crowdedMarkets.length > 0 && (instantExitCapacityPercent - stressedExitCapacityPercent >= 15)
+    isCrowded
   };
 }
