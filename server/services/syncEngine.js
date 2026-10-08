@@ -219,7 +219,7 @@ export async function syncAllVaults(options = {}) {
         );
         marketsCount++;
 
-        const alloc = normalizeAllocationV2(cap, v.address, v.asset_decimals, vaultTotalAssetsHuman);
+        const alloc = normalizeAllocationV2(cap, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd);
         upsertAllocation.run(
           alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
           alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,

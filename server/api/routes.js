@@ -9,6 +9,7 @@ import { calculateMQI, isMarketClean } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { syncAllVaults } from '../services/syncEngine.js';
+import { formatUnits } from '../services/normalizers.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -331,6 +332,7 @@ function handleGetVaults(req, res, url) {
           priceUsd: row.asset_price_usd
         },
         totalAssets: row.total_assets,
+        totalAssetsHuman: formatUnits(row.total_assets, row.asset_decimals),
         totalAssetsUsd: row.total_assets_usd,
         liquidityUsd: row.liquidity_usd,
         exitCapPercent: liq.instantExitCapacityPercent,
@@ -491,6 +493,7 @@ function handleGetVaultByAddress(req, res, address) {
           priceUsd: vault.asset_price_usd
         },
         totalAssets: vault.total_assets,
+        totalAssetsHuman: formatUnits(vault.total_assets, vault.asset_decimals),
         totalAssetsUsd: vault.total_assets_usd,
         liquidityUsd: vault.liquidity_usd,
         apy: vault.apy,

@@ -216,7 +216,7 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
 /**
  * Normalizes VaultV2 allocation from caps
  */
-export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTotalAssetsHuman) {
+export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTotalAssetsHuman, vaultAssetPriceUsd = 1) {
   const supplyHuman = formatUnits(cap.allocation, vaultDecimals);
   const capHuman = formatUnits(cap.absoluteCap, vaultDecimals);
 
@@ -226,13 +226,14 @@ export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTot
   }
 
   const market = cap.data?.market;
+  const loanPrice = market?.loanAsset?.priceUsd ?? vaultAssetPriceUsd ?? 1;
 
   return {
     vault_address: vaultAddress.toLowerCase(),
     market_unique_key: (market?.marketId || '').toLowerCase(),
     supply_assets: String(cap.allocation || '0'),
     supply_assets_human: supplyHuman,
-    supply_assets_usd: supplyHuman * (market?.loanAsset?.priceUsd ?? 1),
+    supply_assets_usd: supplyHuman * loanPrice,
     supply_cap: String(cap.absoluteCap || '0'),
     supply_cap_human: capHuman,
     weight: weight,

@@ -37,13 +37,13 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 2: Extreme Collateral Concentration
-  if (hhi.tier !== 'UNALLOCATED' && hhi.hhi > 0.50 && hhi.topCollateral.sharePercent >= 40) {
+  if (hhi.tier === 'EXTREME') {
     redFlags.push({
       level: 'HIGH',
       title: 'Extreme Collateral Concentration',
       message: `${hhi.topCollateral.sharePercent}% of vault capital is backed by a single collateral asset (${hhi.topCollateral.symbol}), creating critical concentration risk (HHI: ${hhi.hhi}).`
     });
-  } else if (hhi.tier !== 'UNALLOCATED' && (hhi.hhi >= 0.25 || (hhi.hhi > 0.50 && hhi.topCollateral.sharePercent < 40)) && hhi.topCollateral.sharePercent >= 20) {
+  } else if (hhi.tier === 'CONCENTRATED') {
     redFlags.push({
       level: 'MEDIUM',
       title: 'Elevated Collateral Concentration',
@@ -68,14 +68,14 @@ export function generateVaultVerdict(vault, allocations = []) {
     const dropPct = Math.round((liquidity.instantExitCapacityPercent - liquidity.stressedExitCapacityPercent) * 10) / 10;
 
     // Critical trigger: Stressed pro-rata exit capacity collapses into true danger zone (< 15%)
-    // with substantial drop (>= 20%) and material exposure to crowded markets
-    const isCritical = (liquidity.instantExitCapacityPercent >= 25 && liquidity.stressedExitCapacityPercent < 15 && dropPct >= 20)
-      || (crowdedSharePercent >= 35 && dropPct >= 25 && liquidity.stressedExitCapacityPercent < 15);
+    // with substantial drop (>= 15%) and material exposure to crowded markets
+    const isCritical = (liquidity.stressedExitCapacityPercent < 15 && dropPct >= 15 && (liquidity.instantExitCapacityPercent >= 20 || crowdedSharePercent >= 25))
+      || (crowdedSharePercent >= 35 && dropPct >= 20 && liquidity.stressedExitCapacityPercent < 20);
 
-    // High trigger: Material reduction in exit capacity (stressed < 25% with drop >= 15%, or drop >= 25% with stressed < 35%)
+    // High trigger: Material reduction in exit capacity (stressed < 25% with drop >= 10%, or drop >= 20% with stressed < 35%)
     const isHigh = !isCritical && crowdedSharePercent >= 15 && (
-      (liquidity.stressedExitCapacityPercent < 25 && dropPct >= 15) ||
-      (dropPct >= 25 && liquidity.stressedExitCapacityPercent < 35)
+      (liquidity.stressedExitCapacityPercent < 25 && dropPct >= 10) ||
+      (dropPct >= 20 && liquidity.stressedExitCapacityPercent < 35)
     );
 
     const topMarket = liquidity.crowdedMarkets[0];

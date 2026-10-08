@@ -1540,7 +1540,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   // Financials
   DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
-  DOM.modalAssetsHuman.textContent = `${formatNumber(v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0)} ${v.asset?.symbol || ''}`;
+  const humanAssets = v.totalAssetsHuman !== undefined
+    ? v.totalAssetsHuman
+    : (v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0);
+  DOM.modalAssetsHuman.textContent = `${formatNumber(humanAssets)} ${v.asset?.symbol || ''}`;
   DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
   DOM.modalExitCapPct.textContent = `${verdict.liquidity?.instantExitCapacityPercent || 0}% Exit Cap`;
   DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
@@ -1569,18 +1572,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const hhiVal = verdict.hhi?.hhi ?? 0;
   const isUnallocated = verdict.hhi?.tier === 'UNALLOCATED';
 
-  // Force pure English tier labels regardless of backend cache
-  let tierLabel = 'High Diversification';
+  // Read English tier labels directly from backend calculation
+  let tierLabel = verdict.hhi?.tierLabel || 'High Diversification';
   if (isUnallocated || verdict.hhi?.tier === 'UNALLOCATED') {
     tierLabel = 'N/A';
-  } else if (verdict.hhi?.tier === 'EXTREME' || hhiVal > 0.50) {
-    tierLabel = 'Critical Concentration';
-  } else if (verdict.hhi?.tier === 'CONCENTRATED' || hhiVal >= 0.25) {
-    tierLabel = 'High Concentration';
-  } else if (verdict.hhi?.tier === 'MODERATE' || hhiVal >= 0.15) {
-    tierLabel = 'Moderate Concentration';
-  } else {
-    tierLabel = 'High Diversification';
   }
 
   if (DOM.riskHhiVal) {

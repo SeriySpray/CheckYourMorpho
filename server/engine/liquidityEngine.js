@@ -77,14 +77,12 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
 
       // Crowded market detection:
       // 1. Peer supply alone >= market free liquidity (competing claims exceed cash)
-      // 2. Peer vaults dominate this market (peerSupplyUsd > supplyUsd)
-      // 3. Competing vaults materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
-      // 4. Materiality check: vault capital must exceed 1.0% of total vault assets
+      // 2. Competing vaults materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
+      // 3. Materiality check: vault capital must exceed 1.0% of total vault assets
       const hasSignificantDilution = (marketFreeLiquidityUsd === 0 && supplyUsd > 0) ||
         (canExitUsd > 0 && stressedExitUsd < canExitUsd * 0.70);
       const isCrowded = peerSupplyUsd > 0 &&
         (peerSupplyUsd >= marketFreeLiquidityUsd) &&
-        (peerSupplyUsd > supplyUsd) &&
         hasSignificantDilution;
 
       if (isCrowded && supplyUsd > minMaterialThresholdUsd) {

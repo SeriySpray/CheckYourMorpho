@@ -109,26 +109,43 @@ export function calculateMQI(vault, allocations = []) {
   let cleanMarketsCount = 0;
   const compromisedMarkets = [];
   const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
+  const rawCompromisedItems = [];
+  let totalCompromisedRawUsd = 0;
 
   for (const alloc of allocations) {
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
     const test = isMarketClean(alloc);
-    const isMaterial = supplyUsd > minMaterialThresholdUsd;
 
-    if (test.isClean || !isMaterial) {
+    if (test.isClean) {
       cleanSupplyUsd += supplyUsd;
-      if (test.isClean && supplyUsd >= 1) cleanMarketsCount++;
+      if (supplyUsd >= 1) cleanMarketsCount++;
     } else {
-      compromisedSupplyUsd += supplyUsd;
-      const weight = totalAssetsUsd > 0 ? supplyUsd / totalAssetsUsd : 0;
+      rawCompromisedItems.push({ alloc, supplyUsd, test });
+      totalCompromisedRawUsd += supplyUsd;
+    }
+  }
+
+  // Materiality evaluation:
+  // If individual allocation > 1% TVL OR cumulative compromised supply > 1% TVL,
+  // classify as compromised. Otherwise, treat isolated sub-1% dust as clean.
+  const isCumulativeCompromisedMaterial = totalCompromisedRawUsd > minMaterialThresholdUsd;
+
+  for (const item of rawCompromisedItems) {
+    const isMaterial = item.supplyUsd > minMaterialThresholdUsd || isCumulativeCompromisedMaterial;
+    if (isMaterial) {
+      compromisedSupplyUsd += item.supplyUsd;
+      const weight = totalAssetsUsd > 0 ? item.supplyUsd / totalAssetsUsd : 0;
       compromisedMarkets.push({
-        marketUniqueKey: alloc.market_unique_key,
-        collateralSymbol: alloc.collateral_asset_symbol || 'None',
-        loanSymbol: alloc.loan_asset_symbol || '',
-        supplyAssetsUsd: Math.round(supplyUsd * 100) / 100,
+        marketUniqueKey: item.alloc.market_unique_key,
+        collateralSymbol: item.alloc.collateral_asset_symbol || 'None',
+        loanSymbol: item.alloc.loan_asset_symbol || '',
+        supplyAssetsUsd: Math.round(item.supplyUsd * 100) / 100,
         weightPercent: Math.round(weight * 1000) / 10,
-        reasons: test.reasons
+        reasons: item.test.reasons
       });
+    } else {
+      cleanSupplyUsd += item.supplyUsd;
+      if (item.supplyUsd >= 1) cleanMarketsCount++;
     }
   }
 

@@ -104,20 +104,26 @@ export function calculateHHI(vault, allocations = []) {
 
   const hhi = Math.min(1.0, Math.max(0, Math.round(hhiSum * 1000) / 1000));
   const effectiveAssets = hhi > 0 ? Math.round((1 / hhi) * 10) / 10 : 0;
+  const activeCollateralExposure = totalAssetsUsd > 0 ? totalActiveCollateralUsd / totalAssetsUsd : 0;
 
-  // Determine concentration tier
+  // Determine concentration tier taking into account both internal collateral distribution
+  // and overall portfolio exposure (to prevent false critical alarms when vault is 70%+ cash)
   let tier = 'DIVERSIFIED';
   let tierLabel = 'High Diversification';
 
-  if (hhi > 0.50) {
+  if (hhi > 0.50 && topCollatShare >= 40) {
     tier = 'EXTREME';
     tierLabel = 'Critical Concentration';
-  } else if (hhi >= 0.25) {
+  } else if ((hhi > 0.50 && topCollatShare >= 20) || (hhi >= 0.25 && topCollatShare >= 20)) {
     tier = 'CONCENTRATED';
     tierLabel = 'High Concentration';
-  } else if (hhi >= 0.15) {
+  } else if (hhi >= 0.15 && topCollatShare >= 10) {
     tier = 'MODERATE';
     tierLabel = 'Moderate Concentration';
+  } else if (activeCollateralExposure < 0.30) {
+    // Very low active collateral exposure (e.g. >70% cash reserves)
+    tier = 'DIVERSIFIED';
+    tierLabel = 'Low Exposure (High Cash)';
   }
 
   const topCollateral = {
@@ -131,7 +137,8 @@ export function calculateHHI(vault, allocations = []) {
     effectiveAssets,
     tier,
     tierLabel,
-    isExtremeConcentration: hhi > 0.50,
+    activeCollateralExposure: Math.round(activeCollateralExposure * 1000) / 10,
+    isExtremeConcentration: tier === 'EXTREME',
     topCollateral,
     breakdown
   };
