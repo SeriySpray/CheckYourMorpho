@@ -305,7 +305,7 @@ function handleGetVaults(req, res, url) {
 
     if (search) {
       const escapedSearch = search.replace(/([%_\\])/g, '\\$1');
-      whereConditions.push('(name LIKE ? ESCAPE "\\" OR symbol LIKE ? ESCAPE "\\" OR address LIKE ? ESCAPE "\\" OR curator_name LIKE ? ESCAPE "\\" OR asset_symbol LIKE ? ESCAPE "\\")');
+      whereConditions.push('(name LIKE ? ESCAPE \'\\\' OR symbol LIKE ? ESCAPE \'\\\' OR address LIKE ? ESCAPE \'\\\' OR curator_name LIKE ? ESCAPE \'\\\' OR asset_symbol LIKE ? ESCAPE \'\\\')');
       const pattern = `%${escapedSearch}%`;
       params.push(pattern, pattern, pattern, pattern, pattern);
     }
