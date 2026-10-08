@@ -36,6 +36,17 @@ export function getDatabase() {
   return dbInstance;
 }
 
+export function checkpointDatabase() {
+  if (dbInstance) {
+    try {
+      dbInstance.exec('PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize;');
+      console.log('[Database] WAL checkpoint (TRUNCATE) and optimize completed.');
+    } catch (err) {
+      console.warn('[Database] WAL checkpoint warning:', err.message);
+    }
+  }
+}
+
 export function closeDatabase() {
   if (dbInstance) {
     dbInstance.close();

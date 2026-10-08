@@ -35,6 +35,9 @@ CREATE INDEX IF NOT EXISTS idx_vaults_curator ON vaults(curator_name);
 CREATE INDEX IF NOT EXISTS idx_vaults_is_listed ON vaults(is_listed);
 CREATE INDEX IF NOT EXISTS idx_vaults_total_assets ON vaults(total_assets_usd DESC);
 CREATE INDEX IF NOT EXISTS idx_vaults_liquidity ON vaults(liquidity_usd DESC);
+CREATE INDEX IF NOT EXISTS idx_vaults_listed_liq ON vaults(is_listed, liquidity_usd DESC);
+CREATE INDEX IF NOT EXISTS idx_vaults_listed_assets ON vaults(is_listed, total_assets_usd DESC);
+CREATE INDEX IF NOT EXISTS idx_vaults_listed_chain_liq ON vaults(is_listed, chain_id, liquidity_usd DESC);
 
 -- Markets table
 CREATE TABLE IF NOT EXISTS markets (

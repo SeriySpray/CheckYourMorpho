@@ -18,8 +18,13 @@ const db = getDatabase();
 const walStatus = db.prepare('PRAGMA journal_mode;').get()?.journal_mode || 'wal';
 console.log(`[Database] SQLite initialized in ${String(walStatus).toUpperCase()} mode.`);
 
-// Create native HTTP Server
+// Create native HTTP Server with Slowloris and socket exhaustion protection
 const server = http.createServer(handleRequest);
+server.requestTimeout = 15000;      // 15s total request timeout
+server.headersTimeout = 8000;       // 8s headers reception timeout
+server.keepAliveTimeout = 5000;     // 5s keep-alive timeout
+server.timeout = 20000;             // 20s socket idle timeout
+server.maxHeadersCount = 100;
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : CONFIG.server.port;
 const HOST = process.env.HOST || CONFIG.server.host;

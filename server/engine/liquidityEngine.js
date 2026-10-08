@@ -63,13 +63,13 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       const canExitUsd = Math.min(supplyUsd, marketFreeLiquidityUsd);
       loanMarketsExitUsd += canExitUsd;
 
-      // Stressed pro-rata exit capacity considering competing peer vaults
+      // Stressed pro-rata exit capacity considering competing peer vaults and direct market lenders
       const peerSupplyUsd = Number(alloc.peer_supply_usd) || 0;
-      const totalVaultCompetitionUsd = supplyUsd + peerSupplyUsd;
+      const totalCompetitionUsd = Math.max(supplyUsd + peerSupplyUsd, marketTotalSupplyUsd);
 
       let stressedExitUsd = canExitUsd;
-      if (totalVaultCompetitionUsd > 0 && marketFreeLiquidityUsd > 0) {
-        const proRataShare = supplyUsd / totalVaultCompetitionUsd;
+      if (totalCompetitionUsd > 0 && marketFreeLiquidityUsd > 0) {
+        const proRataShare = supplyUsd / totalCompetitionUsd;
         stressedExitUsd = Math.min(supplyUsd, marketFreeLiquidityUsd * proRataShare);
       } else if (marketFreeLiquidityUsd <= 0) {
         stressedExitUsd = 0;
@@ -112,7 +112,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd);
   const trueIdleCashUsd = allocations.length > 0
     ? idleAllocationsUsd + unallocatedCashUsd
-    : Math.min(totalAssetsUsd, Math.max(0, directLiquidityUsd));
+    : (directLiquidityUsd > 0 ? Math.min(totalAssetsUsd, directLiquidityUsd) : totalAssetsUsd);
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
   const totalEffectiveExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsExitUsd);

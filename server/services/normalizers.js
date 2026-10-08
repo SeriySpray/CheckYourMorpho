@@ -18,7 +18,7 @@ export function formatUnits(raw, decimals = 18) {
     
     const padded = cleanStr.padStart(decimals + 1, '0');
     const integerPart = padded.slice(0, padded.length - decimals);
-    const fractionPart = padded.slice(padded.length - decimals).slice(0, 8); // limit precision for float
+    const fractionPart = padded.slice(padded.length - decimals);
     
     const num = Number(`${integerPart}.${fractionPart}`);
     return isNegative ? -num : num;
@@ -226,7 +226,9 @@ export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTot
   }
 
   const market = cap.data?.market;
-  const loanPrice = market?.loanAsset?.priceUsd ?? vaultAssetPriceUsd ?? 1;
+  const mktPrice = Number(market?.loanAsset?.priceUsd);
+  const vPrice = Number(vaultAssetPriceUsd);
+  const loanPrice = (mktPrice > 0 ? mktPrice : (vPrice > 0 ? vPrice : 1));
 
   return {
     vault_address: vaultAddress.toLowerCase(),

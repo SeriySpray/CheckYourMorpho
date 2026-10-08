@@ -20,10 +20,11 @@
  * @returns {boolean}
  */
 export function isIdleReserveMarket(alloc) {
-  const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
   const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
   const colAddr = (alloc.collateral_asset_address || '').trim().toLowerCase();
-  return !symbol || symbol === 'NONE' || symbol === 'IDLE' || lltvNum === 0 || !colAddr || colAddr === '0x0000000000000000000000000000000000000000';
+  const isZeroAddress = !colAddr || colAddr === '0x' || colAddr === '0x0000000000000000000000000000000000000000';
+  const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
+  return (isZeroAddress || symbol === 'NONE' || symbol === 'IDLE') && lltvNum === 0;
 }
 
 /**
@@ -37,14 +38,15 @@ export function calculateHHI(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
   const directLiquidityUsd = Number(vault.liquidity_usd) || 0;
 
-  // Group allocations by unique collateral asset symbol
+  // Group allocations by unique collateral asset contract address (with symbol label)
   // Exclude NONE collateral, 0-LLTV markets, and empty collateral addresses (these are idle/cash holding markets)
   const collateralMap = new Map();
   let totalActiveCollateralUsd = 0;
   let idleAllocationsUsd = 0;
 
   for (const alloc of allocations) {
-    const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
+    const colAddr = (alloc.collateral_asset_address || '').trim().toLowerCase();
+    const symbol = (alloc.collateral_asset_symbol || 'UNKNOWN').trim().toUpperCase();
     const supplyUsd = Number(alloc.supply_assets_usd) || 0;
 
     // Check if this market has active collateral backing
@@ -53,8 +55,11 @@ export function calculateHHI(vault, allocations = []) {
     if (isIdle) {
       idleAllocationsUsd += supplyUsd;
     } else if (supplyUsd > 0) {
-      const current = collateralMap.get(symbol) || 0;
-      collateralMap.set(symbol, current + supplyUsd);
+      const key = colAddr || symbol;
+      if (!collateralMap.has(key)) {
+        collateralMap.set(key, { symbol, usd: 0 });
+      }
+      collateralMap.get(key).usd += supplyUsd;
       totalActiveCollateralUsd += supplyUsd;
     }
   }
@@ -88,7 +93,9 @@ export function calculateHHI(vault, allocations = []) {
   // HHI is calculated across the active collateral portfolio:
   // c_k = collateral_usd_k / totalActiveCollateralUsd
   // HHI = sum(c_k^2)
-  for (const [symbol, usd] of collateralMap.entries()) {
+  for (const item of collateralMap.values()) {
+    const usd = item.usd;
+    const symbol = item.symbol;
     const collateralShare = Math.max(0, Math.min(1.0, usd / totalActiveCollateralUsd));
     hhiSum += collateralShare * collateralShare;
 
@@ -105,9 +112,9 @@ export function calculateHHI(vault, allocations = []) {
   }
 
   // Top collateral asset by USD volume
-  const sortedCollateral = [...collateralMap.entries()].sort((a, b) => b[1] - a[1]);
-  const topCollatSymbol = sortedCollateral[0][0];
-  const topCollatUsd = sortedCollateral[0][1];
+  const sortedCollateral = [...collateralMap.values()].sort((a, b) => b.usd - a.usd);
+  const topCollatSymbol = sortedCollateral[0]?.symbol || 'Unknown';
+  const topCollatUsd = sortedCollateral[0]?.usd || 0;
   const topCollatShare = Math.max(0, Math.min(100, Math.round((topCollatUsd / totalAssetsUsd) * 1000) / 10));
 
   // Sort breakdown descending by share of vault capital

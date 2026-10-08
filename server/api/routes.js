@@ -47,6 +47,9 @@ function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(json),
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
@@ -189,6 +192,14 @@ async function handlePostSync(req, res, url) {
     return;
   }
 
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (contentLength > 1024) {
+    sendJson(res, 413, { error: 'Payload Too Large' });
+    req.destroy();
+    return;
+  }
+  req.resume();
+
   const awaitSync = url.searchParams.get('await') === '1' || url.searchParams.get('await') === 'true';
   const fetchHistory = url.searchParams.get('fetchHistory') === '1' || url.searchParams.get('fetchHistory') === 'true';
 
@@ -251,19 +262,20 @@ function handleGetVaults(req, res, url) {
     const parsedChainId = rawChainId ? parseInt(rawChainId, 10) : null;
     const chainId = (parsedChainId !== null && Number.isFinite(parsedChainId)) ? parsedChainId : null;
     const listedOnly = url.searchParams.get('listedOnly') === '1' || url.searchParams.get('listedOnly') === 'true';
-    const search = (url.searchParams.get('search') || '').trim();
+    const rawSearch = (url.searchParams.get('search') || '').trim();
+    const search = rawSearch.slice(0, 64);
     const sortBy = url.searchParams.get('sortBy') || 'liquidity_usd';
     const sortOrder = (url.searchParams.get('sortOrder') || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    // Whitelist sort columns
-    const allowedSortColumns = {
-      liquidity_usd: 'liquidity_usd',
-      total_assets_usd: 'total_assets_usd',
-      net_apy: 'net_apy',
-      apy: 'apy',
-      name: 'name'
-    };
-    const orderColumn = allowedSortColumns[sortBy] || 'liquidity_usd';
+    // Whitelist sort columns via Set (prevents prototype property injection like sortBy=constructor)
+    const ALLOWED_SORT_COLUMNS = new Set([
+      'liquidity_usd',
+      'total_assets_usd',
+      'net_apy',
+      'apy',
+      'name'
+    ]);
+    const orderColumn = ALLOWED_SORT_COLUMNS.has(sortBy) ? sortBy : 'liquidity_usd';
 
     // Build filter query
     const whereConditions = [];
@@ -321,28 +333,26 @@ function handleGetVaults(req, res, url) {
 
     const rows = db.prepare(selectSql).all(...params, limit, offset);
 
-    // Batch load allocations for returned vaults to compute MQI, HHI, and Crowded Exit metrics
+    // Batch load allocations using json_each(?) to avoid parameter limits and VDBE bytecode churn
     const vaultAddresses = rows.map(r => r.address);
     const allocMap = new Map();
     if (vaultAddresses.length > 0) {
-      const placeholders = vaultAddresses.map(() => '?').join(',');
       const allocRows = db.prepare(`
         SELECT va.*, m.* 
         FROM vault_allocations va 
         JOIN markets m ON va.market_unique_key = m.unique_key 
-        WHERE va.vault_address IN (${placeholders})
-      `).all(...vaultAddresses);
+        WHERE va.vault_address IN (SELECT value FROM json_each(?))
+      `).all(JSON.stringify(vaultAddresses));
 
       // Collect unique market keys to batch aggregate peer supplies
       const marketKeys = Array.from(new Set(allocRows.map(a => a.market_unique_key)));
       if (marketKeys.length > 0) {
-        const mPlaceholders = marketKeys.map(() => '?').join(',');
         const peerTotals = db.prepare(`
           SELECT market_unique_key, vault_address, supply_assets_usd
           FROM vault_allocations
-          WHERE market_unique_key IN (${mPlaceholders})
+          WHERE market_unique_key IN (SELECT value FROM json_each(?))
             AND supply_assets_usd > 1000
-        `).all(...marketKeys);
+        `).all(JSON.stringify(marketKeys));
 
         const marketTotalSupply = new Map();
         for (const pt of peerTotals) {
@@ -416,7 +426,8 @@ function handleGetVaults(req, res, url) {
       vaults
     });
   } catch (err) {
-    sendJson(res, 500, { error: 'Failed to fetch vaults list', details: err.message });
+    console.error('[API] Failed to fetch vaults list:', err);
+    sendJson(res, 500, { error: 'Failed to fetch vaults list' });
   }
 }
 
@@ -427,8 +438,8 @@ function handleGetVaults(req, res, url) {
  */
 function handleGetVaultByAddress(req, res, address) {
   try {
-    const cacheKey = address.toLowerCase();
-    const cached = vaultAuditCache.get(cacheKey);
+    const cleanAddress = address.toLowerCase();
+    const cached = vaultAuditCache.get(cleanAddress);
     if (cached && (Date.now() - cached.timestamp < AUDIT_CACHE_TTL_MS)) {
       sendJson(res, 200, cached.data);
       return;
@@ -436,13 +447,14 @@ function handleGetVaultByAddress(req, res, address) {
 
     const db = getDatabase();
 
-    const vault = db.prepare('SELECT * FROM vaults WHERE LOWER(address) = LOWER(?)').get(address);
+    // Direct index seek on primary key
+    const vault = db.prepare('SELECT * FROM vaults WHERE address = ?').get(cleanAddress);
     if (!vault) {
       sendJson(res, 404, { error: `Vault with address '${address}' not found` });
       return;
     }
 
-    // Active allocations joined with market data
+    // Active allocations joined with market data (uses index seek on vault_address)
     const allocations = db.prepare(`
       SELECT 
         va.vault_address,
@@ -483,15 +495,14 @@ function handleGetVaultByAddress(req, res, address) {
         m.warnings_json
       FROM vault_allocations va
       JOIN markets m ON va.market_unique_key = m.unique_key
-      WHERE LOWER(va.vault_address) = LOWER(?)
+      WHERE va.vault_address = ?
       ORDER BY va.supply_assets_usd DESC
-    `).all(vault.address);
+    `).all(cleanAddress);
 
     // Aggregate competing peer vaults across shared markets for Crowded Exit analysis
     const marketKeys = allocations.map(a => a.market_unique_key);
     const peerMap = new Map();
     if (marketKeys.length > 0) {
-      const placeholders = marketKeys.map(() => '?').join(',');
       const peerRows = db.prepare(`
         SELECT 
           va.market_unique_key,
@@ -500,11 +511,11 @@ function handleGetVaultByAddress(req, res, address) {
           va.supply_assets_usd
         FROM vault_allocations va
         JOIN vaults v ON va.vault_address = v.address
-        WHERE va.market_unique_key IN (${placeholders})
-          AND LOWER(va.vault_address) != LOWER(?)
+        WHERE va.market_unique_key IN (SELECT value FROM json_each(?))
+          AND va.vault_address != ?
           AND va.supply_assets_usd > 1000
         ORDER BY va.supply_assets_usd DESC
-      `).all(...marketKeys, vault.address);
+      `).all(JSON.stringify(marketKeys), cleanAddress);
 
       for (const row of peerRows) {
         const k = row.market_unique_key.toLowerCase();
@@ -595,10 +606,11 @@ function handleGetVaultByAddress(req, res, address) {
       const oldestKey = vaultAuditCache.keys().next().value;
       if (oldestKey) vaultAuditCache.delete(oldestKey);
     }
-    vaultAuditCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });
+    vaultAuditCache.set(cleanAddress, { timestamp: Date.now(), data: responsePayload });
     sendJson(res, 200, responsePayload);
   } catch (err) {
-    sendJson(res, 500, { error: 'Failed to compute vault audit report', details: err.message });
+    console.error('[API] Failed to compute vault audit report:', err);
+    sendJson(res, 500, { error: 'Failed to compute vault audit report' });
   }
 }
 
@@ -639,9 +651,14 @@ export function handleRequest(req, res) {
     return;
   }
 
-  const vaultMatch = pathname.match(/^\/api\/vaults\/([0-9a-zA-Z]+)$/);
+  const vaultMatch = pathname.match(/^\/api\/vaults\/([^/]+)$/);
   if (vaultMatch && req.method === 'GET') {
-    handleGetVaultByAddress(req, res, vaultMatch[1]);
+    const address = vaultMatch[1].trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      sendJson(res, 400, { error: 'Invalid Ethereum address format (must be 0x followed by 40 hex characters)' });
+      return;
+    }
+    handleGetVaultByAddress(req, res, address.toLowerCase());
     return;
   }
 

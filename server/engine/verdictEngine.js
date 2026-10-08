@@ -96,7 +96,18 @@ export function generateVaultVerdict(vault, allocations = []) {
     }
   }
 
-  // 5. Plaintext Objective Summary
+  // 5. Negative Net APY (Capital Decay / Yield Deficit)
+  const netApy = Number(vault.net_apy) || 0;
+  if (netApy < 0) {
+    const netApyPct = (netApy * 100).toFixed(2);
+    redFlags.push({
+      level: netApy < -0.05 ? 'CRITICAL' : 'HIGH',
+      title: 'Negative Net APY (Capital Decay)',
+      message: `Vault has a negative net yield of ${netApyPct}%, indicating active loss of depositor principal due to realized bad debt or excessive curator fees.`
+    });
+  }
+
+  // 6. Plaintext Objective Summary
   let exitSummary = `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%`;
   if (liquidity.isCrowded) {
     exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;

@@ -141,6 +141,7 @@ function startLivePolling() {
   if (livePollingTimer) clearInterval(livePollingTimer);
 
   livePollingTimer = setInterval(async () => {
+    if (document.hidden) return;
     if (isPollingActive) return;
     isPollingActive = true;
 
@@ -606,7 +607,16 @@ function getPinnedAddresses() {
     const raw = localStorage.getItem(PINNED_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(a => String(a).toLowerCase()) : [];
+    const list = Array.isArray(parsed) ? parsed.map(a => String(a).toLowerCase()) : [];
+    if (typeof allVaults !== 'undefined' && Array.isArray(allVaults) && allVaults.length > 0) {
+      const validSet = new Set(allVaults.map(v => (v.address || '').toLowerCase()));
+      const pruned = list.filter(addr => validSet.has(addr));
+      if (pruned.length !== list.length) {
+        savePinnedAddresses(pruned);
+      }
+      return pruned;
+    }
+    return list;
   } catch {
     return [];
   }
@@ -1675,8 +1685,9 @@ function populateAuditModal(data, isQuietRefresh = false) {
     } else {
       verdict.redFlags.forEach(flag => {
         const div = document.createElement('div');
-        div.className = `flag-item ${flag.level.toLowerCase()}`;
-        div.innerHTML = `<strong>${escapeHtml(flag.title)}:</strong> ${escapeHtml(flag.message)}`;
+        const level = (flag.level || 'info').toLowerCase();
+        div.className = `flag-item ${level}`;
+        div.innerHTML = `<strong>${escapeHtml(flag.title || '')}:</strong> ${escapeHtml(flag.message || '')}`;
         DOM.riskFlagsList.appendChild(div);
       });
     }

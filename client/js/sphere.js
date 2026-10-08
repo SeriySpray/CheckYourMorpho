@@ -300,36 +300,44 @@ export class ParticleSphere {
     this.animFrameId = null;
     this.isMobile = window.innerWidth <= 768;
 
-    // Initialize WebGL 2 pipeline only on desktop/tablet (> 768px)
+    this.initWebGL();
+    this.initEvents();
+    this.resize();
+    this.generateParticles();
+
     if (!this.isMobile) {
-      this.initWebGL();
-      this.initEvents();
-      this.resize();
-      this.generateParticles();
       this.animate();
-    } else {
-      this.resize();
-      window.addEventListener('resize', () => {
-        const wasMobile = this.isMobile;
-        this.isMobile = window.innerWidth <= 768;
-        if (wasMobile && !this.isMobile) {
-          if (!this.gl) {
-            this.initWebGL();
-            this.initEvents();
-            this.generateParticles();
-          }
-          this.resize();
-          if (!this.animFrameId) {
-            this.animate();
-          }
-        } else if (!wasMobile && this.isMobile) {
-          if (this.animFrameId) {
-            cancelAnimationFrame(this.animFrameId);
-            this.animFrameId = null;
-          }
-        }
-      });
     }
+
+    // Unified responsive breakpoint listener
+    window.addEventListener('resize', () => {
+      const wasMobile = this.isMobile;
+      this.isMobile = window.innerWidth <= 768;
+      if (wasMobile && !this.isMobile) {
+        this.resize();
+        if (!this.animFrameId) {
+          this.animate();
+        }
+      } else if (!wasMobile && this.isMobile) {
+        if (this.animFrameId) {
+          cancelAnimationFrame(this.animFrameId);
+          this.animFrameId = null;
+        }
+      }
+    });
+
+    // Page Visibility API: pause animation loop when tab is backgrounded
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (this.animFrameId) {
+          cancelAnimationFrame(this.animFrameId);
+          this.animFrameId = null;
+        }
+      } else if (!this.isMobile && !this.animFrameId) {
+        this.lastTime = performance.now();
+        this.animate();
+      }
+    });
   }
 
   initWebGL() {
@@ -337,7 +345,7 @@ export class ParticleSphere {
       alpha: true,
       antialias: false,
       depth: false,
-      powerPreference: 'high-performance'
+      powerPreference: 'default'
     });
 
     if (!gl) {
@@ -1118,7 +1126,20 @@ export class ParticleSphere {
   destroy() {
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
     }
     clearTimeout(this.mouseMoveTimeout);
+
+    if (this.gl) {
+      try {
+        if (this.posBuffer) this.gl.deleteBuffer(this.posBuffer);
+        if (this.tvlBuffer) this.gl.deleteBuffer(this.tvlBuffer);
+        if (this.isVaultBuffer) this.gl.deleteBuffer(this.isVaultBuffer);
+        if (this.vao) this.gl.deleteVertexArray(this.vao);
+        if (this.program) this.gl.deleteProgram(this.program);
+      } catch (e) {
+        console.warn('[Sphere] WebGL cleanup error:', e);
+      }
+    }
   }
 }

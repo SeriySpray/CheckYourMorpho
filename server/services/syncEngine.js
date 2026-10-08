@@ -1,4 +1,4 @@
-import { getDatabase } from '../db/database.js';
+import { getDatabase, checkpointDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
 import {
@@ -151,8 +151,9 @@ export async function syncAllVaults(options = {}) {
     let v2Count = 0;
     let marketsCount = 0;
     let allocationsCount = 0;
+    const fetchedListedAddresses = new Set();
 
-    db.exec('BEGIN TRANSACTION;');
+    db.exec('BEGIN IMMEDIATE TRANSACTION;');
     try {
       for (const rawV of rawVaultsV1) {
         const v = normalizeVault(rawV, curatorMap);
@@ -163,6 +164,9 @@ export async function syncAllVaults(options = {}) {
           'v1', v.is_listed, v.metadata_updated_at
         );
         v1Count++;
+        if (v.is_listed) {
+          fetchedListedAddresses.add(v.address.toLowerCase());
+        }
 
         // Purge previous allocations for this vault to prevent ghost/stale allocations
         deleteVaultAllocations.run(v.address);
@@ -206,7 +210,7 @@ export async function syncAllVaults(options = {}) {
     const rawVaultsV2 = await fetchAllVaultV2s(options.chainIds ?? null);
     console.log(`[SyncEngine] Fetched ${rawVaultsV2.length} V2 vaults from Morpho GraphQL.`);
 
-    db.exec('BEGIN TRANSACTION;');
+    db.exec('BEGIN IMMEDIATE TRANSACTION;');
     try {
       for (const rawV2 of rawVaultsV2) {
         const v = normalizeVaultV2(rawV2, curatorMap);
@@ -217,6 +221,9 @@ export async function syncAllVaults(options = {}) {
           'v2', v.is_listed, v.metadata_updated_at
         );
         v2Count++;
+        if (v.is_listed) {
+          fetchedListedAddresses.add(v.address.toLowerCase());
+        }
 
         // Purge previous allocations for this vault to prevent ghost/stale allocations
         deleteVaultAllocations.run(v.address);
@@ -260,13 +267,24 @@ export async function syncAllVaults(options = {}) {
 
     console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
 
-    // --- Clean up unlisted vaults & orphan data from database ---
-    console.log('[SyncEngine] Purging unlisted vaults and orphan data from database...');
+    // --- Clean up unlisted / delisted vaults from database ---
+    console.log('[SyncEngine] Purging unlisted and delisted vaults...');
+    if (fetchedListedAddresses.size > 0) {
+      const activeAddressesJson = JSON.stringify(Array.from(fetchedListedAddresses));
+      db.prepare(`
+        UPDATE vaults 
+        SET is_listed = 0 
+        WHERE LOWER(address) NOT IN (SELECT value FROM json_each(?))
+      `).run(activeAddressesJson);
+    }
+
     db.exec(`
       DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL;
       DELETE FROM vault_allocations WHERE vault_address NOT IN (SELECT address FROM vaults);
-      DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
     `);
+
+    // Perform WAL maintenance checkpoint and optimizer
+    checkpointDatabase();
 
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[SyncEngine] Synchronization completed in ${durationSec}s. Summary:`);
