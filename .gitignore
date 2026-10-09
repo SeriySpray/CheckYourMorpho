@@ -29,4 +29,5 @@ nginx_checkyourmorpho.conf
 *.conf
 
 # Development documentation, design notes, and reference photos
-docs/
+docs/*
+!docs/time_audit.html
