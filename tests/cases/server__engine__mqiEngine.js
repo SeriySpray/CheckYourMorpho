@@ -71,11 +71,11 @@ export default {
       assert.equal(f(alloc({ warnings_json: [{ type: 'not_whitelisted', level: 'YELLOW' }] })).isClean, false)],
     ['зіпсований JSON попереджень не кидає виняток і ринок чистий', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ warnings_json: '{bad' })).isClean, true)],
-    ['ДЕФЕКТ: warnings_json "null" не має кидати виняток, ринок чистий', ({ isMarketClean: f }) =>
+    ['warnings_json "null" не має кидати виняток, ринок чистий', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ warnings_json: 'null' })).isClean, true)],
-    ['ДЕФЕКТ: warnings_json "{}" не має кидати виняток, ринок чистий', ({ isMarketClean: f }) =>
+    ['warnings_json "{}" не має кидати виняток, ринок чистий', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ warnings_json: '{}' })).isClean, true)],
-    ['ДЕФЕКТ: null-елемент у масиві попереджень не має кидати виняток', ({ isMarketClean: f }) =>
+    ['null-елемент у масиві попереджень не має кидати виняток', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ warnings_json: '[null]' })).isClean, true)],
     ['усі чотири порушення -> чотири причини', ({ isMarketClean: f }) => {
       const r = f(alloc({ is_listed: 0, bad_debt_usd: 1e6, oracle_address: '', warnings_json: JSON.stringify([{ type: 'not_whitelisted' }]) }));

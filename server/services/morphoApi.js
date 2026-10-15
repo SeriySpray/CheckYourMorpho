@@ -114,7 +114,8 @@ export async function fetchPaginatedVaults(query, rootKey, where, pageSize, isCo
     if (!Number.isFinite(countTotal)) {
       throw new Error(`Missing countTotal in ${rootKey} response`);
     }
-    if (items.length < pageSize) {
+    // Stop on countTotal too: an API that ignores skip would otherwise return full pages forever
+    if (items.length < pageSize || results.length >= countTotal) {
       if (results.length < countTotal) {
         throw new Error(`Incomplete ${rootKey} fetch: got ${results.length} of ${countTotal}`);
       }

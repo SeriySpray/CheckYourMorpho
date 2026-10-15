@@ -590,7 +590,7 @@ export default {
       assert.equal(list(mod, '?offset=-5').offset, 0); assert.equal(list(mod, '?offset=abc').offset, 0);
       assert.deepEqual(ids(list(mod, '?offset=-5')), [4, 1, 2, 3]);
     })],
-    ['ДЕФЕКТ: дуже великий offset -> не 5xx (порожня сторінка або 400)', async mod => sandbox(async db => {
+    ['дуже великий offset -> не 5xx (порожня сторінка або 400)', async mod => sandbox(async db => {
       seedCatalog(db);
       for (const o of ['99999999999999999999', '9223372036854775807']) {
         const r = call(mod.handleRequest, 'GET', '/api/vaults?offset=' + o);

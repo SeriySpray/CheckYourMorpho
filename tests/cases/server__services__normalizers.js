@@ -35,7 +35,7 @@ export default {
     ['велике число (>= 1e15) йде через BigInt: 2e21 при 18 = 2000, 2^60 при 18 = 1.152921504606846976', ({ formatUnits: f }) => {
       assert.equal(f(2e21, 18), 2000); assert.equal(f(1e15, 6), 1e9); assert.equal(f(2 ** 60, 18), 1.152921504606846976);
     }],
-    ['[ДЕФЕКТ] нечисловий рядок або об\'єкт дає 0, а не NaN ("safe formatting")', ({ formatUnits: f }) => {
+    ['нечисловий рядок або об\'єкт дає 0, а не NaN ("safe formatting")', ({ formatUnits: f }) => {
       assert.equal(f('abc', 6), 0); assert.equal(f('12abc', 6), 0); assert.equal(f({}, 6), 0);
     }],
   ],
@@ -47,7 +47,7 @@ export default {
       assert.equal(f('861234500000000000'), 86.12); assert.equal(f('1000000000000000000'), 100);
     }],
     ['BigInt-вхід 0.915e18 = 91.5', ({ parseLltv: f }) => assert.equal(f(915000000000000000n), 91.5)],
-    ['[ДЕФЕКТ] нечисловий LLTV дає 0, а не NaN', ({ parseLltv: f }) => assert.equal(f('abc'), 0)],
+    ['нечисловий LLTV дає 0, а не NaN', ({ parseLltv: f }) => assert.equal(f('abc'), 0)],
   ],
   marketKey: [
     ['формат chainId:marketId у нижньому регістрі', ({ marketKey: f }) => assert.equal(f(1, '0xABC'), '1:0xabc')],
@@ -130,7 +130,7 @@ export default {
     }],
     ['net_apy повертається до apy, коли netApy відсутній', ({ normalizeVaultV2: f }) =>
       assert.equal(f({ apy: 0.07 }).net_apy, 0.07)],
-    ['[ДЕФЕКТ] некоректний штраф адаптера не робить ліквідність NaN', ({ normalizeVaultV2: f }) => {
+    ['некоректний штраф адаптера не робить ліквідність NaN', ({ normalizeVaultV2: f }) => {
       const r = f({ totalAssetsUsd: 1000, liquidityUsd: 100, adapters: { items: [{ forceDeallocatePenalty: 'abc' }] } });
       assert.ok(Number.isFinite(r.liquidity_usd), `liquidity_usd = ${r.liquidity_usd}`);
     }],

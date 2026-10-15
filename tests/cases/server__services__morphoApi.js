@@ -159,16 +159,16 @@ export default {
         assert.deepEqual(skips, [0, 2]); assert.equal(r.length, 3);
       } finally { CONFIG.api.pageThrottleMs = saved; }
     }],
-    ['кількість кратна розміру сторінки (4 по 2): skip 0, 2, 4 і рівно 4 елементи в порядку', async ({ fetchPaginatedVaults: f }) => {
+    ['кількість кратна розміру сторінки (4 по 2): skip 0 і 2 (зайвої порожньої сторінки немає), рівно 4 елементи в порядку', async ({ fetchPaginatedVaults: f }) => {
       const skips = [], all = [1, 2, 3, 4].map(i => ({ i }));
       const impl = async (_u, init) => {
         const { skip, first } = JSON.parse(init.body).variables; skips.push(skip);
         return page('vs', all.slice(skip, skip + first), 4);
       };
       const r = await fastTimers({}, () => withFetch(impl, () => f('q', 'vs', {}, 2, () => true)));
-      assert.deepEqual(skips, [0, 2, 4]); assert.deepEqual(r, all);
+      assert.deepEqual(skips, [0, 2]); assert.deepEqual(r, all);
     }],
-    ['[ДЕФЕКТ] API ігнорує skip і віддає повні сторінки: пагінація зупиняється на countTotal, а не зациклюється', async ({ fetchPaginatedVaults: f }) => {
+    ['API ігнорує skip і віддає повні сторінки: пагінація зупиняється на countTotal, а не зациклюється', async ({ fetchPaginatedVaults: f }) => {
       let calls = 0;
       const impl = async () => {
         if (++calls > 5) throw new Error(`зациклення пагінації: ${calls} запитів при countTotal = 2`);

@@ -13,6 +13,7 @@ export function formatUnits(raw, decimals = 18) {
       raw = BigInt(Math.trunc(raw));
     }
     const str = String(raw).trim().split('.')[0];
+    if (!/^-?\d+$/.test(str)) return 0; // not an integer string: "safe" formatting yields 0, never NaN
     if (str === '0') return 0;
     
     // For small decimals and standard numbers

@@ -317,7 +317,8 @@ export function handleGetVaults(req, res, url) {
     const rawLimit = parseInt(url.searchParams.get('limit') || '500', 10);
     const limit = Number.isFinite(rawLimit) ? Math.min(1000, Math.max(1, rawLimit)) : 500;
     const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
-    const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+    // SQLite binds only 64-bit integers: an absurdly large offset is clamped (it yields an empty page)
+    const offset = Number.isFinite(rawOffset) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, rawOffset)) : 0;
     const rawChainId = url.searchParams.get('chainId');
     const parsedChainId = rawChainId ? parseInt(rawChainId, 10) : null;
     const chainId = (parsedChainId !== null && Number.isFinite(parsedChainId) && parsedChainId > 0) ? parsedChainId : null;

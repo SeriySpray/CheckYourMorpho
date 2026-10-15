@@ -75,9 +75,9 @@ export function isMarketClean(market) {
 
   // Liquidity warnings (low_liquidity, sustained_low_liquidity) describe exit risk, not market integrity,
   // and are covered by the liquidity engine. Only RED integrity warnings or non-whitelisted markets compromise.
-  const hasCriticalWarning = warningsJson.some(w => {
-    const type = (w.type || '').toLowerCase();
-    const level = (w.level || '').toUpperCase();
+  const hasCriticalWarning = (Array.isArray(warningsJson) ? warningsJson : []).some(w => {
+    const type = (w?.type || '').toLowerCase();
+    const level = (w?.level || '').toUpperCase();
     return type === 'not_whitelisted' || (level === 'RED' && !type.includes('liquidity'));
   });
 
