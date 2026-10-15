@@ -9,6 +9,9 @@
   },
   "scripts": {
     "sync": "node server/services/syncEngine.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test": "node tests/runner.js --all",
+    "tests": "node tests/web.js",
+    "tests:tui": "node tests/runner.js"
   }
 }

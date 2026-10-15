@@ -35,7 +35,7 @@ export function onSyncSuccess(listener) {
 }
 
 /** BigInt() that treats malformed input as 0 instead of aborting the whole sync. */
-function toBigInt(value) {
+export function toBigInt(value) {
   try {
     return BigInt(value || '0');
   } catch {
@@ -48,7 +48,7 @@ function toBigInt(value) {
  * Look through each such adapter: split its assets across the underlying vault's markets pro rata,
  * and merge the result with the vault's direct market caps.
  */
-function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
+export function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
   const merged = new Map();
   const add = (market, allocation, absoluteCap, via = null) => {
     const key = (market.marketId || '').toLowerCase();

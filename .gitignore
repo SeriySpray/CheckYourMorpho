@@ -29,6 +29,7 @@ deploy_oracle.bat
 deploy_oracle.sh
 deploy_*.bat
 deploy_*.sh
+tests_oracle.bat
 enable_ssl.sh
 nginx_checkyourmorpho.conf
 *.conf

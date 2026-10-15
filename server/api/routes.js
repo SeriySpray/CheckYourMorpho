@@ -40,7 +40,7 @@ onSyncSuccess(() => {
  * underlying V1 vault's own position; when the audited vault is such a V2 vault, its slice is removed
  * from that underlying vault's position so it does not appear as its own competitor.
  */
-function summarizePeers(marketRows, vaultAddress, alloc) {
+export function summarizePeers(marketRows, vaultAddress, alloc) {
   let total = 0;
   const peers = [];
   for (const r of marketRows || []) {
@@ -61,14 +61,14 @@ function summarizePeers(marketRows, vaultAddress, alloc) {
  * A vault the API reports with 0 USD total but with priced allocations would otherwise score as perfectly
  * clean (MQI 100%, exit 100%); fall back to the sum of its allocations.
  */
-function withEffectiveTotal(vault, allocations) {
+export function withEffectiveTotal(vault, allocations) {
   if ((Number(vault.total_assets_usd) || 0) > 0) return vault;
   const sum = allocations.reduce((acc, a) => acc + (Number(a.supply_assets_usd) || 0), 0);
   return sum > 0 ? { ...vault, total_assets_usd: sum } : vault;
 }
 
 /** Constant-time comparison of a presented secret against the expected one. */
-function safeEqual(given, expected) {
+export function safeEqual(given, expected) {
   const a = crypto.createHash('sha256').update(String(given)).digest();
   const b = crypto.createHash('sha256').update(String(expected)).digest();
   return crypto.timingSafeEqual(a, b);
@@ -91,7 +91,7 @@ const MIME_TYPES = {
 /**
  * Sends a standardized JSON response.
  */
-function sendJson(res, statusCode, data, req = null) {
+export function sendJson(res, statusCode, data, req = null) {
   const json = JSON.stringify(data);
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -113,7 +113,7 @@ function sendJson(res, statusCode, data, req = null) {
 /**
  * Handles CORS preflight requests.
  */
-function handleCors(req, res) {
+export function handleCors(req, res) {
   res.writeHead(204, {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
@@ -126,7 +126,7 @@ function handleCors(req, res) {
 /**
  * Serves static assets from the client directory safely.
  */
-function serveStaticFile(req, res, pathname) {
+export function serveStaticFile(req, res, pathname) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     sendJson(res, 405, { error: 'Method Not Allowed' });
     return;
@@ -186,7 +186,7 @@ function serveStaticFile(req, res, pathname) {
   });
 }
 
-function serveFile(filePath, req, res) {
+export function serveFile(filePath, req, res) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -216,7 +216,7 @@ function serveFile(filePath, req, res) {
 /**
  * Handler for GET /api/status
  */
-function handleGetStatus(req, res) {
+export function handleGetStatus(req, res) {
   try {
     const db = getDatabase();
     const syncRow = db.prepare("SELECT value, updated_at FROM sync_state WHERE key = 'last_sync_all'").get();
@@ -239,7 +239,7 @@ function handleGetStatus(req, res) {
         marketsCount,
         allocationsCount
       }
-    });
+    }, req);
   } catch (err) {
     console.error('[API] Failed to retrieve system status:', err);
     sendJson(res, 500, { error: 'Failed to retrieve system status' });
@@ -249,7 +249,7 @@ function handleGetStatus(req, res) {
 /**
  * Handler for POST /api/sync
  */
-async function handlePostSync(req, res, url) {
+export async function handlePostSync(req, res, url) {
   // Manual sync is an operator action: disabled unless SYNC_TOKEN is configured, and always token-protected
   const expectedToken = process.env.SYNC_TOKEN || '';
   const givenToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -309,7 +309,7 @@ async function handlePostSync(req, res, url) {
 /**
  * Handler for GET /api/vaults
  */
-function handleGetVaults(req, res, url) {
+export function handleGetVaults(req, res, url) {
   try {
     const db = getDatabase();
 
@@ -500,12 +500,12 @@ function handleGetVaults(req, res, url) {
  * Employs Stale-While-Revalidate: returns local SQLite audit metrics immediately (<1ms)
  * and dispatches lightweight non-blocking revalidation for the latest 10 transactions.
  */
-function handleGetVaultByAddress(req, res, address) {
+export function handleGetVaultByAddress(req, res, address) {
   try {
     const cleanAddress = address.toLowerCase();
     const cached = vaultAuditCache.get(cleanAddress);
     if (cached && (Date.now() - cached.timestamp < AUDIT_CACHE_TTL_MS)) {
-      sendJson(res, 200, cached.data);
+      sendJson(res, 200, cached.data, req);
       return;
     }
 
@@ -651,7 +651,7 @@ function handleGetVaultByAddress(req, res, address) {
       if (oldestKey) vaultAuditCache.delete(oldestKey);
     }
     vaultAuditCache.set(cleanAddress, { timestamp: Date.now(), data: responsePayload });
-    sendJson(res, 200, responsePayload);
+    sendJson(res, 200, responsePayload, req);
   } catch (err) {
     console.error('[API] Failed to compute vault audit report:', err);
     sendJson(res, 500, { error: 'Failed to compute vault audit report' });

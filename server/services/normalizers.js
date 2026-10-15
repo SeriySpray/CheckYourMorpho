@@ -93,7 +93,7 @@ export function normalizeVault(raw, curatorMap = null) {
 /**
  * Highest forceDeallocate penalty across a V2 vault's adapters, as a fraction (1e18 = 100%).
  */
-function maxForceDeallocatePenalty(rawV2) {
+export function maxForceDeallocatePenalty(rawV2) {
   const penalties = (rawV2.adapters?.items || []).map(a => formatUnits(a.forceDeallocatePenalty, 18));
   return Math.min(1, Math.max(0, ...penalties));
 }

@@ -90,7 +90,7 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
 /**
  * Helper to fetch paginated vault items
  */
-async function fetchPaginatedVaults(query, rootKey, where, pageSize, isComplete) {
+export async function fetchPaginatedVaults(query, rootKey, where, pageSize, isComplete) {
   let skip = 0;
   let results = [];
   while (true) {

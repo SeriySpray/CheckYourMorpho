@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тести CheckYourMorpho</title>
+<style>
+:root {
+  --color-paper: oklch(98% 0.004 95);
+  --color-surface: oklch(100% 0 0);
+  --color-ink: oklch(24% 0.01 95);
+  --color-muted: oklch(50% 0.01 95);
+  --color-line: oklch(90% 0.006 95);
+  --color-ok: oklch(48% 0.12 150);
+  --color-fail: oklch(52% 0.17 28);
+  --color-todo: oklch(58% 0.11 75);
+  --color-focus: oklch(52% 0.15 255);
+  --color-code: oklch(96% 0.006 95);
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px;
+  --radius: 4px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: oklch(20% 0.008 95);
+    --color-surface: oklch(24% 0.008 95);
+    --color-ink: oklch(94% 0.006 95);
+    --color-muted: oklch(70% 0.008 95);
+    --color-line: oklch(33% 0.008 95);
+    --color-ok: oklch(76% 0.14 150);
+    --color-fail: oklch(72% 0.16 28);
+    --color-todo: oklch(78% 0.12 80);
+    --color-focus: oklch(76% 0.13 255);
+    --color-code: oklch(18% 0.008 95);
+  }
+}
+* { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+body { margin: 0; background: var(--color-paper); color: var(--color-ink); font: 15px/1.5 var(--font-ui); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); padding: var(--space-md); border-bottom: 1px solid var(--color-line); }
+h1 { font-size: 17px; font-weight: 600; margin: 0 auto 0 0; }
+.totals { display: flex; gap: var(--space-md); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.totals b { color: var(--color-ink); font-weight: 600; }
+.btn { border: 1px solid var(--color-line); background: var(--color-surface); padding: 6px 12px; border-radius: var(--radius); white-space: nowrap; }
+.btn:hover { border-color: var(--color-muted); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--color-ink); color: var(--color-paper); border-color: var(--color-ink); }
+
+main { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); min-height: calc(100vh - 62px); }
+nav { border-right: 1px solid var(--color-line); padding: var(--space-sm) 0; overflow-y: auto; }
+details > summary { list-style: none; cursor: pointer; padding: 6px var(--space-md); display: flex; gap: var(--space-sm); align-items: baseline; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "+"; width: 1ch; color: var(--color-muted); font-family: var(--font-mono); }
+details[open] > summary::before { content: "-"; }
+summary .path { overflow-wrap: anywhere; min-width: 0; }
+summary .count { margin-left: auto; color: var(--color-muted); font-size: 13px; }
+.fn { display: flex; width: 100%; gap: var(--space-sm); align-items: baseline; border: 0; background: none; text-align: left; padding: 4px var(--space-md) 4px 40px; }
+.fn:hover { background: var(--color-code); }
+.fn[aria-current="true"] { background: var(--color-code); font-weight: 600; }
+.fn .name { font-family: var(--font-mono); font-size: 13.5px; overflow-wrap: anywhere; min-width: 0; }
+.dot { width: 8px; height: 8px; flex: none; align-self: center; border-radius: 50%; background: var(--color-line); }
+.dot.ok { background: var(--color-ok); } .dot.fail { background: var(--color-fail); } .dot.todo { background: var(--color-todo); }
+.stale { padding: 0 var(--space-md) var(--space-sm) 40px; color: var(--color-todo); font-size: 13px; }
+
+section { padding: var(--space-lg); min-width: 0; }
+.crumb { color: var(--color-muted); font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }
+h2 { font-size: 22px; margin: var(--space-xs) 0 var(--space-md); font-family: var(--font-mono); font-weight: 600; overflow-wrap: anywhere; }
+.bar { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-md); }
+.bar .note { color: var(--color-muted); }
+.empty { color: var(--color-muted); padding: var(--space-lg) 0; }
+
+.case { background: var(--color-surface); border: 1px solid var(--color-line); border-left: 3px solid var(--color-line); border-radius: var(--radius); padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-sm); }
+.case.ok { border-left-color: var(--color-ok); } .case.fail { border-left-color: var(--color-fail); }
+.case-head { display: flex; gap: var(--space-md); align-items: baseline; }
+.case-head .title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.status { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--color-muted); }
+.status.ok { color: var(--color-ok); } .status.fail { color: var(--color-fail); }
+.case details summary { padding: var(--space-xs) 0 0; color: var(--color-muted); font-size: 13px; }
+pre { margin: var(--space-sm) 0 0; padding: var(--space-sm) var(--space-md); background: var(--color-code); border-radius: var(--radius); overflow-x: auto; font: 12.5px/1.55 var(--font-mono); white-space: pre; }
+.err { margin-top: var(--space-sm); color: var(--color-fail); }
+.err pre { color: var(--color-ink); }
+.err .lbl { color: var(--color-muted); font-size: 12px; margin-top: var(--space-sm); }
+
+@media (max-width: 760px) {
+  main { grid-template-columns: minmax(0, 1fr); }
+  nav { border-right: 0; border-bottom: 1px solid var(--color-line); max-height: 45vh; }
+  section { padding: var(--space-md); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Тести CheckYourMorpho</h1>
+  <div class="totals" aria-live="polite">
+    <span>пройдено <b id="t-ok">0</b></span><span>провалено <b id="t-fail">0</b></span><span>без тестів <b id="t-todo">0</b></span>
+  </div>
+  <button class="btn" id="expand">Розгорнути все</button>
+  <button class="btn primary" id="run-all">Запустити все</button>
+</header>
+<main>
+  <nav id="tree" aria-label="Файли та функції"></nav>
+  <section id="detail"><p class="empty">Оберіть функцію зліва.</p></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let data = [], sel = null, running = false;
+const openFiles = new Set();
+
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const state = fn => !fn.exported ? 'na' : !fn.cases.length ? 'todo' : !fn.cases.some(c => c.result) ? 'idle' : fn.cases.every(c => c.result?.ok) ? 'ok' : fn.cases.some(c => c.result && !c.result.ok) ? 'fail' : 'idle';
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+async function run(file, fn) {
+  if (running) return;
+  running = true; render();
+  try { data = await api('/api/run', { file, fn }); } catch (e) { alert(e.message); }
+  running = false; render();
+}
+
+function totals() {
+  let ok = 0, fail = 0, todo = 0;
+  for (const f of data) for (const fn of f.fns) {
+    if (!fn.exported) continue;
+    if (!fn.cases.length) { todo++; continue; }
+    for (const c of fn.cases) if (c.result) c.result.ok ? ok++ : fail++;
+  }
+  $('t-ok').textContent = ok; $('t-fail').textContent = fail; $('t-todo').textContent = todo;
+}
+
+function renderTree() {
+  const nav = $('tree'); nav.replaceChildren();
+  for (const f of data) {
+    const d = el('details'); d.open = openFiles.has(f.rel);
+    d.addEventListener('toggle', () => { d.open ? openFiles.add(f.rel) : openFiles.delete(f.rel); });
+    const s = el('summary');
+    const exp = f.fns.filter(x => x.exported);
+    s.append(el('span', 'path', f.rel), el('span', 'count', `${exp.filter(x => x.cases.length).length}/${exp.length}`));
+    d.append(s);
+    for (const fn of f.fns) {
+      const b = el('button', 'fn'); b.type = 'button';
+      const st = state(fn);
+      b.append(el('span', 'dot ' + (st === 'na' ? '' : st === 'idle' ? '' : st)), el('span', 'name', fn.name));
+      if (sel && sel.file === f.rel && sel.fn === fn.name) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', () => { sel = { file: f.rel, fn: fn.name }; render(); });
+      d.append(b);
+    }
+    if (f.stale.length) d.append(el('div', 'stale', 'Застарілі кейси: ' + f.stale.join(', ')));
+    nav.append(d);
+  }
+}
+
+function errBlock(r) {
+  const box = el('div', 'err');
+  box.append(el('div', null, r.message));
+  if (r.expected != null) { box.append(el('div', 'lbl', 'Очікувалось'), el('pre', null, r.expected), el('div', 'lbl', 'Отримано'), el('pre', null, r.actual)); }
+  return box;
+}
+
+function renderDetail() {
+  const box = $('detail'); box.replaceChildren();
+  const f = sel && data.find(x => x.rel === sel.file), fn = f && f.fns.find(x => x.name === sel.fn);
+  if (!fn) { box.append(el('p', 'empty', 'Оберіть функцію зліва.')); return; }
+  box.append(el('div', 'crumb', f.rel), el('h2', null, fn.name + '()'));
+  if (!fn.exported) { box.append(el('p', 'empty', 'Функція не експортована: напряму її не протестувати. Експортуйте її або перевіряйте через публічну функцію.')); return; }
+  if (!fn.cases.length) { box.append(el('p', 'empty', 'Тестів ще немає. Додайте кейси в tests/cases/ для цього файлу.')); return; }
+  const bar = el('div', 'bar');
+  const b = el('button', 'btn primary', 'Запустити цю функцію'); b.disabled = running;
+  b.addEventListener('click', () => run(f.rel, fn.name));
+  const fb = el('button', 'btn', 'Запустити файл'); fb.disabled = running;
+  fb.addEventListener('click', () => run(f.rel, null));
+  bar.append(b, fb, el('span', 'note', running ? 'Виконується...' : `${fn.cases.length} тест(ів)`));
+  box.append(bar);
+  fn.cases.forEach((c, i) => {
+    const r = c.result, card = el('div', 'case ' + (r ? (r.ok ? 'ok' : 'fail') : ''));
+    const head = el('div', 'case-head');
+    head.append(el('span', 'title', `${i + 1}. ${c.title}`), el('span', 'status ' + (r ? (r.ok ? 'ok' : 'fail') : ''), r ? `${r.ok ? 'OK' : 'FAIL'}  ${r.ms.toFixed(1)} мс` : 'не запускався'));
+    card.append(head);
+    if (r && !r.ok) card.append(errBlock(r));
+    const d = el('details'); d.append(el('summary', null, 'Код тесту'), el('pre', null, c.code));
+    card.append(d); box.append(card);
+  });
+}
+
+function render() {
+  totals(); renderTree(); renderDetail();
+  $('run-all').disabled = running;
+  const all = data.length && data.every(f => openFiles.has(f.rel));
+  $('expand').textContent = all ? 'Згорнути все' : 'Розгорнути все';
+}
+
+$('run-all').addEventListener('click', () => run(null, null));
+$('expand').addEventListener('click', () => {
+  const all = data.every(f => openFiles.has(f.rel));
+  data.forEach(f => all ? openFiles.delete(f.rel) : openFiles.add(f.rel)); render();
+});
+
+api('/api/tree').then(t => {
+  data = t;
+  const first = data.find(f => f.fns.some(x => x.cases.length));
+  if (first) { openFiles.add(first.rel); sel = { file: first.rel, fn: first.fns.find(x => x.cases.length).name }; }
+  render();
+});
+</script>
+</body>
+</html>

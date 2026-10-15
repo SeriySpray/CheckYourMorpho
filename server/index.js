@@ -49,7 +49,7 @@ server.listen(PORT, HOST, () => {
 // Background recurring synchronization
 let syncIntervalTimer = null;
 
-async function runBackgroundSync() {
+export async function runBackgroundSync() {
   if (isSyncing()) {
     console.log('[Scheduler] Background sync skipped (synchronization already in progress).');
     return;
@@ -74,7 +74,7 @@ if (CONFIG.sync.intervalMs && CONFIG.sync.intervalMs > 0) {
 }
 
 // Graceful shutdown handling
-function handleShutdown(signal) {
+export function handleShutdown(signal) {
   console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
   if (syncIntervalTimer) {
     clearInterval(syncIntervalTimer);

@@ -1,0 +1,43 @@
+// Спільні фабрики тестових даних.
+export const vault = (over = {}) => ({
+  address: '0xvault', name: 'Test Vault', version: 'v1', chain_id: 1,
+  total_assets_usd: 100e6, liquidity_usd: 0, net_apy: 0.03, ...over
+});
+
+// Алокація, приєднана до ринку: чистий ринок із повною ліквідністю.
+export const alloc = (over = {}) => ({
+  market_unique_key: '1:0xabc', is_listed: 1, oracle_address: '0x1', lltv_percent: 86,
+  collateral_asset_address: '0xweth', collateral_asset_symbol: 'WETH', loan_asset_symbol: 'USDC',
+  warnings_json: '[]', supply_assets_usd: 10e6, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0,
+  peer_supply_usd: 0, ...over
+});
+
+// Десять різних застав по 10% TVL: здоровий вольт без прапорців.
+export const diversified = () => Array.from({ length: 10 }, (_, i) =>
+  alloc({ market_unique_key: `1:0x${i}`, collateral_asset_address: `0xc${i}`, collateral_asset_symbol: `C${i}` }));
+
+export const idle = (over = {}) => alloc({
+  collateral_asset_symbol: 'NONE', collateral_asset_address: '', lltv_percent: 0, oracle_address: '', ...over
+});
+
+// done резолвиться на res.end(): потрібно для обробників, що відповідають асинхронно (fs).
+export function mockRes() {
+  let finish;
+  const res = {
+    statusCode: null, headers: {}, body: '', done: new Promise(r => { finish = r; }),
+    writeHead(c, h) { this.statusCode = c; this.headers = h || {}; },
+    end(b) { this.body += b || ''; finish(this); }
+  };
+  return res;
+}
+export const mockReq = (method, url, headers = {}) => ({ method, url, headers, destroy() {}, resume() {} });
+
+// Підміна глобального fetch на час одного тесту.
+export async function withFetch(impl, fn) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = impl;
+  try { return await fn(); } finally { globalThis.fetch = orig; }
+}
+export const jsonResponse = (body, status = 200, headers = {}) => ({
+  ok: status < 400, status, statusText: String(status), headers: new Headers(headers), json: async () => body
+});
