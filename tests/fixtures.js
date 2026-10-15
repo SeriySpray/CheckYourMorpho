@@ -12,7 +12,7 @@ export const alloc = (over = {}) => ({
   peer_supply_usd: 0, ...over
 });
 
-// Десять різних застав по 10% TVL: здоровий вольт без прапорців.
+// Десять різних застав по 10% TVL: здоровий vault без прапорців.
 export const diversified = () => Array.from({ length: 10 }, (_, i) =>
   alloc({ market_unique_key: `1:0x${i}`, collateral_asset_address: `0xc${i}`, collateral_asset_symbol: `C${i}` }));
 

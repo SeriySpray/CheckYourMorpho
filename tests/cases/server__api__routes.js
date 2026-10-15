@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { mockReq, mockRes } from '../fixtures.js';
+import { CONFIG } from '../../server/config.js';
+import { mockReq, mockRes, withFetch, jsonResponse } from '../fixtures.js';
+
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'client', 'index.html'));
+const PACKAGE_JSON = fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8');
 
 const call = (handleRequest, method, url, headers) => {
   const res = mockRes(); handleRequest(mockReq(method, url, headers), res); return res;
@@ -8,68 +17,284 @@ const call = (handleRequest, method, url, headers) => {
 const callAsync = async (handleRequest, method, url, headers) => {
   const res = mockRes(); handleRequest(mockReq(method, url, headers), res); return res.done;
 };
-const URL_ = path => new URL(path, 'http://localhost');
+const getJson = (mod, url, headers) => {
+  const r = call(mod.handleRequest, 'GET', url, headers); return { status: r.statusCode, body: JSON.parse(r.body), res: r };
+};
+const URL_ = p => new URL(p, 'http://localhost');
 const withEnv = async (name, value, fn) => {
-  const saved = process.env[name]; process.env[name] = value;
+  const saved = process.env[name];
+  if (value === undefined) delete process.env[name]; else process.env[name] = value;
   try { return await fn(); } finally { saved === undefined ? delete process.env[name] : process.env[name] = saved; }
 };
 const peerRow = (over = {}) => ({ vault_address: '0xp1', vault_name: 'P1', supply_assets_usd: 5000, via_vault: null, ...over });
 
+// --- Контрольована БД ---
+const addr = n => '0x' + n.toString(16).padStart(40, '0');
+const ins = (db, table, row) => db.prepare(
+  `INSERT INTO ${table} (${Object.keys(row).join(', ')}) VALUES (${Object.keys(row).map(() => '?').join(', ')})`
+).run(...Object.values(row));
+const V = (n, over = {}) => ({
+  address: addr(n), chain_id: 1, name: `Vault ${n}`, symbol: 'v', curator_name: 'Cur', asset_address: '0xusdc', asset_symbol: 'USDC',
+  asset_decimals: 6, asset_price_usd: 1, total_assets: '1000000000', total_assets_usd: 1000, liquidity_usd: 0, apy: 0.05, net_apy: 0.04,
+  fee: 0.1, is_listed: 1, version: 'v1', metadata_updated_at: 123, ...over
+});
+const M = (key, over = {}) => ({
+  unique_key: key, chain_id: 1, loan_asset_symbol: 'USDC', collateral_asset_address: '0xweth', collateral_asset_symbol: 'WETH',
+  oracle_address: '0xoracle', lltv_percent: 86, total_supply_assets_usd: 2e6, total_borrow_assets_usd: 1.5e6, is_listed: 1,
+  warnings_json: '[]', ...over
+});
+const A = (vaultN, market, usd, over = {}) => ({ vault_address: addr(vaultN), market_unique_key: market, supply_assets_usd: usd, supply_assets_human: usd, ...over });
+
+// Порожня відповідь Morpho API: успішна синхронізація без змін. Через onSyncSuccess вона скидає обидва кеші routes.
+const emptyApi = async (_url, init) => {
+  const { query } = JSON.parse(init.body);
+  if (query.includes('GetCurators')) return jsonResponse({ data: { curators: { items: [] } } });
+  const key = query.includes('GetVaultV2s') ? 'vaultV2s' : 'vaults';
+  return jsonResponse({ data: { [key]: { items: [], pageInfo: { countTotal: 0 } } } });
+};
+const syncMod = () => import('../../server/services/syncEngine.js');
+async function resetCaches() {
+  const { syncAllVaults } = await syncMod();
+  await withFetch(emptyApi, () => syncAllVaults());
+}
+
+// Свіжа порожня БД з чистими кешами на час одного тесту; без шуму в консолі.
+async function sandbox(fn) {
+  const { getDatabase, closeDatabase } = await import('../../server/db/database.js');
+  const savedPath = CONFIG.db.path, log = console.log, warn = console.warn, err = console.error;
+  console.log = console.warn = console.error = () => {};
+  closeDatabase();
+  CONFIG.db.path = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-routes-')), 'routes.db');
+  try {
+    await resetCaches();
+    return await fn(getDatabase());
+  } finally {
+    try { getDatabase().exec('DELETE FROM vaults; DELETE FROM markets;'); await resetCaches(); } finally {
+      console.log = log; console.warn = warn; console.error = err;
+      closeDatabase(); CONFIG.db.path = savedPath;
+    }
+  }
+}
+
+// Керований годинник для перевірки TTL кешів.
+async function withClock(fn) {
+  const real = Date.now; let t = real();
+  Date.now = () => t;
+  try { return await fn({ advance: ms => { t += ms; } }); } finally { Date.now = real; }
+}
+
+// Набір для пошуку, фільтрів і сортування (значення підібрані так, щоб кожне сортування давало інший порядок).
+function seedCatalog(db) {
+  ins(db, 'vaults', V(1, { name: 'Alpha USDC', symbol: 'aUSDC', curator_name: 'Gauntlet', asset_symbol: 'USDC', chain_id: 1, liquidity_usd: 300, total_assets_usd: 1000, net_apy: 0.05, apy: 0.10, is_listed: 1 }));
+  ins(db, 'vaults', V(2, { name: 'beta_eth', symbol: 'bETH', curator_name: 'Steakhouse', asset_symbol: 'WETH', chain_id: 8453, liquidity_usd: 200, total_assets_usd: 3000, net_apy: 0.02, apy: 0.30, is_listed: 0 }));
+  ins(db, 'vaults', V(3, { name: '100% Yield', symbol: 'yUSDT', curator_name: 'Re7', asset_symbol: 'USDT', chain_id: 1, liquidity_usd: 100, total_assets_usd: 2000, net_apy: 0.09, apy: 0.20, is_listed: 1 }));
+  ins(db, 'vaults', V(4, { name: 'Back\\Slash', symbol: 'bs', curator_name: 'MEV', asset_symbol: 'DAI', chain_id: 1, liquidity_usd: 400, total_assets_usd: 500, net_apy: 0.01, apy: 0.40, is_listed: 1 }));
+}
+const ids = body => body.vaults.map(v => parseInt(v.address, 16));
+const list = (mod, qs = '') => getJson(mod, '/api/vaults' + qs).body;
+
+// Ринок mk1: вільна ліквідність 2M - 1.5M = 500K. P і Q мають по 1M, R - дрібна позиція, S - look-through V2 через Q.
+function seedCrowded(db) {
+  ins(db, 'markets', M('mk1'));
+  ins(db, 'vaults', V(0x10, { name: 'Vault P', total_assets_usd: 1e6 }));
+  ins(db, 'vaults', V(0x11, { name: 'Peer Q', total_assets_usd: 1e6 }));
+  ins(db, 'vaults', V(0x12, { name: 'Peer R', total_assets_usd: 900 }));
+  ins(db, 'vaults', V(0x13, { name: 'Look S', total_assets_usd: 4e5, liquidity_usd: 4e5, version: 'v2' }));
+  ins(db, 'vault_allocations', A(0x10, 'mk1', 1e6));
+  ins(db, 'vault_allocations', A(0x11, 'mk1', 1e6));
+  ins(db, 'vault_allocations', A(0x12, 'mk1', 900));
+  ins(db, 'vault_allocations', A(0x13, 'mk1', 4e5, { via_vault: addr(0x11) }));
+}
+
+// F: 60% у чистому ринку, 39.5% + 0.5% у нелістингованих (сукупно матеріально). G: лише 0.5% пилу в нелістингованому.
+function seedQuality(db) {
+  ins(db, 'markets', M('clean', { total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0, oracle_type: null, bad_debt_usd: null }));
+  ins(db, 'markets', M('unl', { is_listed: 0, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0 }));
+  ins(db, 'markets', M('unl2', { is_listed: 0, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0 }));
+  ins(db, 'vaults', V(0x20, { total_assets_usd: 1e6 }));
+  ins(db, 'vaults', V(0x21, { total_assets_usd: 1e6 }));
+  ins(db, 'vault_allocations', A(0x20, 'unl', 3.95e5));
+  ins(db, 'vault_allocations', A(0x20, 'clean', 6e5));
+  ins(db, 'vault_allocations', A(0x20, 'unl2', 5e3));
+  ins(db, 'vault_allocations', A(0x21, 'clean', 9.95e5));
+  ins(db, 'vault_allocations', A(0x21, 'unl2', 5e3));
+}
+
+// Справжній HTTP-сервер на випадковому порту: перевіряє поведінку Node (HEAD, сирі шляхи), яку мок не моделює.
+async function withServer(handleRequest, fn) {
+  const srv = http.createServer(handleRequest);
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  try { return await fn(srv.address().port); } finally { await new Promise(r => srv.close(r)); }
+}
+const rawHttp = (port, method, p, headers = {}) => new Promise((resolve, reject) => {
+  const req = http.request({ host: '127.0.0.1', port, method, path: p, headers, agent: false }, r => {
+    let body = ''; r.setEncoding('utf8'); r.on('data', c => { body += c; });
+    r.on('end', () => resolve({ status: r.statusCode, headers: r.headers, body }));
+  });
+  req.on('error', reject); req.end();
+});
+
+// Запит до /api/sync з сокетом (await=1 вимикає таймаут сокета) і лічильником destroy().
+const syncReq = (headers = {}) => {
+  const req = { ...mockReq('POST', '/api/sync', headers), socket: { setTimeout() {} }, destroyed: 0 };
+  req.destroy = () => { req.destroyed++; };
+  return req;
+};
+const rawV1 = a => ({
+  address: a, name: 'Synced', symbol: 's', listed: true, chain: { id: 1 }, asset: { address: '0xusdc', symbol: 'USDC', decimals: 6, priceUsd: 1 },
+  state: { totalAssets: '1000000', totalAssetsUsd: 1, curator: '0x0', allocation: [] }
+});
+const apiWith = (v1, counter = { n: 0 }, gate = null) => async (_url, init) => {
+  counter.n++;
+  if (gate) await gate;
+  const { query } = JSON.parse(init.body);
+  if (query.includes('GetCurators')) return jsonResponse({ data: { curators: { items: [] } } });
+  const [key, items] = query.includes('GetVaultV2s') ? ['vaultV2s', []] : ['vaults', v1];
+  return jsonResponse({ data: { [key]: { items, pageInfo: { countTotal: items.length } } } });
+};
+const waitIdle = async isSyncing => { for (let i = 0; i < 200 && isSyncing(); i++) await new Promise(r => setTimeout(r, 10)); };
+
 export default {
   handleRequest: [
-    ['OPTIONS -> 204 з CORS', ({ handleRequest }) => {
-      const r = call(handleRequest, 'OPTIONS', '/api/vaults'); assert.equal(r.statusCode, 204); assert.equal(r.headers['Access-Control-Allow-Origin'], '*');
+    ['OPTIONS на будь-який шлях -> 204, CORS-заголовки, порожнє тіло', ({ handleRequest }) => {
+      const r = call(handleRequest, 'OPTIONS', '/api/vaults');
+      assert.equal(r.statusCode, 204); assert.equal(r.body, '');
+      assert.equal(r.headers['Access-Control-Allow-Origin'], '*');
+      assert.equal(r.headers['Access-Control-Allow-Methods'], 'GET, HEAD, OPTIONS');
+      assert.equal(r.headers['Access-Control-Max-Age'], '86400');
     }],
-    ['зворотний слеш у URL -> 400', ({ handleRequest }) => assert.equal(call(handleRequest, 'GET', '/api\\vaults').statusCode, 400)],
-    ['невідомий /api/ маршрут -> 404', ({ handleRequest }) => assert.equal(call(handleRequest, 'GET', '/api/nope').statusCode, 404)],
-    ['некоректна адреса вольта -> 400', ({ handleRequest }) => assert.equal(call(handleRequest, 'GET', '/api/vaults/0x123').statusCode, 400)],
-    ['/api/status -> 200 зі статистикою', ({ handleRequest }) => {
-      const r = call(handleRequest, 'GET', '/api/status'); const body = JSON.parse(r.body);
-      assert.equal(r.statusCode, 200); assert.equal(body.status, 'ok'); assert.ok(body.stats.vaultsCount >= 0);
+    ['зворотний слеш у URL -> 400 (і в API, і в статиці)', ({ handleRequest }) => {
+      assert.equal(call(handleRequest, 'GET', '/api\\vaults').statusCode, 400);
+      assert.equal(call(handleRequest, 'GET', '/..\\package.json').statusCode, 400);
     }],
-    ['HEAD /api/status -> 200 без тіла', ({ handleRequest }) => {
-      const r = call(handleRequest, 'HEAD', '/api/status'); assert.equal(r.statusCode, 200); assert.equal(r.body, '');
+    ['невідомий /api/ маршрут -> 404 з JSON-помилкою', ({ handleRequest }) => {
+      const r = call(handleRequest, 'GET', '/api/nope');
+      assert.equal(r.statusCode, 404); assert.equal(JSON.parse(r.body).error, 'API endpoint not found');
     }],
-    ['/api/vaults -> 200 і валідний JSON', ({ handleRequest }) => {
-      const r = call(handleRequest, 'GET', '/api/vaults'); assert.equal(r.statusCode, 200); JSON.parse(r.body);
+    ['методи, що не читають, на GET-маршрутах -> 404, а GET /api/sync -> 404', ({ handleRequest }) => {
+      assert.equal(call(handleRequest, 'POST', '/api/vaults').statusCode, 404);
+      assert.equal(call(handleRequest, 'DELETE', '/api/status').statusCode, 404);
+      assert.equal(call(handleRequest, 'GET', '/api/sync').statusCode, 404);
     }],
-    ['відповіді API мають захисні заголовки', ({ handleRequest }) => {
+    ['некоректні адреси vault -> 400', ({ handleRequest }) => {
+      for (const a of ['0x123', '0x' + 'g'.repeat(40), '0x' + '1'.repeat(41), '1'.repeat(42), '%200x' + '1'.repeat(40)]) {
+        assert.equal(call(handleRequest, 'GET', '/api/vaults/' + a).statusCode, 400, a);
+      }
+    }],
+    ['адреса з кінцевим слешем або вкладеним шляхом -> 404', ({ handleRequest }) => {
+      assert.equal(call(handleRequest, 'GET', '/api/vaults/0x' + '1'.repeat(40) + '/').statusCode, 404);
+      assert.equal(call(handleRequest, 'GET', '/api/vaults/0x' + '1'.repeat(40) + '/x').statusCode, 404);
+    }],
+    ['/api/status -> 200, лічильники збігаються з COUNT у БД', async mod => sandbox(async db => {
+      seedCatalog(db); ins(db, 'markets', M('m1')); ins(db, 'vault_allocations', A(1, 'm1', 5));
+      const { status, body } = getJson(mod, '/api/status');
+      assert.equal(status, 200); assert.equal(body.status, 'ok'); assert.equal(body.isSyncInProgress, false);
+      assert.deepEqual(body.stats, { vaultsCount: 4, listedVaultsCount: 3, marketsCount: 1, allocationsCount: 1 });
+      const ts = Number(db.prepare("SELECT value FROM sync_state WHERE key = 'last_sync_all'").get().value);
+      assert.equal(body.lastSync.timestamp, ts); assert.equal(body.lastSyncResult.success, true);
+    })],
+    ['HEAD /api/status -> 200 без тіла, але з Content-Length як у GET', ({ handleRequest }) => {
+      const h = call(handleRequest, 'HEAD', '/api/status'), g = call(handleRequest, 'GET', '/api/status');
+      assert.equal(h.statusCode, 200); assert.equal(h.body, '');
+      assert.equal(h.headers['Content-Length'], Buffer.byteLength(g.body));
+    }],
+    ['відповіді API мають захисні та CORS-заголовки', ({ handleRequest }) => {
       const h = call(handleRequest, 'GET', '/api/status').headers;
+      assert.equal(h['Content-Type'], 'application/json; charset=utf-8');
       assert.equal(h['X-Content-Type-Options'], 'nosniff'); assert.equal(h['X-Frame-Options'], 'DENY');
+      assert.equal(h['Referrer-Policy'], 'strict-origin-when-cross-origin'); assert.equal(h['Access-Control-Allow-Origin'], '*');
     }],
-    ['невідома адреса вольта (валідний формат) -> 404', ({ handleRequest }) => {
+    ['невідома адреса vault (валідний формат) -> 404', ({ handleRequest }) => {
       const r = call(handleRequest, 'GET', '/api/vaults/0x' + '0'.repeat(40)); assert.equal(r.statusCode, 404);
     }],
-    ['статичний / віддає client/index.html', async ({ handleRequest }) => {
-      const r = await callAsync(handleRequest, 'GET', '/'); assert.equal(r.statusCode, 200); assert.match(r.headers['Content-Type'], /text\/html/);
+    ['адреса у верхньому регістрі знаходить vault, записаний у нижньому', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(0xabcdef, { name: 'Upper' }));
+      const { status, body } = getJson(mod, '/api/vaults/' + addr(0xabcdef).replace('abcdef', 'ABCDEF'));
+      assert.equal(status, 200); assert.equal(body.vault.name, 'Upper'); assert.equal(body.vault.address, addr(0xabcdef));
+    })],
+    ['некоректний Host не ламає маршрутизацію (підміняється на localhost)', ({ handleRequest }) => {
+      assert.equal(call(handleRequest, 'GET', '/api/status', { host: 'evil host/<x>' }).statusCode, 200);
+      assert.equal(call(handleRequest, 'GET', '/api/status', { host: 'example.com:8080' }).statusCode, 200);
     }],
+    ['ДЕФЕКТ: шлях //x/api/status не має трактуватися як /api/status (протокол-відносний URL)', ({ handleRequest }) => {
+      const r = call(handleRequest, 'GET', '//x/api/status');
+      assert.notEqual(r.statusCode, 200, 'запит //x/api/status потрапив у обробник /api/status');
+    }],
+    ['статичний / віддає client/index.html байт-у-байт', async ({ handleRequest }) => {
+      const r = await callAsync(handleRequest, 'GET', '/');
+      assert.equal(r.statusCode, 200); assert.match(r.headers['Content-Type'], /text\/html/); assert.equal(r.body, INDEX_HTML.toString());
+    }],
+    ['/js/../index.html нормалізується і віддає index.html', async ({ handleRequest }) => {
+      const r = await callAsync(handleRequest, 'GET', '/js/../index.html'); assert.equal(r.statusCode, 200);
+    }],
+    ['обхід шляху в усіх варіантах не віддає файли поза client/', async ({ handleRequest }) => {
+      const attempts = ['/../package.json', '/%2e%2e/package.json', '/%2E%2E/%2e%2e/package.json', '/..%2fpackage.json',
+        '/%2e%2e%2fpackage.json', '/js/../../package.json', '/%252e%252e/package.json', '/..%5cpackage.json', '/%5c..%5cpackage.json',
+        '/..%2f..%2fserver%2fconfig.js', '/..%2fdata%2fmorpho.db', '/C:/Windows/win.ini', '/%2e%2e%5cpackage.json'];
+      for (const a of attempts) {
+        const r = await callAsync(handleRequest, 'GET', a, { accept: 'application/json' });
+        assert.notEqual(r.statusCode, 200, a); assert.notEqual(r.body, PACKAGE_JSON, a); assert.ok(!r.body.includes('"scripts"'), a);
+      }
+    }],
+    ['dot-файли і їх закодовані варіанти -> 403', async ({ handleRequest }) => {
+      for (const a of ['/.env', '/js/.env', '/%2eenv', '/.git/config', '/%2egit/config', '/css/%2e%2e%2f.env']) {
+        const r = await callAsync(handleRequest, 'GET', a); assert.equal(r.statusCode, 403, a);
+      }
+    }],
+    ['null-байт у статичному шляху -> 400', async ({ handleRequest }) => {
+      for (const a of ['/a%00b', '/%00', '/index.html%00.js']) assert.equal((await callAsync(handleRequest, 'GET', a)).statusCode, 400, a);
+    }],
+    ['PUT на статику -> 405', ({ handleRequest }) => assert.equal(call(handleRequest, 'PUT', '/index.html').statusCode, 405)],
+    ['справжній HTTP: HEAD-відповіді без тіла навіть для помилок', async ({ handleRequest }) => withServer(handleRequest, async port => {
+      for (const p of ['/api/status', '/api/nope', '/api/vaults/0x123', '/', '/nope.js']) {
+        const r = await rawHttp(port, 'HEAD', p); assert.equal(r.body, '', p);
+      }
+    })],
+    ['справжній HTTP: сирі шляхи обходу не віддають package.json', async ({ handleRequest }) => withServer(handleRequest, async port => {
+      for (const p of ['/../package.json', '/%2e%2e/package.json', '/..%2fpackage.json', '/..%5cpackage.json', '/js/../../package.json']) {
+        const r = await rawHttp(port, 'GET', p); assert.notEqual(r.status, 200, p); assert.ok(!r.body.includes('"scripts"'), p);
+      }
+    })],
   ],
   summarizePeers: [
     ['порожні рядки -> total 0', ({ summarizePeers: f }) => assert.deepEqual(f(null, '0xv', {}), { total: 0, peers: [] })],
     ['власні позиції пропускаються', ({ summarizePeers: f }) =>
-      assert.equal(f([peerRow({ vault_address: '0xv' })], '0xv', {}).peers.length, 0)],
-    ['дрібні позиції (<= $1K) ігноруються', ({ summarizePeers: f }) =>
-      assert.equal(f([peerRow({ supply_assets_usd: 1000 })], '0xv', {}).peers.length, 0)],
+      assert.deepEqual(f([peerRow({ vault_address: '0xv' }), peerRow()], '0xv', {}), { total: 5000, peers: [{ vaultAddress: '0xp1', vaultName: 'P1', supplyUsd: 5000 }] })],
+    ['межа $1K: рівно 1000 ігнорується, 1000.01 враховується', ({ summarizePeers: f }) => {
+      assert.equal(f([peerRow({ supply_assets_usd: 1000 })], '0xv', {}).total, 0);
+      assert.equal(f([peerRow({ supply_assets_usd: 1000.01 })], '0xv', {}).total, 1000.01);
+    }],
     ['look-through позиції (via_vault) пропускаються', ({ summarizePeers: f }) =>
       assert.equal(f([peerRow({ via_vault: '0xu' })], '0xv', {}).peers.length, 0)],
-    ['пірів відсортовано за спаданням і обрізано до 5', ({ summarizePeers: f }) => {
+    ['пірів відсортовано за спаданням і обрізано до 5, total рахує всіх', ({ summarizePeers: f }) => {
       const rows = Array.from({ length: 7 }, (_, i) => peerRow({ vault_address: `0x${i}`, supply_assets_usd: 2000 + i * 100 }));
       const r = f(rows, '0xv', {});
-      assert.equal(r.peers.length, 5); assert.equal(r.peers[0].supplyUsd, 2600);
-      assert.equal(r.total, rows.reduce((s, x) => s + x.supply_assets_usd, 0));
+      assert.deepEqual(r.peers.map(p => p.supplyUsd), [2600, 2500, 2400, 2300, 2200]);
+      assert.equal(r.total, 7 * 2000 + 100 * (0 + 1 + 2 + 3 + 4 + 5 + 6));
     }],
-    ['частка V2-вольта віднімається від базового V1', ({ summarizePeers: f }) => {
+    ['частка V2-vault віднімається від базового V1', ({ summarizePeers: f }) => {
       const r = f([peerRow({ vault_address: '0xunder', supply_assets_usd: 10000 })], '0xv2', { via_vault: '0xunder', supply_assets_usd: 4000 });
-      assert.equal(r.total, 6000);
+      assert.equal(r.total, 6000); assert.equal(r.peers[0].supplyUsd, 6000);
     }],
+    ['після віднімання частки V2 залишок <= $1K не вважається піром', ({ summarizePeers: f }) =>
+      assert.equal(f([peerRow({ vault_address: '0xu', supply_assets_usd: 4500 })], '0xv2', { via_vault: '0xu', supply_assets_usd: 4000 }).total, 0)],
+    ['віднімання стосується лише базового vault, не інших пірів', ({ summarizePeers: f }) =>
+      assert.equal(f([peerRow({ vault_address: '0xother', supply_assets_usd: 10000 })], '0xv2', { via_vault: '0xu', supply_assets_usd: 4000 }).total, 10000)],
   ],
   withEffectiveTotal: [
-    ['додатний TVL повертає той самий вольт', ({ withEffectiveTotal: f }) => {
+    ['додатний TVL повертає той самий vault', ({ withEffectiveTotal: f }) => {
       const v = { total_assets_usd: 5 }; assert.equal(f(v, [{ supply_assets_usd: 100 }]), v);
     }],
-    ['нульовий TVL замінюється сумою алокацій', ({ withEffectiveTotal: f }) =>
-      assert.equal(f({ total_assets_usd: 0 }, [{ supply_assets_usd: 100 }, { supply_assets_usd: 50 }]).total_assets_usd, 150)],
-    ['без алокацій вольт не змінюється', ({ withEffectiveTotal: f }) => {
+    ['нульовий TVL замінюється сумою алокацій, оригінал не мутується', ({ withEffectiveTotal: f }) => {
+      const v = { total_assets_usd: 0, name: 'x' };
+      const r = f(v, [{ supply_assets_usd: 100 }, { supply_assets_usd: 50 }, { supply_assets_usd: null }]);
+      assert.equal(r.total_assets_usd, 150); assert.equal(r.name, 'x'); assert.equal(v.total_assets_usd, 0);
+    }],
+    ['null/рядковий TVL трактується як число', ({ withEffectiveTotal: f }) => {
+      assert.equal(f({ total_assets_usd: null }, [{ supply_assets_usd: 7 }]).total_assets_usd, 7);
+      const v = { total_assets_usd: '12' }; assert.equal(f(v, [{ supply_assets_usd: 7 }]), v);
+    }],
+    ['без алокацій vault не змінюється', ({ withEffectiveTotal: f }) => {
       const v = { total_assets_usd: 0 }; assert.equal(f(v, []), v);
     }],
   ],
@@ -77,6 +302,7 @@ export default {
     ['однакові секрети -> true', ({ safeEqual: f }) => assert.equal(f('abc', 'abc'), true)],
     ['різні секрети -> false', ({ safeEqual: f }) => assert.equal(f('abc', 'abd'), false)],
     ['різна довжина не кидає виняток', ({ safeEqual: f }) => assert.equal(f('a', 'abcdef'), false)],
+    ['префікс секрету не приймається', ({ safeEqual: f }) => assert.equal(f('secre', 'secret'), false)],
     ['число і рядок порівнюються як рядки', ({ safeEqual: f }) => assert.equal(f(123, '123'), true)],
   ],
   sendJson: [
@@ -84,49 +310,92 @@ export default {
       const res = mockRes(); f(res, 201, { a: 1 });
       assert.equal(res.statusCode, 201); assert.equal(res.body, '{"a":1}'); assert.equal(res.headers['Content-Length'], 7);
     }],
-    ['HEAD-запит не отримує тіла', ({ sendJson: f }) => {
-      const res = mockRes(); f(res, 200, { a: 1 }, { method: 'HEAD' }); assert.equal(res.body, '');
+    ['HEAD-запит не отримує тіла, Content-Length як у GET', ({ sendJson: f }) => {
+      const res = mockRes(); f(res, 200, { a: 1 }, { method: 'HEAD' }); assert.equal(res.body, ''); assert.equal(res.headers['Content-Length'], 7);
     }],
     ['кирилиця рахується в байтах', ({ sendJson: f }) => {
       const res = mockRes(); f(res, 200, { t: 'я' }); assert.equal(res.headers['Content-Length'], Buffer.byteLength('{"t":"я"}'));
     }],
+    ['повний набір заголовків безпеки і CORS', ({ sendJson: f }) => {
+      const res = mockRes(); f(res, 200, {});
+      assert.deepEqual(res.headers, {
+        'Content-Type': 'application/json; charset=utf-8', 'Content-Length': 2, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin', 'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type'
+      });
+    }],
   ],
   handleCors: [
-    ['відповідає 204 з дозволеними методами', ({ handleCors: f }) => {
-      const res = mockRes(); f({}, res); assert.equal(res.statusCode, 204); assert.match(res.headers['Access-Control-Allow-Methods'], /GET/);
+    ['відповідає 204 з дозволеними методами без POST', ({ handleCors: f }) => {
+      const res = mockRes(); f({}, res);
+      assert.equal(res.statusCode, 204); assert.equal(res.headers['Access-Control-Allow-Methods'], 'GET, HEAD, OPTIONS');
+      assert.equal(res.headers['Access-Control-Allow-Headers'], 'Content-Type');
     }],
   ],
   serveStaticFile: [
     ['POST -> 405', ({ serveStaticFile: f }) => {
       const res = mockRes(); f(mockReq('POST', '/'), res, '/'); assert.equal(res.statusCode, 405);
     }],
-    ['null-байт у шляху -> 400', ({ serveStaticFile: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/'), res, '/a%00b'); assert.equal(res.statusCode, 400);
+    ['null-байт (сирий і %00) -> 400', ({ serveStaticFile: f }) => {
+      for (const p of ['/a%00b', '/a\0b']) { const res = mockRes(); f(mockReq('GET', '/'), res, p); assert.equal(res.statusCode, 400, p); }
     }],
     ['битий URI-компонент -> 400', ({ serveStaticFile: f }) => {
       const res = mockRes(); f(mockReq('GET', '/'), res, '/%E0%A4%A'); assert.equal(res.statusCode, 400);
     }],
-    ['dot-файли заборонені -> 403', ({ serveStaticFile: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/'), res, '/.env'); assert.equal(res.statusCode, 403);
+    ['dot-файли (і закодовані) заборонені -> 403', ({ serveStaticFile: f }) => {
+      for (const p of ['/.env', '/%2Eenv', '/js/.secret.js']) { const res = mockRes(); f(mockReq('GET', '/'), res, p); assert.equal(res.statusCode, 403, p); }
+    }],
+    ['відносний шлях з .. (без провідного /) -> 403', ({ serveStaticFile: f }) => {
+      for (const p of ['../package.json', '..%2fpackage.json', 'js/../../package.json']) {
+        const res = mockRes(); f(mockReq('GET', '/'), res, p); assert.equal(res.statusCode, 403, p);
+      }
     }],
     ['вихід за межі client/ не віддає файл', async ({ serveStaticFile: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/', {}), res, '/..%2f..%2fpackage.json'); await res.done;
-      assert.ok([403, 404].includes(res.statusCode), String(res.statusCode));
+      for (const p of ['/..%2f..%2fpackage.json', '/../package.json', '/%2e%2e%2fpackage.json']) {
+        const res = mockRes(); f(mockReq('GET', '/', {}), res, p); await res.done;
+        assert.notEqual(res.statusCode, 200, p); assert.ok(!res.body.includes('"scripts"'), p);
+      }
     }],
-    ['/ -> index.html', async ({ serveStaticFile: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/', {}), res, '/'); await res.done; assert.equal(res.statusCode, 200);
+    ['/ -> index.html з тілом файлу', async ({ serveStaticFile: f }) => {
+      const res = mockRes(); f(mockReq('GET', '/', {}), res, '/'); await res.done;
+      assert.equal(res.statusCode, 200); assert.equal(res.body, INDEX_HTML.toString());
     }],
-    ['неіснуючий файл з розширенням -> 404', async ({ serveStaticFile: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/', {}), res, '/nope.js'); await res.done; assert.equal(res.statusCode, 404);
+    ['неіснуючий файл з розширенням -> 404 навіть з Accept: text/html', async ({ serveStaticFile: f }) => {
+      for (const h of [{}, { accept: 'text/html' }]) {
+        const res = mockRes(); f(mockReq('GET', '/', h), res, '/nope.js'); await res.done; assert.equal(res.statusCode, 404);
+      }
     }],
-    ['SPA-маршрут без розширення з Accept: text/html -> index.html', async ({ serveStaticFile: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/', { accept: 'text/html' }), res, '/vault/abc'); await res.done; assert.equal(res.statusCode, 200);
+    ['SPA-маршрут без розширення з Accept: text/html -> вміст index.html', async ({ serveStaticFile: f }) => {
+      const res = mockRes(); f(mockReq('GET', '/', { accept: 'text/html' }), res, '/vault/abc'); await res.done;
+      assert.equal(res.statusCode, 200); assert.equal(res.body, INDEX_HTML.toString());
+    }],
+    ['SPA-маршрут без Accept: text/html -> 404', async ({ serveStaticFile: f }) => {
+      const res = mockRes(); f(mockReq('GET', '/', { accept: 'application/json' }), res, '/vault/abc'); await res.done; assert.equal(res.statusCode, 404);
+    }],
+    ['каталог без Accept: text/html -> 404, а не лістинг', async ({ serveStaticFile: f }) => {
+      const res = mockRes(); f(mockReq('GET', '/', {}), res, '/js'); await res.done; assert.equal(res.statusCode, 404);
+    }],
+    ['HEAD на статику -> 200, Content-Length файлу, без тіла', async ({ serveStaticFile: f }) => {
+      const res = mockRes(); f(mockReq('HEAD', '/', {}), res, '/index.html'); await res.done;
+      assert.equal(res.statusCode, 200); assert.equal(res.body, ''); assert.equal(res.headers['Content-Length'], INDEX_HTML.length);
     }],
   ],
   serveFile: [
-    ['існуючий файл -> 200 з правильним Content-Type', async ({ serveFile: f }) => {
-      const res = mockRes(); f(fileURLToPath(new URL('../../client/index.html', import.meta.url)), mockReq('GET', '/'), res);
-      await res.done; assert.equal(res.statusCode, 200); assert.match(res.headers['Content-Type'], /text\/html/);
+    ['існуючий файл -> 200, Content-Type, заголовки no-store і SAMEORIGIN', async ({ serveFile: f }) => {
+      const res = mockRes(); f(path.join(ROOT, 'client', 'index.html'), mockReq('GET', '/'), res);
+      await res.done; assert.equal(res.statusCode, 200);
+      assert.equal(res.headers['Content-Type'], 'text/html; charset=utf-8'); assert.equal(res.headers['X-Content-Type-Options'], 'nosniff');
+      assert.equal(res.headers['X-Frame-Options'], 'SAMEORIGIN'); assert.match(res.headers['Cache-Control'], /no-store/);
+      assert.equal(res.headers['Content-Length'], INDEX_HTML.length);
+    }],
+    ['MIME за розширенням без урахування регістру, невідоме -> octet-stream', async ({ serveFile: f }) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cym-mime-'));
+      const cases = { 'a.CSS': 'text/css; charset=utf-8', 'b.js': 'application/javascript; charset=utf-8', 'c.svg': 'image/svg+xml', 'd.xyz': 'application/octet-stream' };
+      for (const [name, type] of Object.entries(cases)) {
+        fs.writeFileSync(path.join(dir, name), 'x');
+        const res = mockRes(); f(path.join(dir, name), mockReq('GET', '/'), res); await res.done;
+        assert.equal(res.headers['Content-Type'], type, name); assert.equal(res.body, 'x');
+      }
     }],
     ['відсутній файл -> 500', async ({ serveFile: f }) => {
       const res = mockRes(); f('/definitely/missing.html', mockReq('GET', '/'), res); await res.done; assert.equal(res.statusCode, 500);
@@ -134,52 +403,351 @@ export default {
   ],
   handleGetStatus: [
     ['200 і status ok', ({ handleGetStatus: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/api/status'), res); assert.equal(JSON.parse(res.body).status, 'ok');
+      const res = mockRes(); f(mockReq('GET', '/api/status'), res); assert.equal(res.statusCode, 200); assert.equal(JSON.parse(res.body).status, 'ok');
     }],
     ['HEAD без тіла', ({ handleGetStatus: f }) => {
       const res = mockRes(); f(mockReq('HEAD', '/api/status'), res); assert.equal(res.body, '');
     }],
+    ['до першої синхронізації lastSync.timestamp = null', async mod => sandbox(async db => {
+      db.exec('DELETE FROM sync_state');
+      const res = mockRes(); mod.handleGetStatus(mockReq('GET', '/api/status'), res);
+      assert.deepEqual(JSON.parse(res.body).lastSync, { timestamp: null, updatedAt: null });
+    })],
   ],
   handlePostSync: [
-    ['без SYNC_TOKEN синхронізація вимкнена -> 403', async ({ handlePostSync: f }) => withEnv('SYNC_TOKEN', '', async () => {
-      const res = mockRes(); await f(mockReq('POST', '/api/sync'), res, URL_('/api/sync')); assert.equal(res.statusCode, 403);
+    ['без SYNC_TOKEN синхронізація вимкнена -> 403 навіть з будь-яким токеном', async ({ handlePostSync: f, }) => {
+      for (const env of ['', undefined]) await withEnv('SYNC_TOKEN', env, async () => {
+        const counter = { n: 0 };
+        await withFetch(apiWith([], counter), async () => {
+          const res = mockRes(); await f(syncReq({ authorization: 'Bearer ' }), res, URL_('/api/sync'));
+          assert.equal(res.statusCode, 403); assert.equal(JSON.parse(res.body).error, 'Manual sync is disabled'); assert.equal(counter.n, 0);
+        });
+      });
+    }],
+    ['неправильний, відсутній або префіксний токен -> 401, синхронізація не стартує', async ({ handlePostSync: f }) => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const counter = { n: 0 };
+      await withFetch(apiWith([], counter), async () => {
+        for (const h of [{ authorization: 'Bearer wrong' }, {}, { authorization: 'Bearer secre' }, { authorization: 'Bearer secret2' }, { authorization: 'Basic secret' }]) {
+          const res = mockRes(); await f(syncReq(h), res, URL_('/api/sync')); assert.equal(res.statusCode, 401, JSON.stringify(h));
+        }
+      });
+      assert.equal(counter.n, 0);
     })],
-    ['неправильний токен -> 401', async ({ handlePostSync: f }) => withEnv('SYNC_TOKEN', 'secret', async () => {
-      const res = mockRes(); await f(mockReq('POST', '/api/sync', { authorization: 'Bearer wrong' }), res, URL_('/api/sync')); assert.equal(res.statusCode, 401);
+    ['перевірка токена йде раніше за ліміт тіла: чужий запит з великим тілом -> 401', async ({ handlePostSync: f }) => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const res = mockRes(); await f(syncReq({ authorization: 'Bearer wrong', 'content-length': '5000' }), res, URL_('/api/sync')); assert.equal(res.statusCode, 401);
     })],
-    ['занадто велике тіло -> 413', async ({ handlePostSync: f }) => withEnv('SYNC_TOKEN', 'secret', async () => {
-      const res = mockRes(); await f(mockReq('POST', '/api/sync', { authorization: 'Bearer secret', 'content-length': '5000' }), res, URL_('/api/sync')); assert.equal(res.statusCode, 413);
+    ['занадто велике тіло (1025 байт) -> 413 і з\'єднання закривається', async ({ handlePostSync: f }) => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const req = syncReq({ authorization: 'Bearer secret', 'content-length': '1025' }), res = mockRes();
+      await f(req, res, URL_('/api/sync')); assert.equal(res.statusCode, 413); assert.equal(req.destroyed, 1);
     })],
+    ['тіло рівно 1024 байти приймається -> 202, фонова синхронізація виконується', async mod => sandbox(async () => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const { isSyncing } = await syncMod(); const counter = { n: 0 };
+      await withFetch(apiWith([rawV1(addr(0x77))], counter), async () => {
+        const res = mockRes(); await mod.handlePostSync(syncReq({ authorization: 'Bearer secret', 'content-length': '1024' }), res, URL_('/api/sync'));
+        assert.equal(res.statusCode, 202);
+        assert.deepEqual(JSON.parse(res.body), { status: 'sync_started', message: 'Vault synchronization started in background', fetchHistory: false });
+        await waitIdle(isSyncing);
+      });
+      assert.ok(counter.n > 0, 'фонова синхронізація не звернулася до API');
+    }))],
+    ['префікс Bearer нечутливий до регістру, fetchHistory=1 відбивається у відповіді', async mod => sandbox(async () => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const { isSyncing } = await syncMod();
+      await withFetch(apiWith([]), async () => {
+        const res = mockRes(); await mod.handlePostSync(syncReq({ authorization: 'bearer secret' }), res, URL_('/api/sync?fetchHistory=1'));
+        assert.equal(res.statusCode, 202); assert.equal(JSON.parse(res.body).fetchHistory, true);
+        await waitIdle(isSyncing);
+      });
+    }))],
+    ['поки триває синхронізація -> 409', async mod => sandbox(async () => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const { syncAllVaults } = await syncMod();
+      let release; const gate = new Promise(r => { release = r; });
+      await withFetch(apiWith([], { n: 0 }, gate), async () => {
+        const first = syncAllVaults();
+        const res = mockRes(); await mod.handlePostSync(syncReq({ authorization: 'Bearer secret' }), res, URL_('/api/sync'));
+        assert.equal(res.statusCode, 409);
+        release(); await first;
+      });
+    }))],
+    ['await=1 -> 200 sync_completed з підсумком і даними у БД', async mod => sandbox(async db => withEnv('SYNC_TOKEN', 'secret', async () => {
+      await withFetch(apiWith([rawV1(addr(0x77)), rawV1(addr(0x78))]), async () => {
+        const res = mockRes(); await mod.handlePostSync(syncReq({ authorization: 'Bearer secret' }), res, URL_('/api/sync?await=1'));
+        const body = JSON.parse(res.body);
+        assert.equal(res.statusCode, 200); assert.equal(body.status, 'sync_completed');
+        assert.equal(body.result.success, true); assert.equal(body.result.summary.v1Count, 2);
+      });
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vaults').get().c, 2);
+    }))],
+    ['await=true при збої API -> 500 sync_failed', async mod => sandbox(async () => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const saved = CONFIG.api.maxRetries; CONFIG.api.maxRetries = 0;
+      try {
+        await withFetch(async () => jsonResponse({}, 500), async () => {
+          const res = mockRes(); await mod.handlePostSync(syncReq({ authorization: 'Bearer secret' }), res, URL_('/api/sync?await=true'));
+          assert.equal(res.statusCode, 500); assert.deepEqual(JSON.parse(res.body), { status: 'sync_failed', error: 'Synchronization failed' });
+        });
+      } finally { CONFIG.api.maxRetries = saved; }
+    }))],
   ],
   handleGetVaults: [
-    ['200 з total/limit/offset/vaults', ({ handleGetVaults: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/api/vaults'), res, URL_('/api/vaults'));
-      const b = JSON.parse(res.body); assert.equal(res.statusCode, 200); assert.ok(Array.isArray(b.vaults)); assert.equal(typeof b.total, 'number');
-    }],
-    ['limit обмежує кількість вольтів', ({ handleGetVaults: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/api/vaults?limit=2'), res, URL_('/api/vaults?limit=2'));
-      const b = JSON.parse(res.body); assert.equal(b.limit, 2); assert.ok(b.vaults.length <= 2);
-    }],
-    ['limit > 1000 обрізається до 1000', ({ handleGetVaults: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/api/vaults?limit=99999'), res, URL_('/api/vaults?limit=99999')); assert.equal(JSON.parse(res.body).limit, 1000);
-    }],
-    ['нечисловий limit -> значення за замовчуванням 500', ({ handleGetVaults: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/api/vaults?limit=abc'), res, URL_('/api/vaults?limit=abc')); assert.equal(JSON.parse(res.body).limit, 500);
-    }],
-    ['від\'ємний offset -> 0', ({ handleGetVaults: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/api/vaults?offset=-5'), res, URL_('/api/vaults?offset=-5')); assert.equal(JSON.parse(res.body).offset, 0);
-    }],
+    ['відповідь містить total/limit/offset/vaults; за замовчуванням limit 500, offset 0', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const b = list(mod); assert.equal(b.total, 4); assert.equal(b.limit, 500); assert.equal(b.offset, 0); assert.equal(b.vaults.length, 4);
+    })],
+    ['поля vault відображаються з рядка БД без втрат', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const v = list(mod, '?search=Alpha').vaults[0];
+      assert.equal(v.address, addr(1)); assert.equal(v.chainId, 1); assert.equal(v.name, 'Alpha USDC'); assert.equal(v.symbol, 'aUSDC');
+      assert.equal(v.curatorName, 'Gauntlet'); assert.equal(v.version, 'v1'); assert.equal(v.isListed, true);
+      assert.deepEqual(v.asset, { address: '0xusdc', symbol: 'USDC', decimals: 6, priceUsd: 1 });
+      assert.equal(v.totalAssets, '1000000000'); assert.equal(v.totalAssetsHuman, 1000); assert.equal(v.totalAssetsUsd, 1000);
+      assert.equal(v.liquidityUsd, 300); assert.equal(v.apy, 0.10); assert.equal(v.netApy, 0.05); assert.equal(v.fee, 0.1); assert.equal(v.updatedAt, 123);
+      assert.equal(list(mod, '?search=beta').vaults[0].isListed, false);
+    })],
+    ['сортування за замовчуванням: liquidity_usd за спаданням', async mod => sandbox(async db => {
+      seedCatalog(db); assert.deepEqual(ids(list(mod)), [4, 1, 2, 3]);
+    })],
+    ['сортування за кожною дозволеною колонкою', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod, '?sortBy=total_assets_usd&sortOrder=asc')), [4, 1, 3, 2]);
+      assert.deepEqual(ids(list(mod, '?sortBy=net_apy')), [3, 1, 2, 4]);
+      assert.deepEqual(ids(list(mod, '?sortBy=apy')), [4, 2, 3, 1]);
+      assert.deepEqual(ids(list(mod, '?sortBy=name&sortOrder=asc')), [3, 1, 4, 2]);
+      assert.deepEqual(ids(list(mod, '?sortBy=liquidity_usd&sortOrder=aSc')), [3, 2, 1, 4]);
+    })],
+    ['недозволений sortBy (у т.ч. SQL і constructor) -> liquidity_usd, недійсний sortOrder -> DESC', async mod => sandbox(async db => {
+      seedCatalog(db);
+      for (const s of ['constructor', 'name;DROP TABLE vaults', 'chain_id', '__proto__']) {
+        const { status, body } = getJson(mod, '/api/vaults?sortBy=' + encodeURIComponent(s));
+        assert.equal(status, 200, s); assert.deepEqual(ids(body), [4, 1, 2, 3], s);
+      }
+      assert.deepEqual(ids(list(mod, '?sortOrder=up')), [4, 1, 2, 3]);
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vaults').get().c, 4);
+    })],
+    ['chainId фільтрує; нуль, від\'ємний і нечисловий chainId ігноруються', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod, '?chainId=8453')), [2]);
+      assert.deepEqual(ids(list(mod, '?chainId=1')), [4, 1, 3]);
+      for (const c of ['0', '-1', 'abc', '']) assert.equal(list(mod, '?chainId=' + c).total, 4, c);
+    })],
+    ['listedOnly=1 і listedOnly=true лишають тільки лістинговані, інші значення - усі', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod, '?listedOnly=1')), [4, 1, 3]);
+      assert.deepEqual(ids(list(mod, '?listedOnly=true')), [4, 1, 3]);
+      assert.equal(list(mod, '?listedOnly=0').total, 4); assert.equal(list(mod, '?listedOnly=yes').total, 4);
+    })],
+    ['пошук нечутливий до регістру і йде по name, symbol, address, curator, asset_symbol', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod, '?search=ALPHA')), [1]);
+      assert.deepEqual(ids(list(mod, '?search=ausdc')), [1]);
+      assert.deepEqual(ids(list(mod, '?search=steak')), [2]);
+      assert.deepEqual(ids(list(mod, '?search=dai')), [4]);
+      assert.deepEqual(ids(list(mod, '?search=' + addr(3).slice(-6))), [3]);
+      assert.deepEqual(ids(list(mod, '?search=%20%20alpha%20')), [1], 'пробіли навколо мають обрізатися');
+    })],
+    ['символи %, _ і \\ у пошуку шукаються буквально (ESCAPE)', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod, '?search=%25')), [3]);
+      assert.deepEqual(ids(list(mod, '?search=_')), [2]);
+      assert.deepEqual(ids(list(mod, '?search=%5C')), [4]);
+      assert.deepEqual(ids(list(mod, '?search=alph_')), [], '_ не має працювати як шаблон одного символу');
+      assert.deepEqual(ids(list(mod, '?search=al%25ha')), [], '% не має працювати як шаблон');
+    })],
+    ['SQL-ін\'єкція в пошуку не змінює запит і не ламає БД', async mod => sandbox(async db => {
+      seedCatalog(db);
+      for (const s of ["' OR 1=1 --", "x'); DROP TABLE vaults; --", '" OR ""="']) {
+        const { status, body } = getJson(mod, '/api/vaults?search=' + encodeURIComponent(s));
+        assert.equal(status, 200, s); assert.equal(body.total, 0, s);
+      }
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vaults').get().c, 4);
+    })],
+    ['пошук обрізається рівно до 64 символів', async mod => sandbox(async db => {
+      const name = 'N'.repeat(60) + 'ABCD';
+      ins(db, 'vaults', V(9, { name }));
+      ins(db, 'vaults', V(10, { name: 'N'.repeat(40) }));
+      assert.deepEqual(ids(list(mod, '?search=' + name + 'ZZZ')), [9], 'зайве відкидається, але перші 64 символи шукаються повністю');
+    })],
+    ['фільтри поєднуються через AND', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod, '?chainId=1&listedOnly=1&search=a')), [4, 1]);
+      assert.deepEqual(ids(list(mod, '?chainId=8453&listedOnly=1')), []);
+    })],
+    ['пагінація: limit/offset ріжуть сторінку, total рахує всі збіги', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const b = list(mod, '?limit=2&offset=1'); assert.deepEqual(ids(b), [1, 2]); assert.equal(b.total, 4);
+      const tail = list(mod, '?limit=2&offset=10'); assert.deepEqual(tail.vaults, []); assert.equal(tail.total, 4);
+      assert.equal(list(mod, '?listedOnly=1&limit=1').total, 3);
+    })],
+    ['межі limit: 0 і від\'ємний -> 1, 1000 лишається, >1000 -> 1000, нечисловий -> 500', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const l0 = list(mod, '?limit=0'); assert.equal(l0.limit, 1); assert.deepEqual(ids(l0), [4]);
+      assert.equal(list(mod, '?limit=-3').limit, 1);
+      assert.equal(list(mod, '?limit=1000').limit, 1000);
+      assert.equal(list(mod, '?limit=1001').limit, 1000);
+      assert.equal(list(mod, '?limit=99999').limit, 1000);
+      assert.equal(list(mod, '?limit=abc').limit, 500);
+    })],
+    ['межі offset: від\'ємний і нечисловий -> 0', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.equal(list(mod, '?offset=-5').offset, 0); assert.equal(list(mod, '?offset=abc').offset, 0);
+      assert.deepEqual(ids(list(mod, '?offset=-5')), [4, 1, 2, 3]);
+    })],
+    ['ДЕФЕКТ: дуже великий offset -> не 5xx (порожня сторінка або 400)', async mod => sandbox(async db => {
+      seedCatalog(db);
+      for (const o of ['99999999999999999999', '9223372036854775807']) {
+        const r = call(mod.handleRequest, 'GET', '/api/vaults?offset=' + o);
+        assert.ok([200, 400].includes(r.statusCode), `offset=${o} -> ${r.statusCode}`);
+      }
+    })],
+    ['метрики ризику враховують пірів: exit 50%, stressed 25%, ринок переповнений', async mod => sandbox(async db => {
+      seedCrowded(db);
+      const p = list(mod, '?search=Vault%20P').vaults[0];
+      assert.equal(p.exitCapPercent, 50); assert.equal(p.exitCapUsd, 5e5);
+      assert.equal(p.stressedExitCapPercent, 25); assert.equal(p.stressedExitCapUsd, 2.5e5);
+      assert.equal(p.isCrowded, true); assert.equal(p.crowdedMarketsCount, 1);
+      assert.equal(p.mqiPercent, 100); assert.equal(p.isAllClean, true); assert.equal(p.compromisedCount, 0);
+    })],
+    ['метрики якості: 40% у нелістингованих ринках -> MQI 60, два скомпрометовані ринки', async mod => sandbox(async db => {
+      seedQuality(db);
+      const [f, g] = [list(mod, '?search=' + addr(0x20).slice(-4)).vaults[0], list(mod, '?search=' + addr(0x21).slice(-4)).vaults[0]];
+      assert.equal(f.mqiPercent, 60); assert.equal(f.compromisedCount, 2); assert.equal(f.isAllClean, false);
+      assert.equal(g.mqiPercent, 100); assert.equal(g.compromisedCount, 0);
+    })],
+    ['нульовий TVL з алокаціями не дає 100% виходу (ефективний TVL = сума алокацій)', async mod => sandbox(async db => {
+      ins(db, 'markets', M('full', { total_supply_assets_usd: 1000, total_borrow_assets_usd: 1000 }));
+      ins(db, 'vaults', V(0x30, { total_assets_usd: 0 }));
+      ins(db, 'vault_allocations', A(0x30, 'full', 1000));
+      const z = list(mod).vaults[0];
+      assert.equal(z.exitCapPercent, 0); assert.equal(z.stressedExitCapPercent, 0);
+    })],
+    ['кеш списку: у межах 15 с віддає збережене, після 15 с - свіже', async mod => sandbox(async db => withClock(async clock => {
+      seedCatalog(db);
+      assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
+      db.prepare("UPDATE vaults SET name = 'Alpha NEW' WHERE address = ?").run(addr(1));
+      clock.advance(14999); assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
+      clock.advance(2); assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha NEW');
+    }))],
+    ['кожен валідований параметр входить у ключ кешу', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.deepEqual(ids(list(mod)), [4, 1, 2, 3]);
+      assert.deepEqual(ids(list(mod, '?sortOrder=asc')), [3, 2, 1, 4]);
+      assert.deepEqual(ids(list(mod, '?sortBy=net_apy')), [3, 1, 2, 4]);
+      assert.deepEqual(ids(list(mod, '?chainId=8453')), [2]);
+      assert.deepEqual(ids(list(mod, '?listedOnly=1')), [4, 1, 3]);
+      assert.deepEqual(ids(list(mod, '?search=beta')), [2]);
+      assert.deepEqual(ids(list(mod, '?limit=1')), [4]);
+      assert.deepEqual(ids(list(mod, '?offset=3')), [3]);
+    })],
+    ['сторонні параметри не створюють нових записів кешу (ключ лише з валідованих значень)', async mod => sandbox(async db => {
+      seedCatalog(db);
+      list(mod, '?limit=7');
+      db.prepare("UPDATE vaults SET name = 'Changed' WHERE address = ?").run(addr(4));
+      assert.equal(list(mod, '?limit=7&junk=1&sortBy=evil').vaults[0].name, 'Back\\Slash');
+    })],
+    ['кеш списку обмежений 50 записами: 51-й витісняє найстаріший', async mod => sandbox(async db => {
+      seedCatalog(db);
+      for (let l = 1; l <= 50; l++) list(mod, `?limit=${l}`);
+      db.prepare("UPDATE vaults SET name = 'Fresh' WHERE address = ?").run(addr(4));
+      list(mod, '?limit=51');
+      assert.equal(list(mod, '?limit=2').vaults[0].name, 'Back\\Slash', 'limit=2 мав лишитися в кеші');
+      assert.equal(list(mod, '?limit=1').vaults[0].name, 'Fresh', 'limit=1 мав бути витіснений');
+    })],
+    ['успішна синхронізація інвалідує кеш списку', async mod => sandbox(async db => {
+      seedCatalog(db);
+      assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
+      db.prepare("UPDATE vaults SET name = 'Alpha AFTER' WHERE address = ?").run(addr(1));
+      assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
+      await resetCaches();
+      assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha AFTER');
+    })],
+    ['HEAD /api/vaults -> 200 без тіла', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const r = call(mod.handleRequest, 'HEAD', '/api/vaults'); assert.equal(r.statusCode, 200); assert.equal(r.body, '');
+    })],
   ],
   handleGetVaultByAddress: [
-    ['невідомий вольт -> 404', ({ handleGetVaultByAddress: f }) => {
-      const res = mockRes(); f(mockReq('GET', '/'), res, '0x' + '0'.repeat(40)); assert.equal(res.statusCode, 404);
+    ['невідомий vault -> 404 з адресою в повідомленні', ({ handleGetVaultByAddress: f }) => {
+      const a = '0x' + '0'.repeat(40), res = mockRes(); f(mockReq('GET', '/'), res, a);
+      assert.equal(res.statusCode, 404); assert.ok(JSON.parse(res.body).error.includes(a));
     }],
-    ['існуючий вольт -> vault, verdict, allocations', async ({ handleGetVaultByAddress: f }) => {
-      const { getDatabase } = await import('../../server/db/database.js');
-      const row = getDatabase().prepare('SELECT address FROM vaults LIMIT 1').get();
-      if (!row) return; // порожня БД: нічого перевіряти
-      const res = mockRes(); f(mockReq('GET', '/'), res, row.address);
-      assert.deepEqual(Object.keys(JSON.parse(res.body)).sort(), ['allocations', 'vault', 'verdict']);
-    }],
+    ['структура відповіді: vault, verdict, allocations з полями з БД', async mod => sandbox(async db => {
+      seedQuality(db);
+      const { status, body } = getJson(mod, '/api/vaults/' + addr(0x20));
+      assert.equal(status, 200); assert.deepEqual(Object.keys(body).sort(), ['allocations', 'vault', 'verdict']);
+      assert.equal(body.vault.address, addr(0x20)); assert.equal(body.vault.totalAssetsUsd, 1e6); assert.equal(body.vault.isListed, true);
+      assert.equal(body.vault.totalAssetsHuman, 1000); assert.deepEqual(body.vault.asset, { address: '0xusdc', symbol: 'USDC', decimals: 6, priceUsd: 1 });
+      assert.equal(body.verdict.vaultAddress, addr(0x20));
+      assert.deepEqual(body.allocations.map(a => a.marketUniqueKey), ['clean', 'unl', 'unl2'], 'сортування за supply_assets_usd DESC');
+      const c = body.allocations[0];
+      assert.equal(c.supplyAssetsUsd, 6e5); assert.equal(c.loanSymbol, 'USDC'); assert.equal(c.collateralSymbol, 'WETH');
+      assert.equal(c.lltvPercent, 86); assert.equal(c.marketTotalSupplyUsd, 1e9); assert.equal(c.isListed, true);
+      assert.equal(c.oracleType, 'Unknown'); assert.equal(c.badDebtUsd, 0); assert.deepEqual(c.warnings, []);
+      assert.equal(body.allocations[1].isListed, false);
+    })],
+    ['матеріальні скомпрометовані ринки позначені, MQI = 60%', async mod => sandbox(async db => {
+      seedQuality(db);
+      const { body } = getJson(mod, '/api/vaults/' + addr(0x20));
+      assert.deepEqual(body.allocations.map(a => a.isFlagged), [false, true, true]);
+      assert.deepEqual(body.allocations.map(a => a.isClean), [true, false, false]);
+      assert.equal(body.verdict.mqi.mqiPercent, 60);
+      assert.ok(body.allocations[1].warnings.some(w => /Unlisted/.test(w)));
+    })],
+    ['пил (<1% TVL) у нелістингованому ринку не позначається, але попередження лишається', async mod => sandbox(async db => {
+      seedQuality(db);
+      const { body } = getJson(mod, '/api/vaults/' + addr(0x21));
+      const dust = body.allocations.find(a => a.marketUniqueKey === 'unl2');
+      assert.equal(dust.isFlagged, false); assert.equal(dust.isClean, true); assert.ok(dust.warnings.length > 0);
+      assert.equal(body.verdict.mqi.mqiPercent, 100);
+    })],
+    ['піри з інших vaults формують stressed exit і переповнений ринок', async mod => sandbox(async db => {
+      seedCrowded(db);
+      const liq = getJson(mod, '/api/vaults/' + addr(0x10)).body.verdict.liquidity;
+      assert.equal(liq.instantExitCapacityPercent, 50); assert.equal(liq.stressedExitCapacityPercent, 25);
+      assert.equal(liq.crowdedMarkets.length, 1); assert.equal(liq.crowdedMarkets[0].peerSupplyUsd, 1e6);
+      assert.deepEqual(liq.crowdedMarkets[0].topPeers, ['Peer Q ($1.0M)']);
+    })],
+    ['V2 через базовий V1: власна частка віднімається від базового, піри P і Q(600K)', async mod => sandbox(async db => {
+      seedCrowded(db);
+      const liq = getJson(mod, '/api/vaults/' + addr(0x13)).body.verdict.liquidity;
+      assert.equal(liq.instantExitCapacityPercent, 100); assert.equal(liq.stressedExitCapacityPercent, 25);
+      assert.equal(liq.crowdedMarkets[0].peerSupplyUsd, 1.6e6);
+      assert.deepEqual(liq.crowdedMarkets[0].topPeers, ['Vault P ($1.0M)', 'Peer Q ($600K)']);
+    })],
+    ['кеш аудиту: у межах 30 с віддає збережене, після 30 с - свіже', async mod => sandbox(async db => withClock(async clock => {
+      ins(db, 'vaults', V(0x40, { name: 'Before' }));
+      const get = () => getJson(mod, '/api/vaults/' + addr(0x40)).body.vault.name;
+      assert.equal(get(), 'Before');
+      db.prepare("UPDATE vaults SET name = 'After' WHERE address = ?").run(addr(0x40));
+      clock.advance(29999); assert.equal(get(), 'Before');
+      clock.advance(2); assert.equal(get(), 'After');
+    }))],
+    ['404 не кешується: vault, що з\'явився, одразу доступний', async mod => sandbox(async db => {
+      assert.equal(call(mod.handleRequest, 'GET', '/api/vaults/' + addr(0x41)).statusCode, 404);
+      ins(db, 'vaults', V(0x41));
+      const { status, body } = getJson(mod, '/api/vaults/' + addr(0x41));
+      assert.equal(status, 200); assert.equal(body.vault?.address, addr(0x41));
+    })],
+    ['нульовий TVL з алокаціями: вихід рахується від суми алокацій (0%, а не 100%)', async mod => sandbox(async db => {
+      ins(db, 'markets', M('full', { total_supply_assets_usd: 1000, total_borrow_assets_usd: 1000 }));
+      ins(db, 'vaults', V(0x43, { total_assets_usd: 0 }));
+      ins(db, 'vault_allocations', A(0x43, 'full', 1000));
+      const liq = getJson(mod, '/api/vaults/' + addr(0x43)).body.verdict.liquidity;
+      assert.equal(liq.instantExitCapacityPercent, 0); assert.equal(liq.stressedExitCapacityPercent, 0);
+    })],
+    ['успішна синхронізація інвалідує кеш аудиту', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(0x42, { name: 'Before' }));
+      const get = () => getJson(mod, '/api/vaults/' + addr(0x42)).body.vault.name;
+      assert.equal(get(), 'Before');
+      db.prepare("UPDATE vaults SET name = 'After' WHERE address = ?").run(addr(0x42));
+      assert.equal(get(), 'Before');
+      await resetCaches(); assert.equal(get(), 'After');
+    })],
+    ['кеш аудиту обмежений 500 записами: 501-й витісняє найстаріший', async mod => sandbox(async db => {
+      db.exec('BEGIN'); for (let i = 0; i <= 500; i++) ins(db, 'vaults', V(0x1000 + i, { name: 'Old' })); db.exec('COMMIT');
+      const get = i => getJson(mod, '/api/vaults/' + addr(0x1000 + i)).body.vault.name;
+      for (let i = 0; i < 500; i++) get(i);
+      db.exec("UPDATE vaults SET name = 'New'");
+      get(500);
+      assert.equal(get(1), 'Old', 'другий запис мав лишитися в кеші');
+      assert.equal(get(0), 'New', 'найстаріший запис мав бути витіснений');
+    })],
   ],
 };
