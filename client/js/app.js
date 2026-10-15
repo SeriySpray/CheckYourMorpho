@@ -12,6 +12,15 @@ let activeAuditData = null;
 let isTransitioningVault = false;
 const clientAuditCache = new Map();
 
+// Cached audits older than this are shown as a placeholder only and always re-fetched
+const AUDIT_CACHE_TTL_MS = 120000;
+
+/** Returns the cached audit for a vault when it is still fresh, otherwise null. */
+function getFreshAudit(address) {
+  const entry = clientAuditCache.get((address || '').toLowerCase());
+  return entry && Date.now() - (entry.cachedAt || 0) < AUDIT_CACHE_TTL_MS ? entry : null;
+}
+
 // DOM Elements cache
 const DOM = {
   sphereWrapper: document.getElementById('sphere-wrapper'),
@@ -113,7 +122,8 @@ async function initApp() {
 
   // 3. Fetch Vaults from REST API
   try {
-    const res = await fetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
+    const res = await apiFetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     allVaults = data.vaults || [];
 
@@ -131,7 +141,29 @@ async function initApp() {
 }
 
 let livePollingTimer = null;
+let visibilityPollingBound = false;
 let isPollingActive = false;
+
+/**
+ * fetch() with a timeout so a hung request can never block clicks or live polling forever.
+ */
+function apiFetch(url, timeoutMs = 15000, cancelSignal = null) {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = cancelSignal && AbortSignal.any ? AbortSignal.any([timeout, cancelSignal]) : timeout;
+  return fetch(url, { signal });
+}
+
+
+/**
+ * Shows a short notice in the header status label, then restores the live counter.
+ */
+function showStatusNotice(text) {
+  if (!DOM.headerStatusText) return;
+  DOM.headerStatusText.textContent = text;
+  setTimeout(() => {
+    DOM.headerStatusText.textContent = allVaults.length > 0 ? `Live: ${allVaults.length} Vaults` : 'API Offline';
+  }, 4000);
+}
 
 /**
  * Periodically polls the server every 60 seconds to refresh vault metrics,
@@ -140,14 +172,14 @@ let isPollingActive = false;
 function startLivePolling() {
   if (livePollingTimer) clearInterval(livePollingTimer);
 
-  livePollingTimer = setInterval(async () => {
+  const pollOnce = async () => {
     if (document.hidden) return;
     if (isPollingActive) return;
     isPollingActive = true;
 
     try {
       // 1. Fetch updated vaults list
-      const res = await fetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
+      const res = await apiFetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.vaults) && data.vaults.length > 0) {
@@ -167,12 +199,14 @@ function startLivePolling() {
           }
           renderPinnedRichPills(false);
         }
+      } else if (DOM.headerStatusText) {
+        DOM.headerStatusText.textContent = 'Reconnecting...';
       }
 
       // 2. Quietly refresh full audits for all pinned vaults so they never lag
       const pinnedList = getPinnedAddresses();
       pinnedList.forEach(addr => {
-        fetch(`/api/vaults/${addr}`)
+        apiFetch(`/api/vaults/${addr}`)
           .then(r => r.ok ? r.json() : null)
           .then(auditData => {
             if (auditData) applyVaultAuditData(addr, auditData);
@@ -183,7 +217,7 @@ function startLivePolling() {
       // 3. If an audit modal is currently open and not animating, quietly refresh it
       if (selectedVaultAddress && !DOM.auditModal.classList.contains('hidden') && !isTransitioningVault) {
         const pollingAddr = selectedVaultAddress;
-        const auditRes = await fetch(`/api/vaults/${pollingAddr}`);
+        const auditRes = await apiFetch(`/api/vaults/${pollingAddr}`);
         if (auditRes.ok) {
           const auditData = await auditRes.json();
           // Ensure user hasn't switched vaults or closed modal during fetch
@@ -194,10 +228,21 @@ function startLivePolling() {
       }
     } catch (pollErr) {
       console.warn('Live polling quiet error:', pollErr.message);
+      if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'Reconnecting...';
     } finally {
       isPollingActive = false;
     }
-  }, 60000);
+  };
+
+  livePollingTimer = setInterval(pollOnce, 60000);
+
+  // Catch up right away when the tab becomes visible again instead of waiting up to a minute
+  if (!visibilityPollingBound) {
+    visibilityPollingBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) pollOnce();
+    });
+  }
 }
 
 function formatChainName(chainId) {
@@ -440,18 +485,13 @@ function setupVaultExplorerEvents() {
       }, 120);
     });
 
+    // Escape is handled centrally in setupModalEvents (closes one layer at a time)
     DOM.searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        closeAllDropdowns();
-        if (DOM.searchInput.value) {
-          DOM.searchInput.value = '';
-          if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
-          explorerFilters.query = '';
-          renderVaultExplorer();
-          DOM.searchInput.blur();
-          sphere.highlightVault(null);
-        }
-      } else if (e.key === 'Enter') {
+      if (e.key === 'Enter') {
+        // Apply a pending debounced query first so Enter never opens a stale first row
+        clearTimeout(searchDebounceTimer);
+        explorerFilters.query = DOM.searchInput.value.trim().toLowerCase();
+        renderVaultExplorer();
         const firstItem = DOM.explorerVaultsList?.querySelector('.explorer-vault-item');
         if (firstItem) {
           firstItem.click();
@@ -500,17 +540,30 @@ function setupVaultExplorerEvents() {
         if (!wasOpen) {
           dropdown.classList.add('open');
           trigger.setAttribute('aria-expanded', 'true');
+          // Keyboard activation (detail 0): move focus into the list
+          if (e.detail === 0) dropdown.querySelector('.dropdown-item.selected, .dropdown-item')?.focus();
         }
       });
     }
 
     if (menu) {
       menu.querySelectorAll('.dropdown-item').forEach(item => {
+        item.tabIndex = 0;
+        item.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            item.click();
+          } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            (e.key === 'ArrowDown' ? item.nextElementSibling : item.previousElementSibling)?.focus();
+          }
+        });
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           const value = item.getAttribute('data-value');
           setFilterValue(filterKey, value);
           closeAllDropdowns();
+          trigger?.focus();
         });
       });
     }
@@ -519,13 +572,6 @@ function setupVaultExplorerEvents() {
   // Global document click closes open dropdowns
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.custom-dropdown')) {
-      closeAllDropdowns();
-    }
-  });
-
-  // Global ESC closes open dropdowns
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
       closeAllDropdowns();
     }
   });
@@ -602,44 +648,51 @@ function matchesCuratorFilter(v, filter) {
 /* --- Pinned Vaults (Favorites / Watchlist) Management --- */
 const PINNED_STORAGE_KEY = 'cym_pinned_vaults';
 
-function getPinnedAddresses() {
-  try {
-    const raw = localStorage.getItem(PINNED_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed) ? parsed.map(a => String(a).toLowerCase()) : [];
-    if (typeof allVaults !== 'undefined' && Array.isArray(allVaults) && allVaults.length > 0) {
-      const validSet = new Set(allVaults.map(v => (v.address || '').toLowerCase()));
-      const pruned = list.filter(addr => validSet.has(addr));
-      if (pruned.length !== list.length) {
-        savePinnedAddresses(pruned);
-      }
-      return pruned;
+// In-memory copy used when localStorage is blocked (private mode, disabled storage), so pinning still works
+let pinnedMemoryFallback = null;
+
+/**
+ * Pinned vault addresses (lowercase). With visibleOnly the list is limited to vaults the API currently
+ * returns; the stored list itself is never pruned, so a vault missing for a while keeps its pin.
+ */
+function getPinnedAddresses(visibleOnly = true) {
+  let list = pinnedMemoryFallback;
+  if (list === null) {
+    try {
+      const raw = localStorage.getItem(PINNED_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      list = Array.isArray(parsed) ? parsed.map(a => String(a).toLowerCase()) : [];
+    } catch {
+      list = [];
     }
-    return list;
-  } catch {
-    return [];
   }
+  if (visibleOnly && Array.isArray(allVaults) && allVaults.length > 0) {
+    const validSet = new Set(allVaults.map(v => (v.address || '').toLowerCase()));
+    return list.filter(addr => validSet.has(addr));
+  }
+  return list;
 }
 
 function savePinnedAddresses(addresses) {
   try {
     localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(addresses));
+    pinnedMemoryFallback = null;
   } catch (err) {
+    pinnedMemoryFallback = addresses;
     console.error('Failed to save pinned vaults to localStorage:', err);
   }
 }
 
-function isVaultPinned(address) {
+function isVaultPinned(address, pinnedSet = null) {
   if (!address) return false;
-  const pinned = getPinnedAddresses();
-  return pinned.includes(address.toLowerCase());
+  const key = address.toLowerCase();
+  return pinnedSet ? pinnedSet.has(key) : getPinnedAddresses().includes(key);
 }
 
 function togglePinVault(address) {
   if (!address) return;
   const addr = address.toLowerCase();
-  let pinned = getPinnedAddresses();
+  let pinned = getPinnedAddresses(false); // raw list: filtering by the current API response would drop other pins
   const exists = pinned.includes(addr);
   if (exists) {
     pinned = pinned.filter(a => a !== addr);
@@ -666,8 +719,9 @@ function updateFavBtnUI(currentAddress) {
  * and the vault explorer list.
  */
 function applyVaultAuditData(vaultAddress, auditData) {
-  if (!vaultAddress || !auditData) return;
+  if (!vaultAddress || !auditData?.vault || !auditData?.verdict) return;
   const lowerAddr = vaultAddress.toLowerCase();
+  auditData.cachedAt = Date.now();
   clientAuditCache.set(lowerAddr, auditData);
 
   const v = auditData.vault;
@@ -715,9 +769,9 @@ function applyVaultAuditData(vaultAddress, auditData) {
     const card = DOM.pinnedRichPills?.querySelector(`[data-address="${v?.address || vaultAddress}"]`)
       || DOM.pinnedRichPills?.querySelector(`[data-address="${lowerAddr}"]`);
     if (card && v) {
-      const netApyFormatted = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+      const netApyFormatted = formatPercent(v.netApy || 0);
       const feeFormatted = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
-      const decimals = v.asset?.decimals || matchingVault?.asset?.decimals || 6;
+      const decimals = v.asset?.decimals ?? matchingVault?.asset?.decimals ?? 6;
       let tokenAmount = 0;
       if (v.totalAssets) {
         tokenAmount = Number(v.totalAssets) / Math.pow(10, decimals);
@@ -773,7 +827,7 @@ function applyVaultAuditData(vaultAddress, auditData) {
     const tvlEl = expItem.querySelector('.vault-item-tvl');
     const apyEl = expItem.querySelector('.vault-item-apy');
     if (tvlEl) tvlEl.textContent = formatCurrency(v.totalAssetsUsd || v.liquidityUsd || 0);
-    if (apyEl) apyEl.textContent = `${((v.netApy || 0) * 100).toFixed(2)}% APY`;
+    if (apyEl) apyEl.textContent = `${formatPercent(v.netApy || 0)} APY`;
   }
 }
 
@@ -806,7 +860,7 @@ function renderPinnedRichPills(animate = false) {
     const chainClass = getChainClass(v.chainId);
     const chainName = formatChainName(v.chainId);
     const curator = formatCuratorName(v.curatorName, v.name);
-    const cachedAudit = clientAuditCache.get((v.address || '').toLowerCase());
+    const cachedAudit = getFreshAudit(v.address);
 
     const totalAssetsUsd = cachedAudit?.vault?.totalAssetsUsd ?? v.totalAssetsUsd ?? 0;
     const liquidityUsd = cachedAudit?.vault?.liquidityUsd ?? v.liquidityUsd ?? 0;
@@ -814,7 +868,7 @@ function renderPinnedRichPills(animate = false) {
     const fee = cachedAudit?.vault?.fee ?? v.fee ?? 0;
     const totalAssets = cachedAudit?.vault?.totalAssets ?? v.totalAssets;
 
-    const netApyFormatted = `${((netApy || 0) * 100).toFixed(2)}%`;
+    const netApyFormatted = formatPercent(netApy || 0);
     const feeFormatted = `Fee: ${((fee || 0) * 100).toFixed(1)}%`;
 
     const decimals = cachedAudit?.vault?.asset?.decimals ?? v.asset?.decimals ?? 6;
@@ -853,7 +907,7 @@ function renderPinnedRichPills(animate = false) {
         </div>
         <div class="rich-pill-actions">
           <span class="rich-pill-mqi-badge ${mqiClass}">${escapeHtml(mqiText)}</span>
-          <button type="button" class="rich-pill-star-btn" data-unpin="${v.address}" title="Unpin from favorites" aria-label="Unpin ${escapeHtml(v.name)}">
+          <button type="button" class="rich-pill-star-btn" data-unpin="${escapeHtml(v.address)}" title="Unpin from favorites" aria-label="Unpin ${escapeHtml(v.name)}">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff" stroke="#ffffff" stroke-width="1.5">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
@@ -939,7 +993,8 @@ function renderPinnedRichPills(animate = false) {
 
   // Background pre-fetch full audits for pinned vaults to warm cache and ensure exact data
   pinnedAddresses.forEach(addr => {
-    fetch(`/api/vaults/${addr}`)
+    if (getFreshAudit(addr)) return; // live polling keeps cached audits fresh
+    apiFetch(`/api/vaults/${addr}`)
       .then(res => res.ok ? res.json() : null)
       .then(auditData => {
         if (auditData) {
@@ -959,11 +1014,13 @@ function renderVaultExplorer() {
   DOM.explorerVaultsList.innerHTML = '';
 
   const pinnedList = getPinnedAddresses();
+  const pinnedSet = new Set(pinnedList); // built once per render instead of once per row
   if (DOM.explorerFavCount) {
     DOM.explorerFavCount.textContent = pinnedList.length;
   }
   if (DOM.explorerFavFilterBtn) {
     DOM.explorerFavFilterBtn.classList.toggle('active', explorerFilters.pinnedOnly);
+    DOM.explorerFavFilterBtn.setAttribute('aria-pressed', String(explorerFilters.pinnedOnly));
   }
 
   const isFiltered = Boolean(
@@ -980,7 +1037,7 @@ function renderVaultExplorer() {
   let results = allVaults.filter(v => {
     // 0. Pinned / Favorites Filter
     if (explorerFilters.pinnedOnly) {
-      if (!isVaultPinned(v.address)) return false;
+      if (!isVaultPinned(v.address, pinnedSet)) return false;
     }
 
     // 1. Text Query Filter
@@ -1080,8 +1137,8 @@ function renderVaultExplorer() {
     const li = document.createElement('li');
     li.className = 'explorer-vault-item';
     li.setAttribute('data-address', v.address);
+    // Not role="button": the row contains its own star button, and nested interactive content is invalid
     li.tabIndex = 0;
-    li.setAttribute('role', 'button');
 
     const chainName = formatChainName(v.chainId);
     const chainClass = getChainClass(v.chainId);
@@ -1091,10 +1148,8 @@ function renderVaultExplorer() {
     const apy = v.netApy || 0;
     const mqi = v.mqiPercent ?? 100;
     const isClean = v.isAllClean ?? (mqi === 100);
-    const isPinned = isVaultPinned(v.address);
+    const isPinned = isVaultPinned(v.address, pinnedSet);
     const apyClass = apy < 0 ? 'negative' : '';
-
-    li.setAttribute('aria-label', `${v.name}, ${formatCurrency(tvl)} deposits`);
 
     const flaggedBadgeHtml = (!isClean && mqi < 100)
       ? ` • <span class="vault-mini-badge flagged">${(100 - mqi).toFixed(1)}% Flagged</span>`
@@ -1103,19 +1158,19 @@ function renderVaultExplorer() {
     li.innerHTML = `
       <div class="vault-item-left">
         <div class="vault-item-title-row">
-          <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${v.address}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="Toggle favorite">
+          <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${escapeHtml(v.address)}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(v.name)}" aria-pressed="${isPinned}">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="${isPinned ? '#ffffff' : 'none'}" stroke="${isPinned ? '#ffffff' : 'rgba(255,255,255,0.35)'}" stroke-width="1.75">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
             </svg>
           </button>
-          <span class="vault-chain-badge ${chainClass}">${chainName}</span>
+          <span class="vault-chain-badge ${chainClass}">${escapeHtml(chainName)}</span>
           <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
         </div>
         <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong>${flaggedBadgeHtml}</span>
       </div>
       <div class="vault-item-right">
         <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
-        <span class="vault-item-apy ${apyClass}">${(apy * 100).toFixed(2)}% APY</span>
+        <span class="vault-item-apy ${apyClass}">${formatPercent(apy)} APY</span>
       </div>
     `;
 
@@ -1143,6 +1198,7 @@ function renderVaultExplorer() {
     });
 
     li.addEventListener('keydown', (e) => {
+      if (e.target !== li) return; // keys pressed on the inner star button belong to the star
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         const pos = sphere.getParticleScreenPos(v.address);
@@ -1198,7 +1254,7 @@ function populateBasicVaultInfo(v) {
   if (DOM.modalExitCapPct && v.exitCapPercent !== undefined) {
     DOM.modalExitCapPct.textContent = `${v.exitCapPercent}% Exit Cap`;
   }
-  if (DOM.modalNetApy) DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+  if (DOM.modalNetApy) DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
   if (DOM.modalGrade && v.mqiPercent !== undefined) {
     DOM.modalGrade.textContent = `${v.mqiPercent}%`;
@@ -1212,7 +1268,85 @@ function populateBasicVaultInfo(v) {
  * Stage 2: Upon arriving at the left side, it smoothly unfolds into the full window panel.
  * Instant Pre-population & In-Memory Cache ensure zero data loading lag.
  */
+/**
+ * Resets the half-open state left by a failed audit request and tells the user.
+ */
+function abortFailedAuditOpen() {
+  selectedVaultAddress = null;
+  isTransitioningVault = false;
+  isClosingAudit = false;
+  sphere.setSelectedVault(null);
+  sphere.highlightVault(null);
+  renderPinnedRichPills(true);
+  showStatusNotice('Audit unavailable, try again');
+}
+
+let focusBeforeAudit = null;
+let isClosingAudit = false;
+let auditOpenToken = 0;
+let auditAbort = null;
+
+/** Moves keyboard focus into the audit dialog once it is visible. */
+function focusAuditModal() {
+  document.getElementById('modal-close-btn')?.focus();
+}
+
+/** Puts focus back where it was before the audit opened (the row may have been re-rendered since). */
+function restoreFocusAfterAudit() {
+  const target = focusBeforeAudit;
+  focusBeforeAudit = null;
+  if (!target) return;
+  let el = target.el && document.contains(target.el) ? target.el : null;
+  if (!el && target.address && DOM.explorerVaultsList) {
+    el = [...DOM.explorerVaultsList.querySelectorAll('[data-address]')].find(n => n.dataset.address === target.address) || null;
+  }
+  el?.focus?.();
+}
+
+/** If a newer audit landed in the cache while the modal was animating in, show it instead of the older data. */
+function syncModalWithCache(address, shownData) {
+  const latest = clientAuditCache.get((address || '').toLowerCase());
+  if (latest && latest !== shownData) {
+    activeAuditData = latest;
+    populateAuditModal(latest, true);
+  }
+}
+
+/** Escape while an audit is still loading: abort the request and undo the opening state. */
+function cancelPendingAuditOpen() {
+  auditOpenToken++;
+  auditAbort?.abort();
+  DOM.morphProxy?.classList.add('hidden');
+  DOM.morphProxyRetract?.classList.add('hidden');
+  DOM.auditModal.classList.add('hidden');
+  selectedVaultAddress = null;
+  isTransitioningVault = false;
+  sphere.setSelectedVault(null);
+  sphere.highlightVault(null);
+  renderPinnedRichPills(true);
+  restoreFocusAfterAudit();
+}
+
+/**
+ * Opens the audit for a vault. Any failure after the transition started (bad payload, render error)
+ * resets the UI instead of leaving it stuck in the transitioning state.
+ */
 async function openVaultAudit(vault, startPos) {
+  if (isTransitioningVault) return;
+  const token = ++auditOpenToken;
+  try {
+    await openVaultAuditFlow(vault, startPos, token);
+  } catch (err) {
+    console.error('Failed to open vault audit:', err);
+    if (token === auditOpenToken) {
+      DOM.morphProxy?.classList.add('hidden');
+      DOM.morphProxyRetract?.classList.add('hidden');
+      abortFailedAuditOpen();
+    }
+  }
+}
+
+async function openVaultAuditFlow(vault, startPos, token) {
   if (isTransitioningVault) return;
 
   // If clicking the currently open vault, do nothing
@@ -1221,6 +1355,10 @@ async function openVaultAudit(vault, startPos) {
   }
 
   DOM.tooltip.classList.add('hidden');
+  if (DOM.auditModal.classList.contains('hidden')) {
+    const active = document.activeElement;
+    focusBeforeAudit = { el: active, address: active?.closest?.('[data-address]')?.dataset.address || null };
+  }
 
   // 1. Instant Synchronous Pre-population (0ms latency: badges, TVL, APY, specs appear immediately)
   const cacheKey = (vault.address || '').toLowerCase();
@@ -1233,26 +1371,29 @@ async function openVaultAudit(vault, startPos) {
 
   // 2. Fetch full audit data with client-side in-memory caching and background revalidation
   let auditDataPromise;
-  if (cachedData) {
-    auditDataPromise = Promise.resolve(cachedData);
-    fetch(`/api/vaults/${vault.address}`)
+  const freshCached = getFreshAudit(cacheKey);
+  if (freshCached) {
+    auditDataPromise = Promise.resolve(freshCached);
+    apiFetch(`/api/vaults/${vault.address}`)
       .then(res => res.ok ? res.json() : null)
       .then(freshData => {
         if (freshData) applyVaultAuditData(vault.address, freshData);
       })
       .catch(() => {});
   } else {
-    auditDataPromise = fetch(`/api/vaults/${vault.address}`)
+    auditAbort = new AbortController();
+    auditDataPromise = apiFetch(`/api/vaults/${vault.address}`, 8000, auditAbort.signal)
       .then(res => {
         if (!res.ok) throw new Error('Vault audit data not found');
         return res.json();
       })
       .then(data => {
+        if (!data?.vault || !data?.verdict) throw new Error('Malformed audit payload');
         applyVaultAuditData(vault.address, data);
         return data;
       })
       .catch(err => {
-        console.error('Error fetching vault audit:', err);
+        if (err.name !== 'AbortError') console.error('Error fetching vault audit:', err);
         return null;
       });
   }
@@ -1269,15 +1410,17 @@ async function openVaultAudit(vault, startPos) {
     }
 
     const data = await auditDataPromise;
+    if (token !== auditOpenToken) return; // cancelled with Escape while loading
     if (!data) {
-      isTransitioningVault = false;
-      closeVaultAudit();
+      abortFailedAuditOpen();
       return;
     }
 
     activeAuditData = data;
     populateAuditModal(data);
     DOM.auditModal.classList.remove('hidden');
+    focusAuditModal();
+    syncModalWithCache(vault.address, data);
     isTransitioningVault = false;
     return;
   }
@@ -1285,7 +1428,7 @@ async function openVaultAudit(vault, startPos) {
   // Target coordinates for Left Floating Terminal (Desktop)
   const targetLeft = 20;
   const targetTop = 18;
-  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetWidth = getAuditPanelWidth();
   const targetHeight = window.innerHeight - 36;
   const targetCenterX = targetLeft + targetWidth / 2;
   const targetCenterY = targetTop + targetHeight / 2;
@@ -1406,10 +1549,10 @@ async function openVaultAudit(vault, startPos) {
 
   // Simultaneously resolve audit data and finish population
   const data = await auditDataPromise;
+  if (token !== auditOpenToken) return; // cancelled with Escape while loading
   if (!data) {
     pOpen.classList.add('hidden');
-    isTransitioningVault = false;
-    closeVaultAudit();
+    abortFailedAuditOpen();
     return;
   }
 
@@ -1421,36 +1564,50 @@ async function openVaultAudit(vault, startPos) {
   const remainingDelay = Math.max(0, 720 - elapsed);
 
   setTimeout(() => {
+    if (token !== auditOpenToken) return;
     DOM.auditModal.classList.remove('hidden');
+    focusAuditModal();
+    syncModalWithCache(vault.address, data);
     pOpen.style.opacity = '0';
     setTimeout(() => {
       pOpen.classList.add('hidden');
-      isTransitioningVault = false;
+      if (token === auditOpenToken) isTransitioningVault = false;
     }, 220);
   }, remainingDelay);
+}
+
+/** Width of the left audit panel, mirroring the CSS (desktop 480px, tablet 440px, both capped by the viewport). */
+function getAuditPanelWidth() {
+  const w = window.innerWidth;
+  const tablet = w >= 769 && w <= 1024;
+  return Math.floor(Math.min(tablet ? 440 : 480, w / 2 - (tablet ? 20 : 30)));
 }
 
 /**
  * Reverses the morphing animation: folds left panel into a ball and flies it back into the 3D sphere.
  */
 function closeVaultAudit() {
-  if (DOM.auditModal.classList.contains('hidden')) return;
+  if (DOM.auditModal.classList.contains('hidden') || isClosingAudit) return;
 
   const isMobile = window.innerWidth <= 768;
   if (isMobile) {
     DOM.auditModal.classList.add('hidden');
     selectedVaultAddress = null;
     isTransitioningVault = false;
+    restoreFocusAfterAudit();
     return;
   }
 
-  const targetWidth = Math.min(480, Math.floor(window.innerWidth * 0.45));
+  const targetWidth = getAuditPanelWidth();
   const targetHeight = window.innerHeight - 36;
   const targetCenterX = 20 + targetWidth / 2;
   const targetCenterY = 18 + targetHeight / 2;
   const targetRadius = '20px';
 
   const closingAddress = selectedVaultAddress;
+  // Block new opens until the fold-and-fly animation ends: its timer resets the selection state at the end
+  isTransitioningVault = true;
+  isClosingAudit = true;
 
   // 1. Hide left audit terminal
   DOM.auditModal.classList.add('hidden');
@@ -1500,7 +1657,9 @@ function closeVaultAudit() {
       sphere.setSelectedVault(null);
       sphere.highlightVault(null);
       isTransitioningVault = false;
+      isClosingAudit = false;
       renderPinnedRichPills(true);
+      restoreFocusAfterAudit();
     }, 450);
   }, 210);
 }
@@ -1516,6 +1675,14 @@ let currentModalExitState = {
   dropPct: 0,
   topPeer: ''
 };
+
+/** Opens or closes the worst-case exit popover, keeping aria-expanded in sync. */
+function setExitInfoActive(active) {
+  if (!DOM.riskExitInfoBtn) return;
+  DOM.riskExitInfoBtn.classList.toggle('active', active);
+  DOM.riskExitInfoBtn.setAttribute('aria-expanded', String(active));
+  updateStressedExitDisplay(active);
+}
 
 function updateStressedExitDisplay(isStressed) {
   if (!DOM.riskExitBar || !DOM.riskExitPct) return;
@@ -1566,18 +1733,25 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // Market Quality Index (MQI) Header Pill
   const mqiVal = verdict.mqi?.mqiPercent ?? 100;
   DOM.modalGrade.textContent = `${mqiVal}%`;
-  DOM.modalScore.textContent = (mqiVal === 100 && verdict.mqi?.isAllClean) ? 'Clean Capital' : (mqiVal < 100 ? `${(100 - mqiVal).toFixed(1)}% Flagged` : 'Clean Capital');
-  DOM.modalGrade.style.color = mqiVal === 100 ? 'var(--accent-green)' : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
+  // mqiPercent is rounded to 0.1, so 100 can still come with flagged (small but material) markets
+  const flaggedMarketCount = verdict.mqi?.compromisedMarkets?.length || 0;
+  const isFullyClean = Boolean(verdict.mqi?.isAllClean);
+  DOM.modalScore.textContent = isFullyClean
+    ? 'Clean Capital'
+    : (mqiVal < 100 ? `${(100 - mqiVal).toFixed(1)}% Flagged` : `${flaggedMarketCount} Flagged Market${flaggedMarketCount === 1 ? '' : 's'}`);
+  DOM.modalGrade.style.color = mqiVal === 100
+    ? (isFullyClean ? 'var(--accent-green)' : 'var(--accent-orange)')
+    : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
 
   // Financials
   DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
   const humanAssets = v.totalAssetsHuman !== undefined
     ? v.totalAssetsHuman
-    : (v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6) : 0);
+    : (v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals ?? 6) : 0);
   DOM.modalAssetsHuman.textContent = `${formatNumber(humanAssets)} ${v.asset?.symbol || ''}`;
   DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
   DOM.modalExitCapPct.textContent = `${verdict.liquidity?.instantExitCapacityPercent || 0}% Exit Cap`;
-  DOM.modalNetApy.textContent = `${((v.netApy || 0) * 100).toFixed(2)}%`;
+  DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
   DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
 
   // Underlying Markets Count Pill
@@ -1650,6 +1824,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   if (DOM.riskExitInfoBtn) {
     DOM.riskExitInfoBtn.classList.remove('active');
+    DOM.riskExitInfoBtn.setAttribute('aria-expanded', 'false');
   }
 
   // Update Popover content
@@ -1769,10 +1944,15 @@ function setupModalEvents() {
         updateStressedExitDisplay(false);
       }
     });
+    DOM.riskExitInfoBtn.addEventListener('focus', () => updateStressedExitDisplay(true));
+    DOM.riskExitInfoBtn.addEventListener('blur', () => {
+      if (!DOM.riskExitInfoBtn.classList.contains('active')) {
+        updateStressedExitDisplay(false);
+      }
+    });
     DOM.riskExitInfoBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isActive = DOM.riskExitInfoBtn.classList.toggle('active');
-      updateStressedExitDisplay(isActive);
+      setExitInfoActive(!DOM.riskExitInfoBtn.classList.contains('active'));
     });
   }
 
@@ -1786,29 +1966,29 @@ function setupModalEvents() {
   }
 
   document.addEventListener('click', (e) => {
-    if (DOM.riskExitInfoBtn && !DOM.riskExitInfoBtn.contains(e.target)) {
+    if (DOM.riskExitInfoBtn && !e.target.closest('.info-circle-wrap')) {
       if (DOM.riskExitInfoBtn.classList.contains('active')) {
-        DOM.riskExitInfoBtn.classList.remove('active');
-        updateStressedExitDisplay(false);
+        setExitInfoActive(false);
       }
     }
   });
 
   window.addEventListener('keydown', (e) => {
+    // The audit panel is a non-modal dialog (the explorer next to it stays usable), so Tab is not trapped
     if (e.key !== 'Escape') return;
 
     // 1. Dismiss worst-case exit popover if open
     if (DOM.riskExitInfoBtn && DOM.riskExitInfoBtn.classList.contains('active')) {
-      DOM.riskExitInfoBtn.classList.remove('active');
-      DOM.riskExitInfoBtn.setAttribute('aria-expanded', 'false');
-      updateStressedExitDisplay(false);
+      setExitInfoActive(false);
       return;
     }
 
-    // 2. Dismiss any open filter dropdowns
+    // 2. Dismiss any open filter dropdowns and give focus back to their trigger
     const openDropdown = document.querySelector('.custom-dropdown.open');
     if (openDropdown) {
+      const openTrigger = openDropdown.querySelector('.dropdown-trigger');
       closeAllDropdowns();
+      openTrigger?.focus();
       return;
     }
 
@@ -1818,10 +1998,16 @@ function setupModalEvents() {
       if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
       explorerFilters.query = '';
       renderVaultExplorer();
+      DOM.searchInput.blur();
+      sphere.highlightVault(null);
       return;
     }
 
-    // 4. Close audit modal if open
+    // 4. Cancel a pending open, or close the audit modal if it is open
+    if (isTransitioningVault && !isClosingAudit && DOM.auditModal.classList.contains('hidden')) {
+      cancelPendingAuditOpen();
+      return;
+    }
     if (selectedVaultAddress || !DOM.auditModal.classList.contains('hidden') || isTransitioningVault) {
       closeVaultAudit();
     }
@@ -1889,7 +2075,8 @@ function formatPercent(val, decimals = 2, fallback = '—') {
   if (val === null || val === undefined || val === '') return fallback;
   const num = Number(val);
   if (!Number.isFinite(num)) return fallback;
-  return `${(num * 100).toFixed(decimals)}%`;
+  const text = (num * 100).toFixed(decimals);
+  return `${/^-0(\.0+)?$/.test(text) ? text.slice(1) : text}%`; // no "-0.00%" for tiny negatives
 }
 
 function escapeHtml(str) {
@@ -1903,16 +2090,22 @@ function escapeHtml(str) {
 }
 
 // Handle viewport resize between desktop and mobile seamlessly
+let resizeTimer = null;
+let wasMobileViewport = window.innerWidth <= 768;
 window.addEventListener('resize', () => {
-  if (window.innerWidth > 768) {
-    if (!selectedVaultAddress || DOM.auditModal?.classList.contains('hidden')) {
-      renderPinnedRichPills(false);
-    }
-  } else {
-    if (DOM.pinnedRichPills) {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const isMobileViewport = window.innerWidth <= 768;
+    if (isMobileViewport === wasMobileViewport) return;
+    wasMobileViewport = isMobileViewport;
+    if (!isMobileViewport) {
+      if (!selectedVaultAddress || DOM.auditModal?.classList.contains('hidden')) {
+        renderPinnedRichPills(false);
+      }
+    } else if (DOM.pinnedRichPills) {
       DOM.pinnedRichPills.classList.add('hidden');
     }
-  }
+  }, 150);
 });
 
 // Boot up app on DOM ready

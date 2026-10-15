@@ -315,6 +315,7 @@ export class ParticleSphere {
       this.isMobile = window.innerWidth <= 768;
       if (wasMobile && !this.isMobile) {
         this.resize();
+        this.generateParticles(); // setVaults() skipped particle generation while on mobile
         if (!this.animFrameId) {
           this.animate();
         }
@@ -362,6 +363,7 @@ export class ParticleSphere {
     gl.compileShader(vs);
     if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
       console.error('Vertex shader error:', gl.getShaderInfoLog(vs));
+      this.gl = null; // keeps render() from running with a missing program
       return;
     }
 
@@ -370,6 +372,7 @@ export class ParticleSphere {
     gl.compileShader(fs);
     if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
       console.error('Fragment shader error:', gl.getShaderInfoLog(fs));
+      this.gl = null;
       return;
     }
 
@@ -379,6 +382,7 @@ export class ParticleSphere {
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       console.error('Shader link error:', gl.getProgramInfoLog(prog));
+      this.gl = null;
       return;
     }
 
@@ -643,9 +647,11 @@ export class ParticleSphere {
     this.canvas.addEventListener('webglcontextrestored', () => {
       console.log('[Sphere] WebGL context restored. Reinitializing pipeline...');
       this.initWebGL();
+      if (!this.gl) return;
       this.generateParticles();
       this.resize();
-      if (!this.animFrameId) {
+      // No render loop on mobile (canvas hidden) or in a background tab; the visibility handler restarts it
+      if (!this.isMobile && !document.hidden && !this.animFrameId) {
         this.animate();
       }
     }, false);

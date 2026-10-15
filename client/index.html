@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
-  <link rel="stylesheet" href="css/main.css?v=20261001_english">
-  <link rel="stylesheet" href="css/components.css?v=20261002_mobile_perf">
+  <link rel="stylesheet" href="css/main.css?v=20261015_audit2">
+  <link rel="stylesheet" href="css/components.css?v=20261015_audit2">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -269,7 +269,7 @@
   <div id="morph-proxy" class="morph-proxy hidden"></div>
 
   <!-- Floating Left Audit Terminal (Morphs from the 3D particle) -->
-  <aside id="audit-modal" class="audit-panel-widget hidden" role="dialog" aria-modal="true" aria-labelledby="modal-vault-name">
+  <aside id="audit-modal" class="audit-panel-widget hidden" role="dialog" aria-labelledby="modal-vault-name">
     
     <!-- Panel Header: Badges, Close Button, Vault Title, Curator, Safety Score, Mini-Tabs -->
     <header class="audit-panel-header">
@@ -398,19 +398,21 @@
             <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>
             <div class="meter-val-wrap">
               <span class="meter-value" id="risk-exit-pct">0%</span>
-              <button type="button" class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" aria-expanded="false">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="16" x2="12" y2="12"></line>
-                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                </svg>
-                <div class="info-popover" id="risk-exit-popover">
+              <span class="info-circle-wrap">
+                <button type="button" class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" aria-expanded="false" aria-describedby="risk-exit-popover">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                </button>
+                <div class="info-popover" id="risk-exit-popover" role="tooltip">
                   <div class="info-popover-title">Worst-Case Exit (Bank Run)</div>
                   <div class="info-popover-body" id="risk-exit-popover-body">
                     In a mass withdrawal across shared markets, competing vaults take their share of cash, reducing available exit to <strong>0%</strong>.
                   </div>
                 </div>
-              </button>
+              </span>
             </div>
           </div>
           <div class="meter-track">
@@ -443,7 +445,7 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261008_audit_fix"></script>
+  <script type="module" src="js/app.js?v=20261015_audit2"></script>
 </body>
 
 
