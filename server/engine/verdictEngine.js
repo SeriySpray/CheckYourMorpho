@@ -66,6 +66,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   if (liquidity.crowdedMarkets && liquidity.crowdedMarkets.length > 0) {
     const totalCrowdedSupplyUsd = liquidity.crowdedMarkets.reduce((sum, m) => sum + m.vaultSupplyUsd, 0);
     const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
+    // Частка від TVL (vault capital), а не від розподіленого капіталу: на цю базу відкалібровані пороги 15/25/35
     const crowdedSharePercent = totalAssetsUsd > 0 ? Math.round((totalCrowdedSupplyUsd / totalAssetsUsd) * 1000) / 10 : 0;
     const dropPct = Math.round((liquidity.instantExitCapacityPercent - liquidity.stressedExitCapacityPercent) * 10) / 10;
 
@@ -93,7 +94,7 @@ export function generateVaultVerdict(vault, allocations = []) {
       redFlags.push({
         level: 'HIGH',
         title: 'Elevated Crowded Exit Contagion',
-        message: `Competing peer vaults (${topPeersStr}) reduce available exit from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% across ${crowdedSharePercent}% of allocated capital during a mass withdrawal.`
+        message: `Competing peer vaults (${topPeersStr}) reduce available exit from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% across ${crowdedSharePercent}% of vault capital during a mass withdrawal.`
       });
     }
   }

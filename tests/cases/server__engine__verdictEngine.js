@@ -102,6 +102,28 @@ export default {
       assert.equal(crowdLevel(f(vault(), crowd(15e6, 15e6, 135e6))), 'HIGH')],
     ['crowded: частка 14% (< 15) -> без прапорця crowded', ({ generateVaultVerdict: f }) =>
       assert.equal(crowdLevel(f(vault(), crowd(14e6, 14e6, 126e6))), null)],
+    // Частка crowded рахується від TVL (vault capital); 10M нерозподіленого кешу розводять TVL і розподілений капітал (90M).
+    ['HIGH crowded: 40M із TVL 100M (90M розподілено), 50% -> 20% -> текст "40% of vault capital", не "allocated"', ({ generateVaultVerdict: f }) => {
+      // норма: 10 + 40 = 50; стрес: 10 + 40*40/160 = 20; падіння 30; частка 40/100 = 40 (від розподіленого було б 44.4)
+      const r = f(vault(), [mkt(0, 40e6, 40e6, 120e6), mkt(1, 50e6, 0)]);
+      assert.equal(crowdLevel(r), 'HIGH');
+      assert.match(flag(r, 'Elevated Crowded Exit Contagion').message, /from 50% to 20% across 40% of vault capital during/);
+      assert.doesNotMatch(flag(r, 'Elevated Crowded Exit Contagion').message, /allocated/);
+    }],
+    ['поріг частки з кешем: 15M із TVL 100M, 25% -> 11.5% -> HIGH, "15% of vault capital"', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [mkt(0, 15e6, 15e6, 135e6), mkt(1, 75e6, 0)]);
+      assert.equal(crowdLevel(r), 'HIGH'); assert.match(flag(r, 'Elevated Crowded Exit Contagion').message, /across 15% of vault capital/);
+    }],
+    ['до порогу з кешем: 14M із TVL 100M (14%, від розподілених 90M було б 15.6%) -> без прапорця crowded', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [mkt(0, 14e6, 14e6, 126e6), mkt(1, 76e6, 0)]);
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 11.4); assert.equal(crowdLevel(r), null);
+    }],
+    ['CRITICAL crowded з кешем: 40M із TVL 100M, 50% -> 14% -> "(40% of vault capital in heavily contested markets)"', ({ generateVaultVerdict: f }) => {
+      // стрес: 10 + 40*40/400 = 14
+      const r = f(vault(), [mkt(0, 40e6, 40e6, 360e6), mkt(1, 50e6, 0)]);
+      assert.equal(crowdLevel(r), 'CRITICAL');
+      assert.match(flag(r, 'Critical Crowded Exit Deficit').message, /from 50% to 14% \(40% of vault capital in heavily contested markets\)\.$/);
+    }],
     ['не crowded vault -> summary без worst-case', ({ generateVaultVerdict: f }) =>
       assert.doesNotMatch(f(vault(), [mkt(0, 100e6, 20e6)]).summary, /worst-case/)],
     ['net APY нижче -5% -> CRITICAL', ({ generateVaultVerdict: f }) =>

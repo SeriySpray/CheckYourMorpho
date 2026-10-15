@@ -23,7 +23,7 @@ import { isIdleReserveMarket } from './hhiEngine.js';
  */
 export function calculateLiquidityMetrics(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd ?? vault.totalAssetsUsd) || 0;
-  const directLiquidityUsd = Number(vault.liquidity_usd ?? vault.liquidityUsd) || 0;
+  const directLiquidityUsd = Math.max(0, Number(vault.liquidity_usd ?? vault.liquidityUsd) || 0);
 
   if (totalAssetsUsd <= 0) {
     return {
@@ -47,7 +47,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
 
   for (const alloc of allocations) {
-    const supplyUsd = Number(alloc.supply_assets_usd) || 0;
+    const supplyUsd = Math.max(0, Number(alloc.supply_assets_usd) || 0);
     totalAllocatedUsd += supplyUsd;
 
     const isIdle = isIdleReserveMarket(alloc);
@@ -112,17 +112,16 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
 
   // True unallocated cash (not at risk in loan markets):
   // either in a 0-LLTV idle market or unallocated cash difference on the vault contract
+  // (і без жодної алокації: результат той самий, що й для рядків із нульовим постачанням)
   const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd);
-  const trueIdleCashUsd = allocations.length > 0
-    ? idleAllocationsUsd + unallocatedCashUsd
-    : (directLiquidityUsd > 0 ? Math.min(totalAssetsUsd, directLiquidityUsd) : 0);
+  const trueIdleCashUsd = idleAllocationsUsd + unallocatedCashUsd;
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
   // V2 vaults report what can be withdrawn right now (idle + liquidity adapter + force-deallocatable
   // liquidity net of its penalty), which can be lower than the market-based figure; V1 only when reported.
   // V1 vaults are capped by the API-reported liquidity too when it is available (unallocated cash on the
   // contract is otherwise assumed fully withdrawable).
-  const instantCapUsd = allocations.length > 0 && (vault.version === 'v2' || directLiquidityUsd > 0)
+  const instantCapUsd = vault.version === 'v2' || directLiquidityUsd > 0
     ? directLiquidityUsd
     : Infinity;
   const totalEffectiveExitUsd = Math.min(totalAssetsUsd, instantCapUsd, trueIdleCashUsd + loanMarketsExitUsd);

@@ -147,5 +147,51 @@ export default {
       // (35²+25²+15²+5²)/80² = 2100/6400 = 0.328125
       assert.equal(r.hhi, 0.328);
     }],
+    // Поріг tier порівнюється з точним hhi і точною часткою, поля відповіді лишаються округленими.
+    ['регрес: частки 51/49 -> точний hhi 0.5002 (> 0.5) дає EXTREME, хоча поле hhi округлене до 0.5', ({ calculateHHI: f }) => {
+      // 0.51² + 0.49² = 0.2601 + 0.2401 = 0.5002
+      const r = f(vault(), [col(0, 51e6), col(1, 49e6)]);
+      assert.equal(r.hhi, 0.5); assert.equal(r.effectiveAssets, 2); assert.equal(r.tier, 'EXTREME');
+      assert.equal(r.topCollateral.sharePercent, 51);
+    }],
+    ['поріг 0.25: частки 40/15/15/15/15 -> hhi рівно 0.25 (0.16 + 4*0.0225), CONCENTRATED', ({ calculateHHI: f }) => {
+      const r = f(vault(), [40, 15, 15, 15, 15].map((p, i) => col(i, p * 1e6)));
+      assert.equal(r.hhi, 0.25); assert.equal(r.tier, 'CONCENTRATED');
+    }],
+    ['регрес: частки 39.95/15.05/15/15/15 -> точний hhi 0.2497505 (< 0.25) дає MODERATE, поле hhi 0.25', ({ calculateHHI: f }) => {
+      // 0.3995² + 0.1505² + 3*0.15² = 0.15960025 + 0.02265025 + 0.0675 = 0.2497505
+      const r = f(vault(), [39.95, 15.05, 15, 15, 15].map((p, i) => col(i, p * 1e6)));
+      assert.equal(r.hhi, 0.25); assert.equal(r.tier, 'MODERATE');
+    }],
+    ['після порогу 0.25: частки 40.05/14.95/15/15/15 -> hhi 0.2502505, CONCENTRATED', ({ calculateHHI: f }) => {
+      const r = f(vault(), [40.05, 14.95, 15, 15, 15].map((p, i) => col(i, p * 1e6)));
+      assert.equal(r.hhi, 0.25); assert.equal(r.tier, 'CONCENTRATED');
+    }],
+    ['регрес: частки 19.95/15.05/15/15/15/10/10 -> точний hhi 0.1499505 (< 0.15) дає DIVERSIFIED, поле hhi 0.15', ({ calculateHHI: f }) => {
+      // 0.03980025 + 0.02265025 + 0.0675 + 0.02 = 0.1499505
+      const r = f(vault(), [19.95, 15.05, 15, 15, 15, 10, 10].map((p, i) => col(i, p * 1e6)));
+      assert.equal(r.hhi, 0.15); assert.equal(r.tier, 'DIVERSIFIED'); assert.equal(r.tierLabel, 'High Diversification');
+    }],
+    ['після порогу 0.15: частки 20.05/14.95/15/15/15/10/10 -> hhi 0.1500505, MODERATE', ({ calculateHHI: f }) => {
+      const r = f(vault(), [20.05, 14.95, 15, 15, 15, 10, 10].map((p, i) => col(i, p * 1e6)));
+      assert.equal(r.hhi, 0.15); assert.equal(r.tier, 'MODERATE');
+    }],
+    ['регрес: одна застава 39.96% TVL (top < 40) -> CONCENTRATED, хоча sharePercent округлений до 40', ({ calculateHHI: f }) => {
+      const r = f(vault(), [col(0, 39.96e6)]);
+      assert.equal(r.tier, 'CONCENTRATED'); assert.equal(r.topCollateral.sharePercent, 40);
+      assert.deepEqual(r.breakdown.map(b => b.sharePercent), [40]);
+    }],
+    ['після порогу 40: одна застава 40.04% TVL -> EXTREME, sharePercent 40', ({ calculateHHI: f }) => {
+      const r = f(vault(), [col(0, 40.04e6)]);
+      assert.equal(r.tier, 'EXTREME'); assert.equal(r.topCollateral.sharePercent, 40);
+    }],
+    ['регрес: дві застави по 19.96% TVL (hhi 0.5, top < 20) -> MODERATE, sharePercent 20', ({ calculateHHI: f }) => {
+      const r = f(vault(), equal(2, 19.96e6));
+      assert.equal(r.tier, 'MODERATE'); assert.equal(r.topCollateral.sharePercent, 20);
+    }],
+    ['регрес: чотири застави по 9.96% TVL (hhi 0.25, top < 10) -> DIVERSIFIED, sharePercent 10', ({ calculateHHI: f }) => {
+      const r = f(vault(), equal(4, 9.96e6));
+      assert.equal(r.tier, 'DIVERSIFIED'); assert.equal(r.tierLabel, 'High Diversification'); assert.equal(r.topCollateral.sharePercent, 10);
+    }],
   ],
 };

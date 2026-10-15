@@ -115,12 +115,15 @@ export function calculateHHI(vault, allocations = []) {
   const sortedCollateral = [...collateralMap.values()].sort((a, b) => b.usd - a.usd);
   const topCollatSymbol = sortedCollateral[0]?.symbol || 'Unknown';
   const topCollatUsd = sortedCollateral[0]?.usd || 0;
-  const topCollatShare = Math.max(0, Math.min(100, Math.round((topCollatUsd / totalAssetsUsd) * 1000) / 10));
+  // Пороги tier порівнюються з точними значеннями; округлені (hhi, sharePercent) лише для відповіді
+  const topCollatShareRaw = Math.max(0, Math.min(100, (topCollatUsd / totalAssetsUsd) * 100));
+  const topCollatShare = Math.round(topCollatShareRaw * 10) / 10;
 
   // Sort breakdown descending by share of vault capital
   breakdown.sort((a, b) => b.sharePercent - a.sharePercent);
 
-  const hhi = Math.min(1.0, Math.max(0, Math.round(hhiSum * 1000) / 1000));
+  const hhiRaw = Math.min(1.0, Math.max(0, hhiSum));
+  const hhi = Math.round(hhiRaw * 1000) / 1000;
   const effectiveAssets = hhi > 0 ? Math.round((1 / hhi) * 10) / 10 : 0;
   const activeCollateralExposure = totalAssetsUsd > 0 ? totalActiveCollateralUsd / totalAssetsUsd : 0;
 
@@ -133,13 +136,13 @@ export function calculateHHI(vault, allocations = []) {
     // Very low active collateral exposure (e.g. >70% cash reserves)
     tier = 'DIVERSIFIED';
     tierLabel = 'Low Exposure (High Cash)';
-  } else if (hhi > 0.50 && topCollatShare >= 40) {
+  } else if (hhiRaw > 0.50 && topCollatShareRaw >= 40) {
     tier = 'EXTREME';
     tierLabel = 'Critical Concentration';
-  } else if ((hhi > 0.50 && topCollatShare >= 20) || (hhi >= 0.25 && topCollatShare >= 20)) {
+  } else if ((hhiRaw > 0.50 && topCollatShareRaw >= 20) || (hhiRaw >= 0.25 && topCollatShareRaw >= 20)) {
     tier = 'CONCENTRATED';
     tierLabel = 'High Concentration';
-  } else if (hhi >= 0.15 && topCollatShare >= 10) {
+  } else if (hhiRaw >= 0.15 && topCollatShareRaw >= 10) {
     tier = 'MODERATE';
     tierLabel = 'Moderate Concentration';
   }
