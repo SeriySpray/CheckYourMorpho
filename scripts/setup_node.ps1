@@ -135,6 +135,24 @@ if (-not $downloadSuccess) {
     exit 1
 }
 
+# Verify the archive against the official checksum list published next to it (TLS alone is not enough
+# for something that gets unpacked and executed)
+try {
+    $sums = (Invoke-WebRequest -UseBasicParsing -Uri "https://nodejs.org/dist/v$nodeVersion/SHASUMS256.txt").Content
+    $expectedLine = $sums -split "`r?`n" | Where-Object { $_.Trim().EndsWith($zipName) } | Select-Object -First 1
+    if (-not $expectedLine) { throw "No checksum entry for $zipName" }
+    $expectedHash = ($expectedLine.Trim() -split '\s+')[0].ToLower()
+    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $tempZip).Hash.ToLower()
+    if ($actualHash -ne $expectedHash) {
+        Remove-Item -Force $tempZip -ErrorAction SilentlyContinue
+        throw "SHA256 mismatch (expected $expectedHash, got $actualHash)"
+    }
+    Write-Host "      SHA256 verified." -ForegroundColor Gray
+} catch {
+    Write-Error "Node.js archive verification failed: $_"
+    exit 1
+}
+
 # 7. Extract archive
 Write-Host "[3/3] Extracting Node.js into .node directory..." -ForegroundColor Cyan
 try {

@@ -5,8 +5,10 @@ import { handleRequest } from './api/routes.js';
 import { syncAllVaults, isSyncing } from './services/syncEngine.js';
 
 // Global process error safety guards
+// After an uncaught exception the process state is undefined: exit and let systemd restart the service
 process.on('uncaughtException', (err) => {
   console.error('[Process] Uncaught Exception:', err);
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -28,6 +30,11 @@ server.maxHeadersCount = 100;
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : CONFIG.server.port;
 const HOST = process.env.HOST || CONFIG.server.host;
+
+server.on('error', (err) => {
+  console.error('[Server] Fatal server error:', err);
+  process.exit(1);
+});
 
 server.listen(PORT, HOST, () => {
   console.log(`[Server] CheckYourMorpho REST API running at http://${HOST}:${PORT}`);
@@ -56,6 +63,9 @@ async function runBackgroundSync() {
     console.error('[Scheduler] Background sync failed:', err.message);
   }
 }
+
+// Fill an empty or stale database right after start-up instead of waiting for the first interval
+setTimeout(runBackgroundSync, 5000);
 
 // Start recurring background sync timer
 if (CONFIG.sync.intervalMs && CONFIG.sync.intervalMs > 0) {

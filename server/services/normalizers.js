@@ -58,6 +58,7 @@ export function normalizeVault(raw, curatorMap = null) {
 
   const decimals = asset.decimals ?? 18;
   const totalAssetsHuman = formatUnits(state.totalAssets, decimals);
+  const assetPrice = Number(asset.priceUsd) || 0;
 
   const rawCuratorAddr = (state.curator || '').toLowerCase();
   let curatorName = 'Independent';
@@ -76,7 +77,7 @@ export function normalizeVault(raw, curatorMap = null) {
     asset_decimals: decimals,
     asset_price_usd: asset.priceUsd ?? 0,
     total_assets: String(state.totalAssets || '0'),
-    total_assets_usd: state.totalAssetsUsd ?? 0,
+    total_assets_usd: state.totalAssetsUsd || totalAssetsHuman * assetPrice,
     liquidity_usd: raw.liquidity?.usd ?? 0,
     apy: state.apy ?? 0,
     net_apy: state.netApy ?? 0,
@@ -90,6 +91,14 @@ export function normalizeVault(raw, curatorMap = null) {
 }
 
 /**
+ * Highest forceDeallocate penalty across a V2 vault's adapters, as a fraction (1e18 = 100%).
+ */
+function maxForceDeallocatePenalty(rawV2) {
+  const penalties = (rawV2.adapters?.items || []).map(a => formatUnits(a.forceDeallocatePenalty, 18));
+  return Math.min(1, Math.max(0, ...penalties));
+}
+
+/**
  * Normalizes vault object from GraphQL response (Morpho Vaults V2)
  */
 export function normalizeVaultV2(raw, curatorMap = null) {
@@ -98,6 +107,8 @@ export function normalizeVaultV2(raw, curatorMap = null) {
 
   const decimals = asset.decimals ?? 18;
   const totalAssetsHuman = formatUnits(raw.totalAssets, decimals);
+  const assetPrice = Number(asset.priceUsd) || 0;
+  const totalAssetsUsd = raw.totalAssetsUsd || totalAssetsHuman * assetPrice;
 
   const v2CuratorItemName = raw.curators?.items?.[0]?.name;
   const rawCuratorAddr = (raw.curator?.address || '').toLowerCase();
@@ -121,8 +132,14 @@ export function normalizeVaultV2(raw, curatorMap = null) {
     asset_decimals: decimals,
     asset_price_usd: asset.priceUsd ?? 0,
     total_assets: String(raw.totalAssets || '0'),
-    total_assets_usd: raw.totalAssetsUsd ?? 0,
-    liquidity_usd: (raw.liquidityUsd ?? 0) + (raw.forceDeallocatableLiquidityUsd ?? 0),
+    total_assets_usd: totalAssetsUsd,
+    // Withdrawable now: idle + liquidity-adapter liquidity at face value, plus force-deallocatable liquidity
+    // net of the worst adapter penalty (anyone can forceDeallocate and withdraw in one go, at that cost)
+    // (clamped to TVL: the API prices its liquidity and TVL fields independently and they can differ by a few %)
+    liquidity_usd: Math.min(
+      totalAssetsUsd || Infinity,
+      (raw.liquidityUsd ?? 0) + (raw.forceDeallocatableLiquidityUsd ?? 0) * (1 - maxForceDeallocatePenalty(raw))
+    ),
     apy: raw.apy ?? 0,
     net_apy: raw.netApy ?? raw.apy ?? 0,
     fee: raw.performanceFee ?? 0,
@@ -135,10 +152,17 @@ export function normalizeVaultV2(raw, curatorMap = null) {
 }
 
 /**
+ * Market ids are hashes of market params, so the same id can exist on several chains.
+ * The storage key therefore includes the chain id.
+ */
+export function marketKey(chainId, marketId) {
+  return `${chainId}:${(marketId || '').toLowerCase()}`;
+}
+
+/**
  * Normalizes market object from GraphQL response
  */
-export function normalizeMarket(raw) {
-  const chain = raw.chain || {};
+export function normalizeMarket(raw, chainId = 1) {
   const loanAsset = raw.loanAsset || {};
   const collateralAsset = raw.collateralAsset || {};
   const oracle = raw.oracle || {};
@@ -160,8 +184,8 @@ export function normalizeMarket(raw) {
   }
 
   return {
-    unique_key: (raw.marketId || '').toLowerCase(),
-    chain_id: chain.id || 1,
+    unique_key: marketKey(chainId, raw.marketId),
+    chain_id: chainId,
     loan_asset_address: (loanAsset.address || '').toLowerCase(),
     loan_asset_symbol: loanAsset.symbol || 'LOAN',
     loan_asset_decimals: loanDecimals,
@@ -196,7 +220,7 @@ export function normalizeMarket(raw) {
 /**
  * Normalizes vault allocation item
  */
-export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vaultTotalAssetsHuman, vaultAssetPriceUsd = 1) {
+export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vaultTotalAssetsHuman, vaultAssetPriceUsd = 1, chainId = 1) {
   const supplyHuman = formatUnits(rawAlloc.supplyAssets, vaultDecimals);
   const capHuman = formatUnits(rawAlloc.supplyCap, vaultDecimals);
 
@@ -211,7 +235,8 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
 
   return {
     vault_address: vaultAddress.toLowerCase(),
-    market_unique_key: (rawAlloc.market?.marketId || '').toLowerCase(),
+    market_unique_key: marketKey(chainId, rawAlloc.market?.marketId),
+    via_vault: null,
     supply_assets: String(rawAlloc.supplyAssets || '0'),
     supply_assets_human: supplyHuman,
     supply_assets_usd: calculatedUsd,
@@ -225,7 +250,7 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
 /**
  * Normalizes VaultV2 allocation from caps
  */
-export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTotalAssetsHuman, vaultAssetPriceUsd = 1) {
+export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTotalAssetsHuman, vaultAssetPriceUsd = 1, chainId = 1) {
   const supplyHuman = formatUnits(cap.allocation, vaultDecimals);
   const capHuman = formatUnits(cap.absoluteCap, vaultDecimals);
 
@@ -241,7 +266,8 @@ export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTot
 
   return {
     vault_address: vaultAddress.toLowerCase(),
-    market_unique_key: (market?.marketId || '').toLowerCase(),
+    market_unique_key: marketKey(chainId, market?.marketId),
+    via_vault: cap.viaVault || null,
     supply_assets: String(cap.allocation || '0'),
     supply_assets_human: supplyHuman,
     supply_assets_usd: supplyHuman * loanPrice,

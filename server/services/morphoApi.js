@@ -51,6 +51,10 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
       }
 
       const json = await res.json();
+      if (json.errors && json.errors.length > 0 && json.data) {
+        console.warn(`[MorphoAPI] Partial GraphQL response, ${json.errors.length} error(s): ${json.errors[0]?.message}`);
+        return json.data;
+      }
       if (json.errors && json.errors.length > 0) {
         const firstErrMsg = json.errors[0]?.message || 'Unknown GraphQL Error';
         const isTransient = json.errors.some(e => {
@@ -86,7 +90,7 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
 /**
  * Helper to fetch paginated vault items
  */
-async function fetchPaginatedVaults(query, rootKey, where, pageSize) {
+async function fetchPaginatedVaults(query, rootKey, where, pageSize, isComplete) {
   let skip = 0;
   let results = [];
   while (true) {
@@ -95,9 +99,27 @@ async function fetchPaginatedVaults(query, rootKey, where, pageSize) {
       skip: skip,
       where: where
     });
-    const items = data?.[rootKey]?.items || [];
+    // A partial GraphQL answer can null out nested fields or a whole page: never feed that to the sync
+    const root = data?.[rootKey];
+    if (!root || !Array.isArray(root.items)) {
+      throw new Error(`Malformed ${rootKey} response`);
+    }
+    const broken = root.items.find(item => !isComplete(item));
+    if (broken) {
+      throw new Error(`Incomplete ${rootKey} item ${broken.address || '?'} (partial GraphQL response)`);
+    }
+    const items = root.items;
     results = results.concat(items);
-    if (items.length < pageSize) break;
+    const countTotal = root.pageInfo?.countTotal;
+    if (!Number.isFinite(countTotal)) {
+      throw new Error(`Missing countTotal in ${rootKey} response`);
+    }
+    if (items.length < pageSize) {
+      if (results.length < countTotal) {
+        throw new Error(`Incomplete ${rootKey} fetch: got ${results.length} of ${countTotal}`);
+      }
+      break;
+    }
     skip += pageSize;
     await sleep(CONFIG.api.pageThrottleMs);
   }
@@ -114,6 +136,7 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
   const query = `
     query GetVaults($first: Int!, $skip: Int!, $where: VaultFilters) {
       vaults(first: $first, skip: $skip, where: $where) {
+        pageInfo { countTotal }
         items {
           address
           symbol
@@ -197,7 +220,7 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
 
   // Strictly fetch only officially listed/published vaults from morpho.org
   const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-  return await fetchPaginatedVaults(query, 'vaults', filterListed, 100);
+  return await fetchPaginatedVaults(query, 'vaults', filterListed, 100, item => Boolean(item.state && item.asset));
 }
 
 
@@ -211,6 +234,7 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
   const query = `
     query GetVaultV2s($first: Int!, $skip: Int!, $where: VaultV2sFilters) {
       vaultV2s(first: $first, skip: $skip, where: $where) {
+        pageInfo { countTotal }
         items {
           address
           name
@@ -234,6 +258,14 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
             }
           }
           owner { address }
+          adapters {
+            items {
+              type
+              assets
+              forceDeallocatePenalty
+              ... on MetaMorphoAdapter { metaMorpho { address } }
+            }
+          }
           caps {
             items {
               allocation
@@ -272,7 +304,8 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
 
   // Strictly fetch only officially listed/published V2 vaults from morpho.org (pageSize: 10 to respect query complexity limits)
   const filterListed = { listed: true, ...(chainIds && chainIds.length ? { chainId_in: chainIds } : {}) };
-  return await fetchPaginatedVaults(query, 'vaultV2s', filterListed, 10);
+  return await fetchPaginatedVaults(query, 'vaultV2s', filterListed, 10,
+    item => Boolean(item.asset && item.totalAssets != null && item.caps && item.adapters));
 }
 
 /**
@@ -281,8 +314,9 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
  */
 export async function fetchCuratorDirectory() {
   const query = `
-    query GetCurators {
-      curators(first: 100) {
+    query GetCurators($first: Int!, $skip: Int!) {
+      curators(first: $first, skip: $skip) {
+        pageInfo { countTotal }
         items {
           id
           name
@@ -296,8 +330,13 @@ export async function fetchCuratorDirectory() {
   `;
 
   try {
-    const data = await fetchMorphoGraphQL(query);
-    const items = data?.curators?.items || [];
+    const items = [];
+    for (let skip = 0; ; skip += 100) {
+      const data = await fetchMorphoGraphQL(query, { first: 100, skip });
+      const page = data?.curators?.items || [];
+      items.push(...page);
+      if (page.length < 100) break;
+    }
     const curatorMap = new Map();
 
     for (const c of items) {

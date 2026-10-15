@@ -8,14 +8,23 @@
  * IsClean_i is strictly binary (1 or 0):
  * 1 (Clean) if:
  *   - Market is officially listed in Morpho (is_listed == 1)
- *   - No active or realized bad debt (bad_debt_usd == 0 && realized_bad_debt_usd == 0)
+ *   - No material active or realized bad debt (above a dust threshold scaled to market size)
  *   - Valid oracle contract address (not zero address)
- *   - No critical protocol security warnings (not_whitelisted, unrecognized_collateral_asset, level RED)
+ *   - No critical protocol security warnings (not_whitelisted, or a RED integrity warning)
  * 0 (Compromised) if ANY of the above conditions is violated.
  */
 
 
 import { isIdleReserveMarket } from './hhiEngine.js';
+
+/**
+ * Minimum allocation (USD) that counts as material for a vault: 1% of TVL, but never more
+ * than $250K, so a flagged position in a very large vault cannot hide below a percentage cut.
+ * shortcut: fixed $250K cap, make it configurable if vault sizes shift by orders of magnitude.
+ */
+export function getMaterialityThresholdUsd(totalAssetsUsd) {
+  return Math.min((Number(totalAssetsUsd) || 0) * 0.01, 250000);
+}
 
 /**
  * Evaluates whether a market passes the strict binary clean test.
@@ -31,10 +40,12 @@ export function isMarketClean(market) {
     reasons.push('Unlisted market (not verified by Morpho)');
   }
 
-  // Check 2: Bad Debt & Realized Bad Debt (ignore sub-$10 dust from complete liquidation rounding)
+  // Check 2: Bad Debt & Realized Bad Debt. Dust threshold scales with market size (min $10, 0.01% of
+  // market supply) so a historical sub-0.01% write-off does not taint a large market forever.
   const badDebtUsd = Number(market.bad_debt_usd || 0);
   const realizedBadDebtUsd = Number(market.realized_bad_debt_usd || 0);
-  if (badDebtUsd > 10 || realizedBadDebtUsd > 10) {
+  const badDebtDustUsd = Math.max(10, (Number(market.total_supply_assets_usd) || 0) * 0.0001);
+  if (badDebtUsd > badDebtDustUsd || realizedBadDebtUsd > badDebtDustUsd) {
     const totalBadDebt = badDebtUsd + realizedBadDebtUsd;
     reasons.push(`Bad debt detected ($${totalBadDebt.toLocaleString('en-US', { maximumFractionDigits: 0 })})`);
   }
@@ -62,10 +73,12 @@ export function isMarketClean(market) {
     }
   } catch {}
 
+  // Liquidity warnings (low_liquidity, sustained_low_liquidity) describe exit risk, not market integrity,
+  // and are covered by the liquidity engine. Only RED integrity warnings or non-whitelisted markets compromise.
   const hasCriticalWarning = warningsJson.some(w => {
     const type = (w.type || '').toLowerCase();
     const level = (w.level || '').toUpperCase();
-    return level === 'RED' || type === 'not_whitelisted' || type === 'unrecognized_collateral_asset';
+    return type === 'not_whitelisted' || (level === 'RED' && !type.includes('liquidity'));
   });
 
   if (hasCriticalWarning) {
@@ -107,7 +120,7 @@ export function calculateMQI(vault, allocations = []) {
   let compromisedSupplyUsd = 0;
   let cleanMarketsCount = 0;
   const compromisedMarkets = [];
-  const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
+  const minMaterialThresholdUsd = getMaterialityThresholdUsd(totalAssetsUsd);
   const rawCompromisedItems = [];
   let totalCompromisedRawUsd = 0;
 

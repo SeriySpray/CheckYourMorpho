@@ -10,13 +10,89 @@ import {
   formatUnits
 } from './normalizers.js';
 
+// A vault must be absent from this many consecutive syncs before it is deleted (with its history rows)
+const MISSED_SYNCS_BEFORE_DELETE = 3;
+
 let isSyncLocked = false;
+let lastSyncResult = null;
+const syncSuccessListeners = [];
 
 /**
  * Returns true if synchronization is currently active.
  */
 export function isSyncing() {
   return isSyncLocked;
+}
+
+/** Outcome of the most recent sync (manual or scheduled), or null before the first one. */
+export function getLastSyncResult() {
+  return lastSyncResult;
+}
+
+/** Registers a callback that runs after every successful sync (used to drop API caches). */
+export function onSyncSuccess(listener) {
+  syncSuccessListeners.push(listener);
+}
+
+/** BigInt() that treats malformed input as 0 instead of aborting the whole sync. */
+function toBigInt(value) {
+  try {
+    return BigInt(value || '0');
+  } catch {
+    return 0n;
+  }
+}
+
+/**
+ * A V2 vault may hold its assets in MetaMorpho (V1) vaults through an adapter instead of direct market caps.
+ * Look through each such adapter: split its assets across the underlying vault's markets pro rata,
+ * and merge the result with the vault's direct market caps.
+ */
+function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
+  const merged = new Map();
+  const add = (market, allocation, absoluteCap, via = null) => {
+    const key = (market.marketId || '').toLowerCase();
+    let entry = merged.get(key);
+    if (!entry) {
+      entry = { allocation: '0', absoluteCap, data: { market }, viaShares: new Map() };
+      merged.set(key, entry);
+    }
+    entry.allocation = String(toBigInt(entry.allocation) + toBigInt(allocation));
+    if (via) entry.viaShares.set(via, (entry.viaShares.get(via) || 0n) + toBigInt(allocation));
+  };
+
+  for (const cap of rawV2.caps?.items || []) {
+    const market = cap.data?.market;
+    if (market) add(market, cap.allocation || '0', cap.absoluteCap || '0');
+  }
+
+  for (const adapter of rawV2.adapters?.items || []) {
+    if (adapter.type !== 'MetaMorpho') continue;
+    const under = v1ByAddress.get((adapter.metaMorpho?.address || '').toLowerCase());
+    const underTotal = toBigInt(under?.state?.totalAssets);
+    const adapterAssets = toBigInt(adapter.assets);
+    if (adapterAssets <= 0n) continue;
+    if (underTotal <= 0n) {
+      console.warn(`[SyncEngine] V2 vault ${rawV2.name}: MetaMorpho adapter not resolved (underlying vault not listed or empty).`);
+      continue;
+    }
+    for (const alloc of under.state.allocation || []) {
+      if (!alloc.market) continue;
+      const share = (toBigInt(alloc.supplyAssets) * adapterAssets) / underTotal;
+      if (share > 0n) add(alloc.market, share, '0', under.address.toLowerCase());
+    }
+  }
+
+  // Tag a position with the underlying vault it sits inside when that look-through is the majority of it,
+  // so peer-supply aggregation does not count the same capital twice.
+  // shortcut: mixed direct + look-through positions are tagged by majority only.
+  return [...merged.values()].map(({ viaShares, ...cap }) => {
+    const total = toBigInt(cap.allocation);
+    for (const [via, share] of viaShares) {
+      if (share * 2n > total) return { ...cap, viaVault: via };
+    }
+    return cap;
+  });
 }
 
 /**
@@ -48,9 +124,16 @@ export async function syncAllVaults(options = {}) {
         ?, ?, ?
       )
       ON CONFLICT(address) DO UPDATE SET
+        chain_id = excluded.chain_id,
+        asset_address = excluded.asset_address,
+        asset_symbol = excluded.asset_symbol,
+        asset_decimals = excluded.asset_decimals,
+        missed_syncs = 0,
         name = excluded.name,
         symbol = excluded.symbol,
-        curator_name = excluded.curator_name,
+        curator_name = CASE
+          WHEN excluded.curator_name LIKE '0x%' AND vaults.curator_name NOT LIKE '0x%' THEN vaults.curator_name
+          ELSE excluded.curator_name END,
         asset_price_usd = excluded.asset_price_usd,
         total_assets = excluded.total_assets,
         total_assets_usd = excluded.total_assets_usd,
@@ -86,6 +169,15 @@ export async function syncAllVaults(options = {}) {
         ?, ?, ?
       )
       ON CONFLICT(unique_key) DO UPDATE SET
+        chain_id = excluded.chain_id,
+        loan_asset_address = excluded.loan_asset_address,
+        loan_asset_symbol = excluded.loan_asset_symbol,
+        loan_asset_decimals = excluded.loan_asset_decimals,
+        collateral_asset_address = excluded.collateral_asset_address,
+        collateral_asset_symbol = excluded.collateral_asset_symbol,
+        collateral_asset_decimals = excluded.collateral_asset_decimals,
+        oracle_address = excluded.oracle_address,
+        irm_address = excluded.irm_address,
         loan_asset_price_usd = excluded.loan_asset_price_usd,
         collateral_asset_price_usd = excluded.collateral_asset_price_usd,
         lltv = excluded.lltv,
@@ -112,11 +204,11 @@ export async function syncAllVaults(options = {}) {
       INSERT INTO vault_allocations (
         vault_address, market_unique_key, supply_assets,
         supply_assets_human, supply_assets_usd, supply_cap,
-        supply_cap_human, weight, updated_at
+        supply_cap_human, weight, updated_at, via_vault
       ) VALUES (
         ?, ?, ?,
         ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?, ?
       )
       ON CONFLICT(vault_address, market_unique_key) DO UPDATE SET
         supply_assets = excluded.supply_assets,
@@ -125,7 +217,8 @@ export async function syncAllVaults(options = {}) {
         supply_cap = excluded.supply_cap,
         supply_cap_human = excluded.supply_cap_human,
         weight = excluded.weight,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        via_vault = excluded.via_vault
     `);
 
     const updateSyncState = db.prepare(`
@@ -150,6 +243,15 @@ export async function syncAllVaults(options = {}) {
     console.log('[SyncEngine] Fetching Morpho Vaults V2...');
     const rawVaultsV2 = await fetchAllVaultV2s(options.chainIds ?? null);
     console.log(`[SyncEngine] Fetched ${rawVaultsV2.length} V2 vaults from Morpho GraphQL.`);
+
+    const v1ByAddress = new Map(rawVaultsV1.map(rv => [(rv.address || '').toLowerCase(), rv]));
+
+    // Guard against purging the catalogue on a truncated API answer
+    const fetchedTotal = rawVaultsV1.filter(rv => rv.listed).length + rawVaultsV2.filter(rv => rv.listed).length;
+    const knownListed = db.prepare('SELECT COUNT(*) AS c FROM vaults WHERE is_listed = 1').get()?.c || 0;
+    if (!options.chainIds && knownListed > 20 && fetchedTotal < knownListed * 0.5) {
+      throw new Error(`Suspicious sync: API returned ${fetchedTotal} listed vaults, DB has ${knownListed}. Aborting before purge.`);
+    }
 
     let v1Count = 0;
     let v2Count = 0;
@@ -183,7 +285,7 @@ export async function syncAllVaults(options = {}) {
         for (const rawAlloc of rawAllocations) {
           if (!rawAlloc.market) continue;
 
-          const m = normalizeMarket(rawAlloc.market);
+          const m = normalizeMarket(rawAlloc.market, v.chain_id);
           if (!seenMarketKeys.has(m.unique_key)) {
             upsertMarket.run(
               m.unique_key, m.chain_id, m.loan_asset_address, m.loan_asset_symbol,
@@ -199,11 +301,11 @@ export async function syncAllVaults(options = {}) {
             marketsCount++;
           }
 
-          const alloc = normalizeAllocation(rawAlloc, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd);
+          const alloc = normalizeAllocation(rawAlloc, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd, v.chain_id);
           upsertAllocation.run(
             alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
             alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,
-            alloc.supply_cap_human, alloc.weight, alloc.updated_at
+            alloc.supply_cap_human, alloc.weight, alloc.updated_at, alloc.via_vault
           );
           allocationsCount++;
         }
@@ -225,14 +327,14 @@ export async function syncAllVaults(options = {}) {
 
         deleteVaultAllocations.run(v.address);
 
-        const caps = rawV2.caps?.items || [];
+        const caps = expandMetaMorphoAdapters(rawV2, v1ByAddress);
         const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
 
         for (const cap of caps) {
           const rawMarket = cap.data?.market;
           if (!rawMarket) continue;
 
-          const m = normalizeMarket(rawMarket);
+          const m = normalizeMarket(rawMarket, v.chain_id);
           if (!seenMarketKeys.has(m.unique_key)) {
             upsertMarket.run(
               m.unique_key, m.chain_id, m.loan_asset_address, m.loan_asset_symbol,
@@ -248,32 +350,34 @@ export async function syncAllVaults(options = {}) {
             marketsCount++;
           }
 
-          const alloc = normalizeAllocationV2(cap, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd);
+          const alloc = normalizeAllocationV2(cap, v.address, v.asset_decimals, vaultTotalAssetsHuman, v.asset_price_usd, v.chain_id);
           upsertAllocation.run(
             alloc.vault_address, alloc.market_unique_key, alloc.supply_assets,
             alloc.supply_assets_human, alloc.supply_assets_usd, alloc.supply_cap,
-            alloc.supply_cap_human, alloc.weight, alloc.updated_at
+            alloc.supply_cap_human, alloc.weight, alloc.updated_at, alloc.via_vault
           );
           allocationsCount++;
         }
       }
 
-      // 3C. Update sync timestamp
-      updateSyncState.run('last_sync_all', String(Math.floor(Date.now() / 1000)), Math.floor(Date.now() / 1000));
+      // 3C. Update sync timestamp (a chain-restricted sync must not make the whole catalogue look fresh)
+      const nowSec = Math.floor(Date.now() / 1000);
+      updateSyncState.run(options.chainIds ? 'last_sync_partial' : 'last_sync_all', String(nowSec), nowSec);
 
       // 3D. Purge unlisted / delisted vaults
-      if (fetchedListedAddresses.size > 0) {
+      if (!options.chainIds && fetchedListedAddresses.size > 0) {
         const activeAddressesJson = JSON.stringify(Array.from(fetchedListedAddresses));
         db.prepare(`
-          UPDATE vaults 
-          SET is_listed = 0 
+          UPDATE vaults
+          SET missed_syncs = missed_syncs + 1
           WHERE LOWER(address) NOT IN (SELECT value FROM json_each(?))
         `).run(activeAddressesJson);
       }
 
       db.exec(`
-        DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL;
+        DELETE FROM vaults WHERE is_listed = 0 OR is_listed IS NULL OR missed_syncs >= ${MISSED_SYNCS_BEFORE_DELETE};
         DELETE FROM vault_allocations WHERE vault_address NOT IN (SELECT address FROM vaults);
+        DELETE FROM markets WHERE unique_key NOT IN (SELECT market_unique_key FROM vault_allocations);
       `);
 
       db.exec('COMMIT;');
@@ -294,13 +398,24 @@ export async function syncAllVaults(options = {}) {
     console.log(`- Markets: ${marketsCount}`);
     console.log(`- Allocations: ${allocationsCount}`);
 
-    return {
+    const summary = {
       v1Count,
       v2Count,
       marketsCount,
       allocationsCount,
       durationSec
     };
+    lastSyncResult = {
+      success: true,
+      completedAt: Math.floor(Date.now() / 1000),
+      durationSec,
+      summary
+    };
+    for (const listener of syncSuccessListeners) listener();
+    return summary;
+  } catch (err) {
+    lastSyncResult = { success: false, failedAt: Math.floor(Date.now() / 1000), error: 'Synchronization failed' };
+    throw err;
   } finally {
     isSyncLocked = false;
   }

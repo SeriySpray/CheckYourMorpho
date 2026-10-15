@@ -14,6 +14,11 @@ npm-debug.log*
 
 # Environment and OS
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.sqlite*
 .env.local
 .DS_Store
 Thumbs.db

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,7 @@ import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
-import { syncAllVaults, isSyncing } from '../services/syncEngine.js';
+import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
 
 
@@ -17,13 +18,61 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..');
 const clientDir = path.resolve(rootDir, 'client');
 
-// Global synchronization state tracking
-let lastSyncResult = null;
-
 // In-memory cache for instant 0ms vault audit responses (30s TTL, bounded to 500 entries)
 const AUDIT_CACHE_TTL_MS = 30000;
 const AUDIT_CACHE_MAX_SIZE = 500;
 const vaultAuditCache = new Map();
+
+// Short-lived cache of the /api/vaults list: every miss recomputes all engines for up to 1000 vaults
+const LIST_CACHE_TTL_MS = 15000;
+const LIST_CACHE_MAX_SIZE = 50;
+const vaultListCache = new Map();
+
+// Every successful sync (manual or scheduled) invalidates both caches
+onSyncSuccess(() => {
+  vaultAuditCache.clear();
+  vaultListCache.clear();
+});
+
+/**
+ * Peer supply for one allocation: other vaults' positions in the same market (> $1K).
+ * Look-through positions of V2 vaults (via_vault set) are skipped because they are already part of the
+ * underlying V1 vault's own position; when the audited vault is such a V2 vault, its slice is removed
+ * from that underlying vault's position so it does not appear as its own competitor.
+ */
+function summarizePeers(marketRows, vaultAddress, alloc) {
+  let total = 0;
+  const peers = [];
+  for (const r of marketRows || []) {
+    if (r.vault_address === vaultAddress || r.via_vault) continue;
+    let supply = Number(r.supply_assets_usd) || 0;
+    if (alloc.via_vault && r.vault_address === alloc.via_vault) {
+      supply -= Number(alloc.supply_assets_usd) || 0;
+    }
+    if (supply <= 1000) continue;
+    total += supply;
+    peers.push({ vaultAddress: r.vault_address, vaultName: r.vault_name, supplyUsd: supply });
+  }
+  peers.sort((a, b) => b.supplyUsd - a.supplyUsd);
+  return { total, peers: peers.slice(0, 5) };
+}
+
+/**
+ * A vault the API reports with 0 USD total but with priced allocations would otherwise score as perfectly
+ * clean (MQI 100%, exit 100%); fall back to the sum of its allocations.
+ */
+function withEffectiveTotal(vault, allocations) {
+  if ((Number(vault.total_assets_usd) || 0) > 0) return vault;
+  const sum = allocations.reduce((acc, a) => acc + (Number(a.supply_assets_usd) || 0), 0);
+  return sum > 0 ? { ...vault, total_assets_usd: sum } : vault;
+}
+
+/** Constant-time comparison of a presented secret against the expected one. */
+function safeEqual(given, expected) {
+  const a = crypto.createHash('sha256').update(String(given)).digest();
+  const b = crypto.createHash('sha256').update(String(expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 // MIME types dictionary for static file serving
 const MIME_TYPES = {
@@ -51,7 +100,7 @@ function sendJson(res, statusCode, data, req = null) {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   });
   if (req && req.method === 'HEAD') {
@@ -67,7 +116,7 @@ function sendJson(res, statusCode, data, req = null) {
 function handleCors(req, res) {
   res.writeHead(204, {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400'
   });
@@ -183,7 +232,7 @@ function handleGetStatus(req, res) {
         timestamp: syncRow ? Number(syncRow.value) : null,
         updatedAt: syncRow ? syncRow.updated_at : null
       },
-      lastSyncResult,
+      lastSyncResult: getLastSyncResult(),
       stats: {
         vaultsCount,
         listedVaultsCount,
@@ -192,7 +241,8 @@ function handleGetStatus(req, res) {
       }
     });
   } catch (err) {
-    sendJson(res, 500, { error: 'Failed to retrieve system status', details: err.message });
+    console.error('[API] Failed to retrieve system status:', err);
+    sendJson(res, 500, { error: 'Failed to retrieve system status' });
   }
 }
 
@@ -200,6 +250,14 @@ function handleGetStatus(req, res) {
  * Handler for POST /api/sync
  */
 async function handlePostSync(req, res, url) {
+  // Manual sync is an operator action: disabled unless SYNC_TOKEN is configured, and always token-protected
+  const expectedToken = process.env.SYNC_TOKEN || '';
+  const givenToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!expectedToken || !safeEqual(givenToken, expectedToken)) {
+    sendJson(res, expectedToken ? 401 : 403, { error: expectedToken ? 'Unauthorized' : 'Manual sync is disabled' });
+    return;
+  }
+
   if (isSyncing()) {
     sendJson(res, 409, { error: 'Synchronization is already in progress' });
     return;
@@ -218,35 +276,24 @@ async function handlePostSync(req, res, url) {
 
   const runSync = async () => {
     try {
-      const result = await syncAllVaults({
+      await syncAllVaults({
         fetchHistoryForTop: fetchHistory,
         minAssetsUsdForHistory: 50000
       });
-      lastSyncResult = {
-        success: true,
-        completedAt: Math.floor(Date.now() / 1000),
-        durationSec: result.durationSec,
-        summary: result
-      };
-      vaultAuditCache.clear();
-      return lastSyncResult;
+      return getLastSyncResult();
     } catch (err) {
-      lastSyncResult = {
-        success: false,
-        failedAt: Math.floor(Date.now() / 1000),
-        error: err.message
-      };
       console.error('[API] Synchronization failed:', err);
       throw err;
     }
   };
 
   if (awaitSync) {
+    req.socket.setTimeout(0); // a full sync outlasts the default 20s idle timeout
     try {
       const result = await runSync();
       sendJson(res, 200, { status: 'sync_completed', result });
     } catch (err) {
-      sendJson(res, 500, { status: 'sync_failed', error: err.message });
+      sendJson(res, 500, { status: 'sync_failed', error: 'Synchronization failed' });
     }
   } else {
     // Run in background
@@ -289,6 +336,14 @@ function handleGetVaults(req, res, url) {
       'name'
     ]);
     const orderColumn = ALLOWED_SORT_COLUMNS.has(sortBy) ? sortBy : 'liquidity_usd';
+
+    // Key built from validated values only, so junk query parameters cannot bypass or flood the cache
+    const cacheKey = [chainId, listedOnly, search, orderColumn, sortOrder, limit, offset].join('|');
+    const cachedList = vaultListCache.get(cacheKey);
+    if (cachedList && Date.now() - cachedList.timestamp < LIST_CACHE_TTL_MS) {
+      sendJson(res, 200, cachedList.data, req);
+      return;
+    }
 
     // Build filter query
     const whereConditions = [];
@@ -358,27 +413,21 @@ function handleGetVaults(req, res, url) {
         WHERE va.vault_address IN (SELECT value FROM json_each(?))
       `).all(JSON.stringify(vaultAddresses));
 
-      // Collect unique market keys to batch aggregate peer supplies
+      // Batch aggregate peer supplies per market
       const marketKeys = Array.from(new Set(allocRows.map(a => a.market_unique_key)));
       if (marketKeys.length > 0) {
-        const peerTotals = db.prepare(`
-          SELECT market_unique_key, vault_address, supply_assets_usd
+        const peerRowsByMarket = new Map();
+        const peerRows = db.prepare(`
+          SELECT market_unique_key, vault_address, supply_assets_usd, via_vault
           FROM vault_allocations
           WHERE market_unique_key IN (SELECT value FROM json_each(?))
-            AND supply_assets_usd > 1000
         `).all(JSON.stringify(marketKeys));
-
-        const marketTotalSupply = new Map();
-        for (const pt of peerTotals) {
-          const mk = (pt.market_unique_key || '').toLowerCase();
-          marketTotalSupply.set(mk, (marketTotalSupply.get(mk) || 0) + (Number(pt.supply_assets_usd) || 0));
+        for (const r of peerRows) {
+          if (!peerRowsByMarket.has(r.market_unique_key)) peerRowsByMarket.set(r.market_unique_key, []);
+          peerRowsByMarket.get(r.market_unique_key).push(r);
         }
-
         for (const a of allocRows) {
-          const mk = (a.market_unique_key || '').toLowerCase();
-          const totalInMarket = marketTotalSupply.get(mk) || 0;
-          const selfSupply = Number(a.supply_assets_usd) || 0;
-          a.peer_supply_usd = Math.max(0, totalInMarket - selfSupply);
+          a.peer_supply_usd = summarizePeers(peerRowsByMarket.get(a.market_unique_key), a.vault_address, a).total;
         }
       }
 
@@ -391,9 +440,10 @@ function handleGetVaults(req, res, url) {
 
     const vaults = rows.map(row => {
       const allocs = allocMap.get(row.address.toLowerCase()) || [];
-      const mqi = calculateMQI(row, allocs);
-      const hhi = calculateHHI(row, allocs);
-      const liq = calculateLiquidityMetrics(row, allocs);
+      const scored = withEffectiveTotal(row, allocs);
+      const mqi = calculateMQI(scored, allocs);
+      const hhi = calculateHHI(scored, allocs);
+      const liq = calculateLiquidityMetrics(scored, allocs);
 
       return {
         address: row.address,
@@ -433,12 +483,12 @@ function handleGetVaults(req, res, url) {
     });
 
 
-    sendJson(res, 200, {
-      total: totalCount,
-      limit,
-      offset,
-      vaults
-    });
+    const listPayload = { total: totalCount, limit, offset, vaults };
+    if (vaultListCache.size >= LIST_CACHE_MAX_SIZE) {
+      vaultListCache.delete(vaultListCache.keys().next().value);
+    }
+    vaultListCache.set(cacheKey, { timestamp: Date.now(), data: listPayload });
+    sendJson(res, 200, listPayload, req);
   } catch (err) {
     console.error('[API] Failed to fetch vaults list:', err);
     sendJson(res, 500, { error: 'Failed to fetch vaults list' });
@@ -479,6 +529,7 @@ function handleGetVaultByAddress(req, res, address) {
         va.supply_cap,
         va.supply_cap_human,
         va.weight,
+        va.via_vault,
         m.chain_id,
         m.loan_asset_address,
         m.loan_asset_symbol,
@@ -515,48 +566,29 @@ function handleGetVaultByAddress(req, res, address) {
 
     // Aggregate competing peer vaults across shared markets for Crowded Exit analysis
     const marketKeys = allocations.map(a => a.market_unique_key);
-    const peerMap = new Map();
+    const peerRowsByMarket = new Map();
     if (marketKeys.length > 0) {
       const peerRows = db.prepare(`
-        SELECT 
-          va.market_unique_key,
-          va.vault_address,
-          v.name as vault_name,
-          va.supply_assets_usd
+        SELECT va.market_unique_key, va.vault_address, v.name AS vault_name, va.supply_assets_usd, va.via_vault
         FROM vault_allocations va
         JOIN vaults v ON va.vault_address = v.address
         WHERE va.market_unique_key IN (SELECT value FROM json_each(?))
-          AND va.vault_address != ?
-          AND va.supply_assets_usd > 1000
-        ORDER BY va.supply_assets_usd DESC
-      `).all(JSON.stringify(marketKeys), cleanAddress);
-
-      for (const row of peerRows) {
-        const k = row.market_unique_key.toLowerCase();
-        if (!peerMap.has(k)) {
-          peerMap.set(k, { totalPeerSupplyUsd: 0, peers: [] });
-        }
-        const entry = peerMap.get(k);
-        entry.totalPeerSupplyUsd += Number(row.supply_assets_usd) || 0;
-        if (entry.peers.length < 5) {
-          entry.peers.push({
-            vaultAddress: row.vault_address,
-            vaultName: row.vault_name,
-            supplyUsd: Number(row.supply_assets_usd) || 0
-          });
-        }
+      `).all(JSON.stringify(marketKeys));
+      for (const r of peerRows) {
+        if (!peerRowsByMarket.has(r.market_unique_key)) peerRowsByMarket.set(r.market_unique_key, []);
+        peerRowsByMarket.get(r.market_unique_key).push(r);
       }
     }
 
     for (const alloc of allocations) {
-      const k = (alloc.market_unique_key || '').toLowerCase();
-      const peerData = peerMap.get(k) || { totalPeerSupplyUsd: 0, peers: [] };
-      alloc.peer_supply_usd = peerData.totalPeerSupplyUsd;
+      const peerData = summarizePeers(peerRowsByMarket.get(alloc.market_unique_key), cleanAddress, alloc);
+      alloc.peer_supply_usd = peerData.total;
       alloc.peer_vaults = peerData.peers;
     }
 
     // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
-    const verdict = generateVaultVerdict(vault, allocations);
+    const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
+    const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
 
     const responsePayload = {
       vault: {
@@ -587,10 +619,8 @@ function handleGetVaultByAddress(req, res, address) {
       verdict,
       allocations: allocations.map(a => {
         const test = isMarketClean(a);
-        const supplyUsd = Number(a.supply_assets_usd) || 0;
-        const minMaterialThresholdUsd = (Number(vault.total_assets_usd) || 0) * 0.01;
-        const isMaterial = supplyUsd > minMaterialThresholdUsd;
-        const isFlagged = !test.isClean && isMaterial;
+        // Same decision as the MQI engine (materiality incl. cumulative rule), so table and score agree
+        const isFlagged = !test.isClean && compromisedKeys.has(a.market_unique_key);
 
         return {
           marketUniqueKey: a.market_unique_key,
@@ -637,6 +667,12 @@ export function handleRequest(req, res) {
     return;
   }
 
+  // WHATWG URL turns "\\" into "/", which would let /api\vaults slip past a reverse proxy matching /api/
+  if (req.url.includes('\\')) {
+    sendJson(res, 400, { error: 'Bad Request' });
+    return;
+  }
+
   let parsedUrl;
   try {
     const rawHost = req.headers.host || 'localhost';
@@ -650,7 +686,9 @@ export function handleRequest(req, res) {
   const pathname = parsedUrl.pathname;
 
   // REST API Routes
-  if (pathname === '/api/status' && req.method === 'GET') {
+  const isRead = req.method === 'GET' || req.method === 'HEAD';
+
+  if (pathname === '/api/status' && isRead) {
     handleGetStatus(req, res);
     return;
   }
@@ -660,13 +698,13 @@ export function handleRequest(req, res) {
     return;
   }
 
-  if (pathname === '/api/vaults' && req.method === 'GET') {
+  if (pathname === '/api/vaults' && isRead) {
     handleGetVaults(req, res, parsedUrl);
     return;
   }
 
   const vaultMatch = pathname.match(/^\/api\/vaults\/([^/]+)$/);
-  if (vaultMatch && req.method === 'GET') {
+  if (vaultMatch && isRead) {
     const address = vaultMatch[1].trim();
     if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
       sendJson(res, 400, { error: 'Invalid Ethereum address format (must be 0x followed by 40 hex characters)' });

@@ -63,9 +63,11 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       const canExitUsd = Math.min(supplyUsd, marketFreeLiquidityUsd);
       loanMarketsExitUsd += canExitUsd;
 
-      // Stressed pro-rata exit capacity considering competing peer vaults and direct market lenders
+      // Stressed pro-rata exit capacity: every vault with a position in this market runs for the exit at once,
+      // so free liquidity is shared pro rata with the other vaults (direct lenders are not part of this scenario,
+      // they are already reflected in the market's utilization and therefore in the normal exit)
       const peerSupplyUsd = Number(alloc.peer_supply_usd) || 0;
-      const totalCompetitionUsd = Math.max(supplyUsd + peerSupplyUsd, marketTotalSupplyUsd);
+      const totalCompetitionUsd = supplyUsd + peerSupplyUsd;
 
       let stressedExitUsd = canExitUsd;
       if (totalCompetitionUsd > 0 && marketFreeLiquidityUsd > 0) {
@@ -77,11 +79,10 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       loanMarketsStressedExitUsd += stressedExitUsd;
 
       // Crowded market detection:
-      // 1. External supply (competing vaults or direct market lenders) >= market free liquidity
-      // 2. Competing lenders materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
+      // 1. Competing peer vaults' supply >= market free liquidity
+      // 2. Peers materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
       // 3. Materiality check: vault capital must exceed 1.0% of total vault assets
-      const nonVaultSupplyUsd = Math.max(0, marketTotalSupplyUsd - supplyUsd);
-      const totalContestedClaimsUsd = Math.max(peerSupplyUsd, nonVaultSupplyUsd);
+      const totalContestedClaimsUsd = peerSupplyUsd;
       const hasSignificantDilution = (marketFreeLiquidityUsd === 0 && supplyUsd > 0) ||
         (canExitUsd > 0 && stressedExitUsd < canExitUsd * 0.70);
       const isCrowded = totalContestedClaimsUsd > 0 &&
@@ -93,10 +94,6 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
           const m = p.supplyUsd >= 1e6 ? `$${(p.supplyUsd / 1e6).toFixed(1)}M` : `$${(p.supplyUsd / 1e3).toFixed(0)}K`;
           return `${p.vaultName || 'Vault'} (${m})`;
         });
-        if (topPeersList.length === 0 && nonVaultSupplyUsd > 0) {
-          const m = nonVaultSupplyUsd >= 1e6 ? `$${(nonVaultSupplyUsd / 1e6).toFixed(1)}M` : `$${(nonVaultSupplyUsd / 1e3).toFixed(0)}K`;
-          topPeersList.push(`Direct Market Lenders (${m})`);
-        }
 
         crowdedMarkets.push({
           marketUniqueKey: alloc.market_unique_key,
@@ -121,11 +118,18 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     : (directLiquidityUsd > 0 ? Math.min(totalAssetsUsd, directLiquidityUsd) : 0);
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
-  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsExitUsd);
+  // V2 vaults report what can be withdrawn right now (idle + liquidity adapter + force-deallocatable
+  // liquidity net of its penalty), which can be lower than the market-based figure; V1 only when reported.
+  // V1 vaults are capped by the API-reported liquidity too when it is available (unallocated cash on the
+  // contract is otherwise assumed fully withdrawable).
+  const instantCapUsd = allocations.length > 0 && (vault.version === 'v2' || directLiquidityUsd > 0)
+    ? directLiquidityUsd
+    : Infinity;
+  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, instantCapUsd, trueIdleCashUsd + loanMarketsExitUsd);
   const instantExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalEffectiveExitUsd / totalAssetsUsd) * 1000) / 10));
 
   // Combined stressed exit capacity = true idle cash + loan markets stressed pro-rata cash
-  const totalStressedExitUsd = Math.min(totalAssetsUsd, trueIdleCashUsd + loanMarketsStressedExitUsd);
+  const totalStressedExitUsd = Math.min(totalAssetsUsd, instantCapUsd, trueIdleCashUsd + loanMarketsStressedExitUsd);
   const stressedExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalStressedExitUsd / totalAssetsUsd) * 1000) / 10));
 
   // Sort crowded markets descending by vault's exposed capital
