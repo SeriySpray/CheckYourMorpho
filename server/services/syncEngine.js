@@ -76,9 +76,12 @@ export function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
       console.warn(`[SyncEngine] V2 vault ${rawV2.name}: MetaMorpho adapter not resolved (underlying vault not listed or empty).`);
       continue;
     }
+    // Inconsistent API data (allocations above totalAssets) must not push the shares above the adapter's assets
+    const allocSum = (under.state.allocation || []).reduce((sum, a) => sum + toBigInt(a.supplyAssets), 0n);
+    const denominator = allocSum > underTotal ? allocSum : underTotal;
     for (const alloc of under.state.allocation || []) {
       if (!alloc.market) continue;
-      const share = (toBigInt(alloc.supplyAssets) * adapterAssets) / underTotal;
+      const share = (toBigInt(alloc.supplyAssets) * adapterAssets) / denominator;
       if (share > 0n) add(alloc.market, share, '0', under.address.toLowerCase());
     }
   }
@@ -132,7 +135,7 @@ export async function syncAllVaults(options = {}) {
         name = excluded.name,
         symbol = excluded.symbol,
         curator_name = CASE
-          WHEN excluded.curator_name LIKE '0x%' AND vaults.curator_name NOT LIKE '0x%' THEN vaults.curator_name
+          WHEN excluded.curator_name LIKE '0x%' AND vaults.curator_name NOT LIKE '0x%' AND vaults.curator_name != 'Independent' THEN vaults.curator_name
           ELSE excluded.curator_name END,
         asset_price_usd = excluded.asset_price_usd,
         total_assets = excluded.total_assets,

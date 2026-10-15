@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 
-// Тести з позначкою [ДЕФЕКТ] описують задуману поведінку і падають через помилку в server/ (див. звіт).
-
 const rawVault = (over = {}) => ({
   address: '0xABC', name: 'V', symbol: 'v', listed: true, chain: { id: 8453 },
   asset: { address: '0xUSDC', symbol: 'USDC', decimals: 6, priceUsd: 1 },

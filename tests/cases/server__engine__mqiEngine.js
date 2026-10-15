@@ -48,7 +48,7 @@ export default {
       assert.equal(f(alloc({ oracle_address: '0x0000000000000000000000000000000000000000' })).isClean, false);
       assert.equal(f(alloc({ oracle_address: '0X0000000000000000000000000000000000000000' })).isClean, false);
     }],
-    ['ДЕФЕКТ: oracle "0x" (порожня адреса) має вважатися відсутнім', ({ isMarketClean: f }) =>
+    ['oracle "0x" (порожня адреса) має вважатися відсутнім', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ oracle_address: '0x' })).isClean, false)],
     ['відсутній oracle в резерві допустимий', ({ isMarketClean: f }) =>
       assert.equal(f(idle()).isClean, true)],

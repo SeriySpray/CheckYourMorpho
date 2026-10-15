@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import { CONFIG } from '../../server/config.js';
 import { withFetch, jsonResponse } from '../fixtures.js';
 
-// Тести з позначкою [ДЕФЕКТ] описують задуману поведінку і падають через помилку в server/ (див. звіт).
-
 // Без ретраїв, щоб помилкові сценарії не чекали на backoff; мережа підмінена.
 async function noRetries(fn) {
   const saved = CONFIG.api.maxRetries; CONFIG.api.maxRetries = 0;

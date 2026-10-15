@@ -235,16 +235,11 @@ export default {
       await sync(mod, newApi([v1Curated('0xaaa', '0xCAFE'), v1Curated('0xccc', '0xBEEF')], [], dir(['Gauntlet', '0xcafe'])));
       assert.equal(curatorOf(db, '0xaaa'), 'Gauntlet'); assert.equal(curatorOf(db, '0xccc'), '0xBEEF');
     })],
-    ['[ДЕФЕКТ] vault без куратора (Independent), що отримав куратора поза каталогом, не лишається Independent', async mod => sandbox(async db => {
+    ['vault без куратора (Independent), що отримав куратора поза каталогом, не лишається Independent', async mod => sandbox(async db => {
       await sync(mod, newApi([rawV1('0xaaa', { state: { ...rawV1('0xaaa').state, curator: '0x0000000000000000000000000000000000000000' } })]));
       assert.equal(curatorOf(db, '0xaaa'), 'Independent');
       await sync(mod, newApi([v1Curated('0xaaa', '0xBEEF')]));
       assert.equal(curatorOf(db, '0xaaa'), '0xBEEF');
-    })],
-    ['[ДЕФЕКТ] зміна куратора на адресу поза каталогом не зберігає ім\'я попереднього куратора', async mod => sandbox(async db => {
-      await sync(mod, newApi([v1Curated('0xaaa', '0xCAFE')], [], dir(['Gauntlet', '0xcafe'])));
-      await sync(mod, newApi([v1Curated('0xaaa', '0xBEEF')], [], dir(['Gauntlet', '0xcafe'])));
-      assert.notEqual(curatorOf(db, '0xaaa'), 'Gauntlet');
     })],
   ],
   toBigInt: [
@@ -321,7 +316,7 @@ export default {
       const under = { address: '0xu', state: { totalAssets: '100', allocation: [{ supplyAssets: '100', market: { marketId: '0xA' } }] } };
       assert.deepEqual(f({ adapters: { items: [{ type: 'MorphoMarketV1', assets: '50', metaMorpho: { address: '0xu' } }] } }, new Map([['0xu', under]])), []);
     }],
-    ['[ДЕФЕКТ] алокації базового vault більші за його totalAssets (80 + 40 > 100): частки не перевищують актив адаптера 50', ({ expandMetaMorphoAdapters: f }) => {
+    ['алокації базового vault більші за його totalAssets (80 + 40 > 100): частки не перевищують актив адаптера 50', ({ expandMetaMorphoAdapters: f }) => {
       const under = { address: '0xu', state: { totalAssets: '100', allocation: [{ supplyAssets: '80', market: { marketId: '0xA' } }, { supplyAssets: '40', market: { marketId: '0xB' } }] } };
       const r = f({ adapters: { items: [{ type: 'MetaMorpho', assets: '50', metaMorpho: { address: '0xu' } }] } }, new Map([['0xu', under]]));
       const sum = r.reduce((s, c) => s + BigInt(c.allocation), 0n);

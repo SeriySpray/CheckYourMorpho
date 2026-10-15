@@ -669,7 +669,8 @@ export function handleRequest(req, res) {
   }
 
   // WHATWG URL turns "\\" into "/", which would let /api\vaults slip past a reverse proxy matching /api/
-  if (req.url.includes('\\')) {
+  // A leading // would be parsed by WHATWG URL as a protocol-relative host and skip the /api/ matching
+  if (req.url.includes('\\') || req.url.startsWith('//')) {
     sendJson(res, 400, { error: 'Bad Request' });
     return;
   }

@@ -216,7 +216,7 @@ export default {
       assert.equal(call(handleRequest, 'GET', '/api/status', { host: 'evil host/<x>' }).statusCode, 200);
       assert.equal(call(handleRequest, 'GET', '/api/status', { host: 'example.com:8080' }).statusCode, 200);
     }],
-    ['ДЕФЕКТ: шлях //x/api/status не має трактуватися як /api/status (протокол-відносний URL)', ({ handleRequest }) => {
+    ['шлях //x/api/status не має трактуватися як /api/status (протокол-відносний URL)', ({ handleRequest }) => {
       const r = call(handleRequest, 'GET', '//x/api/status');
       assert.notEqual(r.statusCode, 200, 'запит //x/api/status потрапив у обробник /api/status');
     }],

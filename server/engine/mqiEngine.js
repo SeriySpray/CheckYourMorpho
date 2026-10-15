@@ -54,7 +54,7 @@ export function isMarketClean(market) {
   const isIdleReserve = isIdleReserveMarket(market);
   if (!isIdleReserve) {
     const oracleAddr = (market.oracle_address || '').toLowerCase();
-    const isZeroAddress = !oracleAddr || oracleAddr === '0x0000000000000000000000000000000000000000';
+    const isZeroAddress = !oracleAddr || oracleAddr === '0x' || oracleAddr === '0x0000000000000000000000000000000000000000';
 
     if (isZeroAddress) {
       reasons.push('Missing oracle contract address');
