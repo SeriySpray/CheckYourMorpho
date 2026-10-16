@@ -36,7 +36,6 @@ export function isIdleReserveMarket(alloc) {
  */
 export function calculateHHI(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
-  const directLiquidityUsd = Number(vault.liquidity_usd) || 0;
 
   // Group allocations by unique collateral asset contract address (with symbol label)
   // Exclude NONE collateral, 0-LLTV markets, and empty collateral addresses (these are idle/cash holding markets)
@@ -63,9 +62,6 @@ export function calculateHHI(vault, allocations = []) {
       totalActiveCollateralUsd += supplyUsd;
     }
   }
-
-  // Any vault capital not deployed into active collateral is unallocated cash / idle reserve
-  const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalActiveCollateralUsd);
 
   // Materiality threshold: at least 1.0% of total vault capital must be deployed into active collateral
   const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
@@ -125,7 +121,9 @@ export function calculateHHI(vault, allocations = []) {
   const hhiRaw = Math.min(1.0, Math.max(0, hhiSum));
   const hhi = Math.round(hhiRaw * 1000) / 1000;
   const effectiveAssets = hhi > 0 ? Math.round((1 / hhi) * 10) / 10 : 0;
-  const activeCollateralExposure = totalAssetsUsd > 0 ? totalActiveCollateralUsd / totalAssetsUsd : 0;
+  // Measured against known capital: exposure behind unresolved V2 adapters is not cash
+  const knownAssetsUsd = totalAssetsUsd - Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
+  const activeCollateralExposure = knownAssetsUsd > 0 ? totalActiveCollateralUsd / knownAssetsUsd : 1;
 
   // Determine concentration tier taking into account both internal collateral distribution
   // and overall portfolio exposure (to prevent false critical alarms when vault is 70%+ cash)

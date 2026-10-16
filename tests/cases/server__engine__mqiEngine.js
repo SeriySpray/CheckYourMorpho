@@ -146,5 +146,20 @@ export default {
       // кумулятивно 20.2M >= 1M, тож і 0.2M-пил стає суттєвим: 79.8%
       assert.equal(r.mqiPercent, 79.8); assert.equal(r.compromisedMarkets.length, 2);
     }],
+    ['C1: V2 $10M без алокацій, уся сума нерозкрита -> MQI 0, а не 100 (не чистий кеш)', ({ calculateMQI: f }) => {
+      const r = f(vault({ version: 'v2', total_assets_usd: 10e6, unresolved_exposure_usd: 10e6 }), []);
+      assert.equal(r.mqiPercent, 0); assert.equal(r.isAllClean, false);
+      assert.equal(r.cleanAssetsUsd, 0); assert.equal(r.unresolvedAssetsUsd, 10e6); assert.deepEqual(r.compromisedMarkets, []);
+    }],
+    ['C1: 50M у чистому ринку + 50M нерозкрито -> MQI 50; clean + compromised + unresolved = TVL', ({ calculateMQI: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 50e6 }), [alloc({ supply_assets_usd: 50e6 })]);
+      assert.equal(r.mqiPercent, 50); assert.equal(r.cleanAssetsUsd + r.compromisedAssetsUsd + r.unresolvedAssetsUsd, 100e6);
+    }],
+    ['C1: нерозкрита сума нижче порогу суттєвості (200K із 100M, поріг 250K) рахується чистою, рівно на порозі - ні', ({ calculateMQI: f }) => {
+      const below = f(vault({ unresolved_exposure_usd: 200e3 }), []);
+      assert.equal(below.mqiPercent, 100); assert.equal(below.unresolvedAssetsUsd, 0); assert.equal(below.isAllClean, true);
+      const at = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 100e3 }), []);
+      assert.equal(at.mqiPercent, 99); assert.equal(at.isAllClean, false);
+    }],
   ],
 };

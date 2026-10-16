@@ -23,7 +23,10 @@ import { isIdleReserveMarket } from './hhiEngine.js';
  */
 export function calculateLiquidityMetrics(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd ?? vault.totalAssetsUsd) || 0;
-  const directLiquidityUsd = Math.max(0, Number(vault.liquidity_usd ?? vault.liquidityUsd) || 0);
+  // Absent or non-numeric = the API did not report it, so exit is unknown; 0 = nothing withdrawable right now
+  const reportedLiquidity = vault.liquidity_usd ?? vault.liquidityUsd;
+  const exitUnknown = reportedLiquidity == null || reportedLiquidity === '' || !Number.isFinite(Number(reportedLiquidity));
+  const directLiquidityUsd = exitUnknown ? 0 : Math.max(0, Number(reportedLiquidity));
 
   if (totalAssetsUsd <= 0) {
     return {
@@ -35,7 +38,8 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       stressedExitCapacityPercent: 100,
       crowdedMarkets: [],
       isIlliquid: false,
-      isCrowded: false
+      isCrowded: false,
+      exitUnknown: false
     };
   }
 
@@ -112,23 +116,20 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
 
   // True unallocated cash (not at risk in loan markets):
   // either in a 0-LLTV idle market or unallocated cash difference on the vault contract
-  // (і без жодної алокації: результат той самий, що й для рядків із нульовим постачанням)
-  const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd);
+  // (і без жодної алокації: результат той самий, що й для рядків із нульовим постачанням).
+  // Exposure behind V2 adapters we could not look through is not cash: its exit is unknown, counted as none.
+  const unresolvedUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
+  const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd - unresolvedUsd);
   const trueIdleCashUsd = idleAllocationsUsd + unallocatedCashUsd;
 
-  // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd)
-  // V2 vaults report what can be withdrawn right now (idle + liquidity adapter + force-deallocatable
-  // liquidity net of its penalty), which can be lower than the market-based figure; V1 only when reported.
-  // V1 vaults are capped by the API-reported liquidity too when it is available (unallocated cash on the
-  // contract is otherwise assumed fully withdrawable).
-  const instantCapUsd = vault.version === 'v2' || directLiquidityUsd > 0
-    ? directLiquidityUsd
-    : Infinity;
-  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, instantCapUsd, trueIdleCashUsd + loanMarketsExitUsd);
+  // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd),
+  // capped by the API-reported withdrawable liquidity (V2: idle + liquidity adapter + force-deallocatable
+  // liquidity net of its penalty), which can be lower than the market-based figure.
+  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsExitUsd);
   const instantExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalEffectiveExitUsd / totalAssetsUsd) * 1000) / 10));
 
   // Combined stressed exit capacity = true idle cash + loan markets stressed pro-rata cash
-  const totalStressedExitUsd = Math.min(totalAssetsUsd, instantCapUsd, trueIdleCashUsd + loanMarketsStressedExitUsd);
+  const totalStressedExitUsd = Math.min(totalAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsStressedExitUsd);
   const stressedExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalStressedExitUsd / totalAssetsUsd) * 1000) / 10));
 
   // Sort crowded markets descending by vault's exposed capital
@@ -136,21 +137,24 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
 
   const capacityDrop = instantExitCapacityPercent - stressedExitCapacityPercent;
   const relativeDrop = instantExitCapacityPercent > 0 ? capacityDrop / instantExitCapacityPercent : 0;
-  const isCrowded = crowdedMarkets.length > 0 && (
+  const isCrowded = !exitUnknown && crowdedMarkets.length > 0 && (
     capacityDrop >= 15 ||
     (instantExitCapacityPercent >= 10 && stressedExitCapacityPercent < 10) ||
     (instantExitCapacityPercent > 0 && relativeDrop >= 0.50)
   );
 
+  // Without reported liquidity the exit figures stay null instead of an optimistic market-only estimate
+  const known = value => (exitUnknown ? null : value);
   return {
     directLiquidityUsd: Math.round(trueIdleCashUsd * 100) / 100,
     marketExitCapacityUsd: Math.round(loanMarketsExitUsd * 100) / 100,
-    instantExitCapacityUsd: Math.round(totalEffectiveExitUsd * 100) / 100,
-    instantExitCapacityPercent,
-    stressedExitCapacityUsd: Math.round(totalStressedExitUsd * 100) / 100,
-    stressedExitCapacityPercent,
+    instantExitCapacityUsd: known(Math.round(totalEffectiveExitUsd * 100) / 100),
+    instantExitCapacityPercent: known(instantExitCapacityPercent),
+    stressedExitCapacityUsd: known(Math.round(totalStressedExitUsd * 100) / 100),
+    stressedExitCapacityPercent: known(stressedExitCapacityPercent),
     crowdedMarkets,
-    isIlliquid: instantExitCapacityPercent < 20,
-    isCrowded
+    isIlliquid: known(instantExitCapacityPercent < 20),
+    isCrowded,
+    exitUnknown
   };
 }

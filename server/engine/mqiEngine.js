@@ -102,13 +102,13 @@ export function isMarketClean(market) {
  */
 export function calculateMQI(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
-  const directLiquidityUsd = Number(vault.liquidity_usd) || 0;
 
   if (totalAssetsUsd <= 0) {
     return {
       mqiPercent: 100,
       cleanAssetsUsd: 0,
       compromisedAssetsUsd: 0,
+      unresolvedAssetsUsd: 0,
       isAllClean: true,
       cleanMarketsCount: 0,
       totalMarketsCount: 0,
@@ -161,11 +161,15 @@ export function calculateMQI(vault, allocations = []) {
     }
   }
 
-  // Any vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)
+  // Capital behind V2 adapters we could not look through is unknown, not clean cash (sub-material dust stays clean)
+  const unresolvedRawUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
+  const unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd ? unresolvedRawUsd : 0;
+
+  // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)
   const totalAllocated = cleanSupplyUsd + compromisedSupplyUsd;
-  const idleCashUsd = Math.max(0, totalAssetsUsd - totalAllocated);
+  const idleCashUsd = Math.max(0, totalAssetsUsd - totalAllocated - unresolvedUsd);
   const totalCleanAssetsUsd = cleanSupplyUsd + idleCashUsd;
-  const effectiveTotalUsd = totalCleanAssetsUsd + compromisedSupplyUsd;
+  const effectiveTotalUsd = totalCleanAssetsUsd + compromisedSupplyUsd + unresolvedUsd;
 
   const mqiPercent = effectiveTotalUsd > 0 
     ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / effectiveTotalUsd) * 1000) / 10))
@@ -175,7 +179,8 @@ export function calculateMQI(vault, allocations = []) {
     mqiPercent,
     cleanAssetsUsd: Math.round(totalCleanAssetsUsd * 100) / 100,
     compromisedAssetsUsd: Math.round(compromisedSupplyUsd * 100) / 100,
-    isAllClean: compromisedMarkets.length === 0 && mqiPercent === 100,
+    unresolvedAssetsUsd: Math.round(unresolvedUsd * 100) / 100,
+    isAllClean: compromisedMarkets.length === 0 && unresolvedUsd === 0 && mqiPercent === 100,
     cleanMarketsCount,
     totalMarketsCount: allocations.length,
     compromisedMarkets

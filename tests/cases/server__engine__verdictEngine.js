@@ -138,5 +138,24 @@ export default {
       assert.equal(apyFlag(f(vault({ net_apy: 0 }), diversified())), undefined);
       assert.equal(apyFlag(f(vault({ net_apy: 'abc' }), diversified())), undefined);
     }],
+    ['C1: V2 $10M без алокацій із нерозкритою експозицією -> HIGH Unresolved Exposure, MQI 0, вихід 0', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ version: 'v2', total_assets_usd: 10e6, liquidity_usd: 10e6, unresolved_exposure_usd: 10e6 }), []);
+      const x = flag(r, 'Unresolved Exposure');
+      assert.equal(x.level, 'HIGH'); assert.match(x.message, /^100% of capital \(\$10\.00M\) /);
+      assert.equal(r.mqi.mqiPercent, 0); assert.equal(r.mqi.isAllClean, false);
+      assert.equal(r.liquidity.instantExitCapacityPercent, 0);
+    }],
+    ['C1: нерозкрита експозиція нижче порогу суттєвості -> без прапорця', ({ generateVaultVerdict: f }) =>
+      assert.equal(flag(f(vault({ unresolved_exposure_usd: 200e3 }), diversified()), 'Unresolved Exposure'), undefined)],
+    ['C2: невідома ліквідність -> MEDIUM Unknown Exit Liquidity, summary "unknown", без "Only null%"', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ liquidity_usd: null }), diversified());
+      assert.equal(flag(r, 'Unknown Exit Liquidity').level, 'MEDIUM');
+      assert.equal(flag(r, 'Restricted Exit Liquidity'), undefined);
+      assert.match(r.summary, /Exit Liquidity: unknown\.$/);
+    }],
+    ['C2: невідома ліквідність і crowded-ринок -> без crowded-прапорців з null у тексті', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ liquidity_usd: null }), crowd(30e6, 30e6, 90e6));
+      assert.equal(crowdLevel(r), null); assert.ok(r.redFlags.every(x => !/null/.test(x.message)));
+    }],
   ],
 };

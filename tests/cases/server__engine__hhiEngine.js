@@ -193,5 +193,10 @@ export default {
       const r = f(vault(), equal(4, 9.96e6));
       assert.equal(r.tier, 'DIVERSIFIED'); assert.equal(r.tierLabel, 'High Diversification'); assert.equal(r.topCollateral.sharePercent, 10);
     }],
+    ['C1: нерозкрита експозиція не є кешем: 25M в одній заставі + 75M нерозкрито -> не "Low Exposure (High Cash)"', ({ calculateHHI: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 75e6 }), [col(0, 25e6)]);
+      assert.notEqual(r.tierLabel, 'Low Exposure (High Cash)'); assert.equal(r.tier, 'CONCENTRATED');
+      assert.equal(r.activeCollateralExposure, 100);
+    }],
   ],
 };

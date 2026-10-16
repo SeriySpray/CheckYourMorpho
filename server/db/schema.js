@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS vaults (
   liquidity_usd REAL DEFAULT 0,
   is_listed INTEGER DEFAULT 0,
   metadata_updated_at INTEGER,
-  missed_syncs INTEGER DEFAULT 0
+  missed_syncs INTEGER DEFAULT 0,
+  unresolved_exposure_usd REAL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_vaults_version ON vaults(version);

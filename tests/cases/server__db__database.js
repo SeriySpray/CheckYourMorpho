@@ -59,7 +59,7 @@ export default {
     }],
     ['мігрує стару схему: додає всі нові колонки', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {
       const db = getDatabase();
-      for (const c of ['version', 'liquidity_usd', 'is_listed', 'missed_syncs']) assert.ok(cols(db, 'vaults').includes(c), `vaults.${c}`);
+      for (const c of ['version', 'liquidity_usd', 'is_listed', 'missed_syncs', 'unresolved_exposure_usd']) assert.ok(cols(db, 'vaults').includes(c), `vaults.${c}`);
       for (const c of ['is_listed', 'oracle_type', 'bad_debt_usd', 'realized_bad_debt_usd', 'warnings_count', 'warnings_json']) {
         assert.ok(cols(db, 'markets').includes(c), `markets.${c}`);
       }
@@ -68,8 +68,8 @@ export default {
     })],
     ['мігрує стару схему: наявні рядки отримують значення за замовчуванням, дані збережено', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {
       const db = getDatabase();
-      assert.deepEqual({ ...db.prepare("SELECT name, version, liquidity_usd, is_listed, missed_syncs FROM vaults WHERE address = '0xold'").get() },
-        { name: 'Legacy', version: 'v1', liquidity_usd: 0, is_listed: 0, missed_syncs: 0 });
+      assert.deepEqual({ ...db.prepare("SELECT name, version, liquidity_usd, is_listed, missed_syncs, unresolved_exposure_usd FROM vaults WHERE address = '0xold'").get() },
+        { name: 'Legacy', version: 'v1', liquidity_usd: 0, is_listed: 0, missed_syncs: 0, unresolved_exposure_usd: 0 });
       assert.deepEqual({ ...db.prepare("SELECT is_listed, oracle_type, bad_debt_usd, realized_bad_debt_usd, warnings_count, warnings_json FROM markets").get() },
         { is_listed: 1, oracle_type: 'ChainlinkOracleV2', bad_debt_usd: 0, realized_bad_debt_usd: 0, warnings_count: 0, warnings_json: null });
       assert.deepEqual({ ...db.prepare('SELECT supply_assets_usd, via_vault FROM vault_allocations').get() }, { supply_assets_usd: 42, via_vault: null });

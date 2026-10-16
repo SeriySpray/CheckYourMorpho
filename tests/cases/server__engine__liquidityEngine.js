@@ -17,7 +17,7 @@ export default {
     ['нечисловий TVL -> 100%', ({ calculateLiquidityMetrics: f }) =>
       assert.equal(f(vault({ total_assets_usd: 'abc' }), [mkt(0, 50e6, 0)]).instantExitCapacityPercent, 100)],
     ['camelCase-поля vault теж приймаються', ({ calculateLiquidityMetrics: f }) =>
-      assert.equal(f({ totalAssetsUsd: 100e6, liquidityUsd: 0 }, [mkt(0, 100e6, 30e6)]).instantExitCapacityPercent, 30)],
+      assert.equal(f({ totalAssetsUsd: 100e6, liquidityUsd: 50e6 }, [mkt(0, 100e6, 30e6)]).instantExitCapacityPercent, 30)],
     ['ринок із повною ліквідністю -> 100% виходу', ({ calculateLiquidityMetrics: f }) =>
       assert.equal(f(vault(), [alloc({ supply_assets_usd: 100e6 })]).instantExitCapacityPercent, 100)],
     ['вихід обмежений вільною ліквідністю ринку', ({ calculateLiquidityMetrics: f }) => {
@@ -57,9 +57,9 @@ export default {
       const r = f(vault({ version: 'v2', liquidity_usd: 0 }), [mkt(0, 100e6, 500e6)]);
       assert.equal(r.instantExitCapacityPercent, 0); assert.equal(r.isIlliquid, true);
     }],
-    ['V1 обмежується liquidity_usd, лише якщо API його повідомив (200K -> 20%, 0 -> 100%)', ({ calculateLiquidityMetrics: f }) => {
+    ['V1 обмежується повідомленим liquidity_usd (200K -> 20%, справжній 0 -> 0%)', ({ calculateLiquidityMetrics: f }) => {
       assert.equal(f(vault({ total_assets_usd: 1e6, liquidity_usd: 200e3 }), [mkt(0, 1e6, 500e6)]).instantExitCapacityPercent, 20);
-      assert.equal(f(vault({ total_assets_usd: 1e6, liquidity_usd: 0 }), [mkt(0, 1e6, 500e6)]).instantExitCapacityPercent, 100);
+      assert.equal(f(vault({ total_assets_usd: 1e6, liquidity_usd: 0 }), [mkt(0, 1e6, 500e6)]).instantExitCapacityPercent, 0);
     }],
     ['стрес: 50M кешу + 40M вільних, частка проти піра 50/(50+150) -> стресовий 60%, нормальний 90%', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault(), [mkt(0, 50e6, 40e6, 150e6)]);
@@ -135,13 +135,13 @@ export default {
     }],
     // Vault без жодної реальної позиції: капітал лежить на контракті і доступний миттєво,
     // обмеження - лише liquidity_usd (V2 завжди, V1 коли API його повідомив).
-    ['регрес: V1 без алокацій і без liquidity_usd -> 100% (капітал на контракті), а не 0%', ({ calculateLiquidityMetrics: f }) => {
+    ['регрес: V1 без алокацій, ліквідність не обмежує -> 100% (капітал на контракті), а не 0%', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault(), []);
       assert.equal(r.instantExitCapacityPercent, 100); assert.equal(r.stressedExitCapacityPercent, 100);
       assert.equal(r.instantExitCapacityUsd, 100e6); assert.equal(r.directLiquidityUsd, 100e6); assert.equal(r.isIlliquid, false);
     }],
-    ['порожній список і рядок із нульовим постачанням дають однаковий вихід: V1/V2 x liquidity_usd 0/30M -> 100/30/0/30', ({ calculateLiquidityMetrics: f }) => {
-      const cases = [['v1', 0, 100], ['v1', 30e6, 30], ['v2', 0, 0], ['v2', 30e6, 30]];
+    ['порожній список і рядок із нульовим постачанням дають однаковий вихід: V1/V2 x liquidity_usd 0/30M -> 0/30/0/30', ({ calculateLiquidityMetrics: f }) => {
+      const cases = [['v1', 0, 0], ['v1', 30e6, 30], ['v2', 0, 0], ['v2', 30e6, 30]];
       for (const [version, liq, expected] of cases) {
         const v = vault({ version, liquidity_usd: liq });
         for (const allocs of [[], [alloc({ supply_assets_usd: 0 })]]) {
@@ -166,10 +166,35 @@ export default {
       assert.equal(r.instantExitCapacityPercent, 50); assert.equal(r.stressedExitCapacityPercent, 50);
       assert.equal(r.marketExitCapacityUsd, 0); assert.deepEqual(r.crowdedMarkets, []);
     }],
-    ['від\'ємний liquidity_usd у V2 -> 0 USD виходу, а не від\'ємна сума; нечисловий у V1 -> як 0 (100%)', ({ calculateLiquidityMetrics: f }) => {
+    ['від\'ємний liquidity_usd у V2 -> 0 USD виходу, а не від\'ємна сума; нечисловий у V1 -> невідомо (null)', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault({ version: 'v2', liquidity_usd: -5e6 }), [mkt(0, 100e6, 500e6)]);
       assert.equal(r.instantExitCapacityUsd, 0); assert.equal(r.stressedExitCapacityUsd, 0); assert.equal(r.instantExitCapacityPercent, 0);
-      assert.equal(f(vault({ liquidity_usd: 'abc' }), [mkt(0, 100e6, 500e6)]).instantExitCapacityPercent, 100);
+      assert.equal(f(vault({ liquidity_usd: 'abc' }), [mkt(0, 100e6, 500e6)]).instantExitCapacityPercent, null);
+    }],
+    // C2: null = API не повідомив ліквідність, 0 = справжній нуль
+    ['C2: V1 з liquidity_usd 0 (справжній нуль) -> 0%, а не 100%', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ total_assets_usd: 1e6, liquidity_usd: 0 }), [mkt(0, 1e6, 500e6)]);
+      assert.equal(r.instantExitCapacityPercent, 0); assert.equal(r.stressedExitCapacityPercent, 0); assert.equal(r.isIlliquid, true);
+      assert.equal(r.exitUnknown, false);
+    }],
+    ['C2: liquidity_usd null/undefined/нечисловий (V1 і V2) -> вихід невідомий (null), а не 100%', ({ calculateLiquidityMetrics: f }) => {
+      for (const version of ['v1', 'v2']) for (const liq of [null, undefined, 'abc']) {
+        const r = f(vault({ version, liquidity_usd: liq }), [mkt(0, 100e6, 500e6)]);
+        const label = `${version}, liquidity ${liq}`;
+        assert.equal(r.exitUnknown, true, label);
+        assert.deepEqual([r.instantExitCapacityPercent, r.instantExitCapacityUsd, r.stressedExitCapacityPercent, r.stressedExitCapacityUsd, r.isIlliquid, r.isCrowded],
+          [null, null, null, null, null, false], label);
+        assert.equal(r.marketExitCapacityUsd, 100e6, label);
+      }
+    }],
+    // C1: нерозкрита експозиція V2-адаптерів не є кешем на контракті
+    ['C1: V2 10M без алокацій, уся сума в нерозв\'язаному адаптері -> 0% виходу, а не 100%', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ version: 'v2', total_assets_usd: 10e6, liquidity_usd: 10e6, unresolved_exposure_usd: 10e6 }), []);
+      assert.equal(r.instantExitCapacityPercent, 0); assert.equal(r.directLiquidityUsd, 0);
+    }],
+    ['C1: 40M нерозкрито + 60M у ринку з 30M вільних -> 30% (кешу на контракті 0)', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 40e6 }), [mkt(0, 60e6, 30e6)]);
+      assert.equal(r.instantExitCapacityPercent, 30); assert.equal(r.directLiquidityUsd, 0);
     }],
   ],
 };

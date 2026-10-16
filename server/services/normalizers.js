@@ -79,7 +79,8 @@ export function normalizeVault(raw, curatorMap = null) {
     asset_price_usd: asset.priceUsd ?? 0,
     total_assets: String(state.totalAssets || '0'),
     total_assets_usd: state.totalAssetsUsd || totalAssetsHuman * assetPrice,
-    liquidity_usd: raw.liquidity?.usd ?? 0,
+    // null = the API did not report it (unknown), 0 = nothing withdrawable
+    liquidity_usd: raw.liquidity?.usd ?? null,
     apy: state.apy ?? 0,
     net_apy: state.netApy ?? 0,
     fee: state.fee ?? 0,
@@ -137,7 +138,7 @@ export function normalizeVaultV2(raw, curatorMap = null) {
     // Withdrawable now: idle + liquidity-adapter liquidity at face value, plus force-deallocatable liquidity
     // net of the worst adapter penalty (anyone can forceDeallocate and withdraw in one go, at that cost)
     // (clamped to TVL: the API prices its liquidity and TVL fields independently and they can differ by a few %)
-    liquidity_usd: Math.min(
+    liquidity_usd: raw.liquidityUsd == null && raw.forceDeallocatableLiquidityUsd == null ? null : Math.min(
       totalAssetsUsd || Infinity,
       (raw.liquidityUsd ?? 0) + (raw.forceDeallocatableLiquidityUsd ?? 0) * (1 - maxForceDeallocatePenalty(raw))
     ),

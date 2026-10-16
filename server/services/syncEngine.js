@@ -43,6 +43,27 @@ export function toBigInt(value) {
   }
 }
 
+/** Underlying V1 vault of a MetaMorpho adapter, or null when it is not listed or empty. */
+function lookThroughVault(adapter, v1ByAddress) {
+  const under = v1ByAddress.get((adapter.metaMorpho?.address || '').toLowerCase());
+  return toBigInt(under?.state?.totalAssets) > 0n ? under : null;
+}
+
+/**
+ * Raw assets a V2 vault holds through adapters whose markets cannot be resolved:
+ * MetaMorpho adapters without a listed, non-empty underlying vault, and adapter types we cannot look through.
+ */
+export function unresolvedAdapterAssets(rawV2, v1ByAddress) {
+  let sum = 0n;
+  for (const adapter of rawV2.adapters?.items || []) {
+    const assets = toBigInt(adapter.assets);
+    // MorphoMarketV1 positions already arrive as market caps
+    if (assets <= 0n || adapter.type === 'MorphoMarketV1') continue;
+    if (adapter.type !== 'MetaMorpho' || !lookThroughVault(adapter, v1ByAddress)) sum += assets;
+  }
+  return sum;
+}
+
 /**
  * A V2 vault may hold its assets in MetaMorpho (V1) vaults through an adapter instead of direct market caps.
  * Look through each such adapter: split its assets across the underlying vault's markets pro rata,
@@ -68,14 +89,14 @@ export function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
 
   for (const adapter of rawV2.adapters?.items || []) {
     if (adapter.type !== 'MetaMorpho') continue;
-    const under = v1ByAddress.get((adapter.metaMorpho?.address || '').toLowerCase());
-    const underTotal = toBigInt(under?.state?.totalAssets);
     const adapterAssets = toBigInt(adapter.assets);
     if (adapterAssets <= 0n) continue;
-    if (underTotal <= 0n) {
+    const under = lookThroughVault(adapter, v1ByAddress);
+    if (!under) {
       console.warn(`[SyncEngine] V2 vault ${rawV2.name}: MetaMorpho adapter not resolved (underlying vault not listed or empty).`);
       continue;
     }
+    const underTotal = toBigInt(under.state.totalAssets);
     // Inconsistent API data (allocations above totalAssets) must not push the shares above the adapter's assets
     const allocSum = (under.state.allocation || []).reduce((sum, a) => sum + toBigInt(a.supplyAssets), 0n);
     const denominator = allocSum > underTotal ? allocSum : underTotal;
@@ -119,12 +140,12 @@ export async function syncAllVaults(options = {}) {
         address, chain_id, name, symbol, curator_name, asset_address,
         asset_symbol, asset_decimals, asset_price_usd, total_assets,
         total_assets_usd, liquidity_usd, apy, net_apy, fee, owner, pending_owner,
-        version, is_listed, metadata_updated_at
+        version, is_listed, metadata_updated_at, unresolved_exposure_usd
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?, ?
       )
       ON CONFLICT(address) DO UPDATE SET
         chain_id = excluded.chain_id,
@@ -148,7 +169,8 @@ export async function syncAllVaults(options = {}) {
         pending_owner = excluded.pending_owner,
         version = excluded.version,
         is_listed = excluded.is_listed,
-        metadata_updated_at = excluded.metadata_updated_at
+        metadata_updated_at = excluded.metadata_updated_at,
+        unresolved_exposure_usd = excluded.unresolved_exposure_usd
     `);
 
     const upsertMarket = db.prepare(`
@@ -273,7 +295,7 @@ export async function syncAllVaults(options = {}) {
           v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
           v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
           v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
-          'v1', v.is_listed, v.metadata_updated_at
+          'v1', v.is_listed, v.metadata_updated_at, 0
         );
         v1Count++;
         if (v.is_listed) {
@@ -317,11 +339,16 @@ export async function syncAllVaults(options = {}) {
       // 3B. Write V2 Vaults & Allocations
       for (const rawV2 of rawVaultsV2) {
         const v = normalizeVaultV2(rawV2, curatorMap);
+        const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
+        // Priced as a share of the vault's own TVL, so it is in the same units the engines compare it with
+        const unresolvedShare = vaultTotalAssetsHuman > 0
+          ? Math.min(1, formatUnits(String(unresolvedAdapterAssets(rawV2, v1ByAddress)), v.asset_decimals) / vaultTotalAssetsHuman)
+          : 0;
         upsertVault.run(
           v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
           v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
           v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
-          'v2', v.is_listed, v.metadata_updated_at
+          'v2', v.is_listed, v.metadata_updated_at, unresolvedShare * (Number(v.total_assets_usd) || 0)
         );
         v2Count++;
         if (v.is_listed) {
@@ -331,7 +358,6 @@ export async function syncAllVaults(options = {}) {
         deleteVaultAllocations.run(v.address);
 
         const caps = expandMetaMorphoAdapters(rawV2, v1ByAddress);
-        const vaultTotalAssetsHuman = formatUnits(v.total_assets, v.asset_decimals);
 
         for (const cap of caps) {
           const rawMarket = cap.data?.market;

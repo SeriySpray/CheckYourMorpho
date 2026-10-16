@@ -241,6 +241,33 @@ export default {
       await sync(mod, newApi([v1Curated('0xaaa', '0xBEEF')]));
       assert.equal(curatorOf(db, '0xaaa'), '0xBEEF');
     })],
+    ['C1: нерозв\'язаний адаптер V2 зберігається як unresolved_exposure_usd (300 із 500), у V1 - 0', async mod => sandbox(async db => {
+      const v2 = rawV2('0xbbb', '0xm9', { caps: { items: [] }, adapters: { items: [{ type: 'MetaMorpho', assets: '300000000', metaMorpho: { address: '0xnone' } }] } });
+      await sync(mod, newApi([rawV1('0xaaa')], [v2]));
+      const u = a => db.prepare('SELECT unresolved_exposure_usd AS u FROM vaults WHERE address = ?').get(a).u;
+      assert.equal(u('0xbbb'), 300); assert.equal(u('0xaaa'), 0);
+    })],
+    ['C2: V1 без liquidity в API -> liquidity_usd NULL, із liquidity.usd 0 -> 0', async mod => sandbox(async db => {
+      await sync(mod, newApi([rawV1('0xaaa'), rawV1('0xccc', { liquidity: { usd: 0 } })]));
+      const l = a => db.prepare('SELECT liquidity_usd AS l FROM vaults WHERE address = ?').get(a).l;
+      assert.equal(l('0xaaa'), null); assert.equal(l('0xccc'), 0);
+    })],
+  ],
+  unresolvedAdapterAssets: [
+    ['MetaMorpho поза v1ByAddress, MetaMorpho з порожнім базовим і невідомий тип рахуються; MorphoMarketV1 і розв\'язаний - ні', ({ unresolvedAdapterAssets: f }) => {
+      const under = { address: '0xu', state: { totalAssets: '100', allocation: [{ supplyAssets: '100', market: { marketId: '0xA' } }] } };
+      const empty = { address: '0xe', state: { totalAssets: '0', allocation: [] } };
+      const items = [
+        { type: 'MetaMorpho', assets: '10', metaMorpho: { address: '0xnone' } },
+        { type: 'MetaMorpho', assets: '20', metaMorpho: { address: '0xE' } },
+        { type: 'MorphoVaultV2', assets: '40' },
+        { type: 'MorphoMarketV1', assets: '1000' },
+        { type: 'MetaMorpho', assets: '500', metaMorpho: { address: '0xU' } },
+        { type: 'Other', assets: '0' },
+      ];
+      assert.equal(f({ adapters: { items } }, new Map([['0xu', under], ['0xe', empty]])), 70n);
+    }],
+    ['без адаптерів -> 0n', ({ unresolvedAdapterAssets: f }) => assert.equal(f({}, new Map()), 0n)],
   ],
   toBigInt: [
     ['рядок -> BigInt', ({ toBigInt: f }) => assert.equal(f('123'), 123n)],

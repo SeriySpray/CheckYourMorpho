@@ -53,6 +53,11 @@ export default {
     ['той самий id на різних мережах дає різні ключі', ({ marketKey: f }) => assert.notEqual(f(1, '0xa'), f(8453, '0xa'))],
   ],
   normalizeVault: [
+    ['C2: liquidity відсутня або usd null -> liquidity_usd null (невідомо), справжній 0 лишається 0', ({ normalizeVault: f }) => {
+      assert.equal(f(rawVault({ liquidity: undefined })).liquidity_usd, null);
+      assert.equal(f(rawVault({ liquidity: { usd: null } })).liquidity_usd, null);
+      assert.equal(f(rawVault({ liquidity: { usd: 0 } })).liquidity_usd, 0);
+    }],
     ['адреса в нижньому регістрі, мережа з chain.id', ({ normalizeVault: f }) => {
       const r = f(rawVault()); assert.equal(r.address, '0xabc'); assert.equal(r.chain_id, 8453); assert.equal(r.version, 'v1');
     }],
@@ -131,6 +136,11 @@ export default {
     ['некоректний штраф адаптера не робить ліквідність NaN', ({ normalizeVaultV2: f }) => {
       const r = f({ totalAssetsUsd: 1000, liquidityUsd: 100, adapters: { items: [{ forceDeallocatePenalty: 'abc' }] } });
       assert.ok(Number.isFinite(r.liquidity_usd), `liquidity_usd = ${r.liquidity_usd}`);
+    }],
+    ['C2: без liquidityUsd і forceDeallocatableLiquidityUsd -> null (невідомо), а не 0; одне з них є -> число', ({ normalizeVaultV2: f }) => {
+      assert.equal(f({ totalAssetsUsd: 1000 }).liquidity_usd, null);
+      assert.equal(f({ totalAssetsUsd: 1000, liquidityUsd: 0 }).liquidity_usd, 0);
+      assert.equal(f({ totalAssetsUsd: 1000, forceDeallocatableLiquidityUsd: 40 }).liquidity_usd, 40);
     }],
   ],
   normalizeMarket: [

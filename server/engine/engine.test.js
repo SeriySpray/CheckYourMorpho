@@ -40,9 +40,10 @@ test('V2 instant exit is capped by the vault-reported instant liquidity', () => 
   const vault = { version: 'v2', total_assets_usd: 1e6, liquidity_usd: 200000 };
   const alloc = market({ supply_assets_usd: 1e6 });
   assert.equal(calculateLiquidityMetrics(vault, [alloc]).instantExitCapacityPercent, 20);
-  // V1 is capped only when the API reported some liquidity; without it the market-based figure is used
+  // V1 is capped by reported liquidity too; a reported 0 is a real zero, a missing value leaves exit unknown
   assert.equal(calculateLiquidityMetrics({ ...vault, version: 'v1' }, [alloc]).instantExitCapacityPercent, 20);
-  assert.equal(calculateLiquidityMetrics({ ...vault, version: 'v1', liquidity_usd: 0 }, [alloc]).instantExitCapacityPercent, 100);
+  assert.equal(calculateLiquidityMetrics({ ...vault, version: 'v1', liquidity_usd: 0 }, [alloc]).instantExitCapacityPercent, 0);
+  assert.equal(calculateLiquidityMetrics({ ...vault, version: 'v1', liquidity_usd: null }, [alloc]).instantExitCapacityPercent, null);
 });
 
 test('V2 withdrawable liquidity counts force-deallocatable liquidity net of the adapter penalty', () => {
@@ -56,7 +57,7 @@ test('V2 withdrawable liquidity counts force-deallocatable liquidity net of the 
 });
 
 test('stressed exit only shares free liquidity with peer vaults, not with direct lenders', () => {
-  const vault = { version: 'v1', total_assets_usd: 1e6, liquidity_usd: 0 };
+  const vault = { version: 'v1', total_assets_usd: 1e6, liquidity_usd: 1e12 };
   // 90% utilized market: 1M of ours, 99M of other lenders (direct), 10M free liquidity, no peer vaults
   const noPeers = market({ supply_assets_usd: 1e6, total_supply_assets_usd: 100e6, total_borrow_assets_usd: 90e6, peer_supply_usd: 0 });
   const liq = calculateLiquidityMetrics(vault, [noPeers]);

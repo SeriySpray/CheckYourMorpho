@@ -38,6 +38,17 @@ export function generateVaultVerdict(vault, allocations = []) {
     });
   }
 
+  // Flag 1b: Material capital behind V2 adapters whose markets could not be resolved (see mqiEngine)
+  if (mqi.unresolvedAssetsUsd > 0) {
+    const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
+    const unresolvedPct = totalAssetsUsd > 0 ? Math.round((mqi.unresolvedAssetsUsd / totalAssetsUsd) * 1000) / 10 : 0;
+    redFlags.push({
+      level: 'HIGH',
+      title: 'Unresolved Exposure',
+      message: `${unresolvedPct}% of capital ($${(mqi.unresolvedAssetsUsd / 1e6).toFixed(2)}M) is held through adapters whose underlying markets could not be resolved; its quality, concentration and exit liquidity are unknown.`
+    });
+  }
+
   // Flag 2: Extreme Collateral Concentration
   if (hhi.tier === 'EXTREME') {
     redFlags.push({
@@ -53,8 +64,14 @@ export function generateVaultVerdict(vault, allocations = []) {
     });
   }
 
-  // Flag 3: Severe Exit Liquidity Lockup
-  if (liquidity.instantExitCapacityPercent < 20) {
+  // Flag 3: Severe Exit Liquidity Lockup (null < 20 is true in JS, so unknown exit is handled first)
+  if (liquidity.exitUnknown) {
+    redFlags.push({
+      level: 'MEDIUM',
+      title: 'Unknown Exit Liquidity',
+      message: 'Withdrawable liquidity was not reported for this vault, so how much of the deposits can be withdrawn immediately is unknown.'
+    });
+  } else if (liquidity.instantExitCapacityPercent < 20) {
     redFlags.push({
       level: 'HIGH',
       title: 'Restricted Exit Liquidity',
@@ -63,7 +80,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 4: Crowded Exit Contagion / Shared Market Overhang
-  if (liquidity.crowdedMarkets && liquidity.crowdedMarkets.length > 0) {
+  if (!liquidity.exitUnknown && liquidity.crowdedMarkets && liquidity.crowdedMarkets.length > 0) {
     const totalCrowdedSupplyUsd = liquidity.crowdedMarkets.reduce((sum, m) => sum + m.vaultSupplyUsd, 0);
     const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
     // Частка від TVL (vault capital), а не від розподіленого капіталу: на цю базу відкалібровані пороги 15/25/35
@@ -111,7 +128,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // 6. Plaintext Objective Summary
-  let exitSummary = `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%`;
+  let exitSummary = liquidity.exitUnknown ? 'Exit Liquidity: unknown' : `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%`;
   if (liquidity.isCrowded) {
     exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
   }

@@ -1,7 +1,8 @@
 // Спільні фабрики тестових даних.
+// liquidity_usd за замовчуванням не обмежує вихід (0 тепер означає "нічого не можна вивести"), тож вихід визначають ринки.
 export const vault = (over = {}) => ({
   address: '0xvault', name: 'Test Vault', version: 'v1', chain_id: 1,
-  total_assets_usd: 100e6, liquidity_usd: 0, net_apy: 0.03, ...over
+  total_assets_usd: 100e6, liquidity_usd: 1e12, net_apy: 0.03, ...over
 });
 
 // Алокація, приєднана до ринку: чистий ринок із повною ліквідністю.

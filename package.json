@@ -5,12 +5,12 @@
   "description": "Risk audit, curator track record, and protocol architecture analytics platform for MetaMorpho Vaults",
   "private": true,
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "sync": "node server/services/syncEngine.js",
     "start": "node server/index.js",
-    "test": "node tests/runner.js --all",
+    "test": "node tests/runner.js --all && node --test server/engine/engine.test.js",
     "tests": "node tests/web.js",
     "tests:tui": "node tests/runner.js"
   }
