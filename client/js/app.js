@@ -3,7 +3,10 @@
  * Connects 3D Particle Sphere, search autocomplete, filters, and audit modal.
  */
 
-import { ParticleSphere } from './sphere.js';
+import { ParticleSphere } from './sphere.js?v=20261016_a11y';
+
+// Read live (.matches) so toggling the OS setting applies without a reload
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 let sphere = null;
 let allVaults = [];
@@ -135,6 +138,7 @@ async function initApp() {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
   }
+  refreshStaleIndicator();
 
   // 4. Start Live Periodic Polling (every 60s)
   startLivePolling();
@@ -165,6 +169,39 @@ function showStatusNotice(text) {
   }, 4000);
 }
 
+/** "5m ago" style age of an ISO timestamp, or '' when it cannot be parsed. */
+function formatDataAge(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  const min = Math.max(0, Math.floor(ms / 60000)); // clock skew must not produce "-3m ago"
+  if (min < 60) return `${min}m ago`;
+  const hours = Math.floor(min / 60);
+  return hours < 48 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * Shows the stale-data notice when /api/status reports stale === true.
+ * A failed request or an older API without the field leaves it hidden.
+ */
+async function refreshStaleIndicator() {
+  let status = null;
+  try {
+    const res = await apiFetch('/api/status');
+    if (res.ok) status = await res.json();
+  } catch {
+    // Offline state is already reported by the vaults poll
+  }
+  const stale = status?.stale === true;
+  const age = stale ? formatDataAge(status.lastSuccessAt) : '';
+  const label = age ? `Stale data · last sync ${age}` : 'Stale data';
+  document.querySelectorAll('.stale-indicator').forEach(el => {
+    el.classList.toggle('hidden', !stale);
+    el.title = stale && age ? `Last successful sync: ${new Date(status.lastSuccessAt).toLocaleString()}` : '';
+    const text = el.querySelector('.stale-text');
+    if (text) text.textContent = stale ? label : '';
+  });
+}
+
 /**
  * Periodically polls the server every 60 seconds to refresh vault metrics,
  * particle sphere, explorer list, and actively inspected audit modal.
@@ -177,6 +214,7 @@ function startLivePolling() {
     if (isPollingActive) return;
     isPollingActive = true;
 
+    refreshStaleIndicator();
     try {
       // 1. Fetch updated vaults list
       const res = await apiFetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
@@ -786,8 +824,11 @@ function applyVaultAuditData(vaultAddress, auditData) {
       const isClean = mqiPercent === 100 && (verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true);
       const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
       const mqiClass = isClean ? 'clean' : 'flagged';
-      const exitCapPct = verdict?.liquidity?.instantExitCapacityPercent ?? matchingVault?.exitCapPercent ?? (v.totalAssetsUsd > 0 ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : 0);
-      const exitCapText = `${exitCapPct}% Exit Cap`;
+      const exitCapText = formatExitCap(pickExitMetric(
+        verdict?.liquidity?.instantExitCapacityPercent,
+        matchingVault?.exitCapPercent,
+        v.totalAssetsUsd > 0 ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : 0
+      ));
 
       // Update MQI badge
       const mqiBadge = card.querySelector('.rich-pill-mqi-badge');
@@ -837,6 +878,7 @@ function applyVaultAuditData(vaultAddress, auditData) {
  */
 function renderPinnedRichPills(animate = false) {
   if (!DOM.pinnedRichPills) return;
+  animate = animate && !REDUCED_MOTION.matches;
 
   const pinnedAddresses = getPinnedAddresses();
   const pinnedVaults = [];
@@ -863,7 +905,7 @@ function renderPinnedRichPills(animate = false) {
     const cachedAudit = getFreshAudit(v.address);
 
     const totalAssetsUsd = cachedAudit?.vault?.totalAssetsUsd ?? v.totalAssetsUsd ?? 0;
-    const liquidityUsd = cachedAudit?.vault?.liquidityUsd ?? v.liquidityUsd ?? 0;
+    const liquidityUsd = cachedAudit?.vault?.liquidityUsd ?? v.liquidityUsd ?? null;
     const netApy = cachedAudit?.vault?.netApy ?? v.netApy ?? 0;
     const fee = cachedAudit?.vault?.fee ?? v.fee ?? 0;
     const totalAssets = cachedAudit?.vault?.totalAssets ?? v.totalAssets;
@@ -885,8 +927,11 @@ function renderPinnedRichPills(animate = false) {
     const isClean = mqiPercent === 100 && (cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true);
     const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
     const mqiClass = isClean ? 'clean' : 'flagged';
-    const exitCapPct = cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent ?? v.exitCapPercent ?? (totalAssetsUsd > 0 ? Number(((liquidityUsd / totalAssetsUsd) * 100).toFixed(1)) : 0);
-    const exitCapText = `${exitCapPct}% Exit Cap`;
+    const exitCapText = formatExitCap(pickExitMetric(
+      cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent,
+      v.exitCapPercent,
+      totalAssetsUsd > 0 ? Number(((liquidityUsd / totalAssetsUsd) * 100).toFixed(1)) : 0
+    ));
 
     const card = document.createElement('div');
     card.className = 'pinned-rich-pill';
@@ -1252,13 +1297,13 @@ function populateBasicVaultInfo(v) {
   }
   if (DOM.modalLiq) DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
   if (DOM.modalExitCapPct && v.exitCapPercent !== undefined) {
-    DOM.modalExitCapPct.textContent = `${v.exitCapPercent}% Exit Cap`;
+    DOM.modalExitCapPct.textContent = formatExitCap(exitMetric(v.exitCapPercent));
   }
   if (DOM.modalNetApy) DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
   if (DOM.modalGrade && v.mqiPercent !== undefined) {
     DOM.modalGrade.textContent = `${v.mqiPercent}%`;
-    DOM.modalGrade.style.color = v.mqiPercent === 100 ? 'var(--accent-green)' : (v.mqiPercent >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
+    DOM.modalGrade.dataset.tone = v.mqiPercent === 100 ? 'ok' : (v.mqiPercent >= 80 ? 'warn' : 'bad');
   }
 }
 
@@ -1365,7 +1410,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
   const cachedData = clientAuditCache.get(cacheKey);
   const initialVaultObj = cachedData?.vault ? Object.assign({}, vault, cachedData.vault, {
     mqiPercent: cachedData.verdict?.mqi?.mqiPercent ?? vault.mqiPercent,
-    exitCapPercent: cachedData.verdict?.liquidity?.instantExitCapacityPercent ?? vault.exitCapPercent
+    exitCapPercent: pickExitMetric(cachedData.verdict?.liquidity?.instantExitCapacityPercent, vault.exitCapPercent)
   }) : vault;
   populateBasicVaultInfo(initialVaultObj);
 
@@ -1402,9 +1447,10 @@ async function openVaultAuditFlow(vault, startPos, token) {
 
   const isMobile = window.innerWidth <= 768;
 
-  // On Mobile: Directly load and slide up the bottom sheet modal with zero lag (no 3D sphere proxy animation)
-  if (isMobile) {
+  // On Mobile (or with reduced motion): show the panel directly, without the 3D sphere proxy animation
+  if (isMobile || REDUCED_MOTION.matches) {
     selectedVaultAddress = vault.address;
+    if (!isMobile) sphere.setSelectedVault(vault.address);
     if (DOM.pinnedRichPills) {
       DOM.pinnedRichPills.classList.add('hidden');
     }
@@ -1590,10 +1636,15 @@ function closeVaultAudit() {
   if (DOM.auditModal.classList.contains('hidden') || isClosingAudit) return;
 
   const isMobile = window.innerWidth <= 768;
-  if (isMobile) {
+  if (isMobile || REDUCED_MOTION.matches) {
     DOM.auditModal.classList.add('hidden');
     selectedVaultAddress = null;
     isTransitioningVault = false;
+    if (!isMobile) {
+      sphere.setSelectedVault(null);
+      sphere.highlightVault(null);
+      renderPinnedRichPills(false);
+    }
     restoreFocusAfterAudit();
     return;
   }
@@ -1688,18 +1739,27 @@ function updateStressedExitDisplay(isStressed) {
   if (!DOM.riskExitBar || !DOM.riskExitPct) return;
   const { normalExitPct, normalExitUsd, stressedExitPct, stressedExitUsd, dropPct } = currentModalExitState;
 
-  if (isStressed) {
+  // Unknown liquidity: an empty neutral bar, never a full (safe-looking) one
+  if (normalExitPct === null) {
+    DOM.riskExitBar.style.width = '0%';
+    DOM.riskExitBar.dataset.tone = '';
+    DOM.riskExitPct.textContent = 'N/A';
+    if (DOM.riskExitDesc) DOM.riskExitDesc.textContent = 'Exit liquidity unknown: no liquidity data for this vault';
+    return;
+  }
+
+  if (isStressed && stressedExitPct !== null) {
     DOM.riskExitBar.style.width = `${Math.min(100, stressedExitPct)}%`;
-    DOM.riskExitBar.style.background = stressedExitPct < 15 ? '#ff4d4d' : (dropPct > 0 ? '#ffaa00' : '#ffffff');
+    DOM.riskExitBar.dataset.tone = stressedExitPct < 15 ? 'bad' : (dropPct > 0 ? 'warn' : '');
     if (dropPct > 0) {
-      DOM.riskExitPct.innerHTML = `<span style="color:#ffaa00; font-size:10px; margin-right:4px; font-weight:600;">STRESSED:</span>${stressedExitPct}%`;
+      DOM.riskExitPct.innerHTML = `<span class="exit-stressed-tag">STRESSED:</span>${stressedExitPct}%`;
       if (DOM.riskExitDesc) {
-        DOM.riskExitDesc.innerHTML = `<span style="color:#ffaa00; font-weight:500;">${formatCurrency(stressedExitUsd)}</span> available during a mass withdrawal (bank run)`;
+        DOM.riskExitDesc.innerHTML = `<span class="exit-stressed-usd">${formatCurrency(stressedExitUsd)}</span> available during a mass withdrawal (bank run)`;
       }
     }
   } else {
     DOM.riskExitBar.style.width = `${Math.min(100, normalExitPct)}%`;
-    DOM.riskExitBar.style.background = '#ffffff';
+    DOM.riskExitBar.dataset.tone = '';
     DOM.riskExitPct.textContent = `${normalExitPct}%`;
     if (DOM.riskExitDesc) {
       DOM.riskExitDesc.textContent = `${formatCurrency(normalExitUsd)} available for immediate withdrawal without locking markets`;
@@ -1738,10 +1798,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const isFullyClean = Boolean(verdict.mqi?.isAllClean);
   DOM.modalScore.textContent = isFullyClean
     ? 'Clean Capital'
-    : (mqiVal < 100 ? `${(100 - mqiVal).toFixed(1)}% Flagged` : `${flaggedMarketCount} Flagged Market${flaggedMarketCount === 1 ? '' : 's'}`);
-  DOM.modalGrade.style.color = mqiVal === 100
-    ? (isFullyClean ? 'var(--accent-green)' : 'var(--accent-orange)')
-    : (mqiVal >= 80 ? 'var(--accent-orange)' : 'var(--accent-red)');
+    : (verdict.mqi?.unresolvedAssetsUsd > 0 && !flaggedMarketCount ? `${(100 - mqiVal).toFixed(1)}% Unverified`
+    : mqiVal < 100 ? `${(100 - mqiVal).toFixed(1)}% Flagged` : `${flaggedMarketCount} Flagged Market${flaggedMarketCount === 1 ? '' : 's'}`);
+  DOM.modalGrade.dataset.tone = mqiVal === 100
+    ? (isFullyClean ? 'ok' : 'warn')
+    : (mqiVal >= 80 ? 'warn' : 'bad');
 
   // Financials
   DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
@@ -1750,7 +1811,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
     : (v.totalAssets ? Number(v.totalAssets) / Math.pow(10, v.asset?.decimals ?? 6) : 0);
   DOM.modalAssetsHuman.textContent = `${formatNumber(humanAssets)} ${v.asset?.symbol || ''}`;
   DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
-  DOM.modalExitCapPct.textContent = `${verdict.liquidity?.instantExitCapacityPercent || 0}% Exit Cap`;
+  DOM.modalExitCapPct.textContent = formatExitCap(pickExitMetric(verdict.liquidity?.instantExitCapacityPercent, 0));
   DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
   DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
 
@@ -1763,14 +1824,14 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // --- PANEL 2: PORTFOLIO AUDIT (MQI & HHI & EXIT) ---
   // 1. MQI
   if (DOM.riskMqiPct) DOM.riskMqiPct.textContent = `${mqiVal}%`;
-  if (DOM.riskMqiBar) {
-    DOM.riskMqiBar.style.width = `${mqiVal}%`;
-    DOM.riskMqiBar.style.background = '#ffffff';
-  }
+  if (DOM.riskMqiBar) DOM.riskMqiBar.style.width = `${mqiVal}%`;
   if (DOM.riskMqiDesc) {
+    const unresolvedUsd = verdict.mqi?.unresolvedAssetsUsd || 0;
     DOM.riskMqiDesc.textContent = verdict.mqi?.isAllClean
       ? '100% of capital is deployed in verified, non-defaulted markets'
-      : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
+      : unresolvedUsd > 0 && !(verdict.mqi?.compromisedMarkets?.length)
+        ? `${formatCurrency(unresolvedUsd)} sits in adapters that could not be expanded (unknown, not verified)`
+        : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
   // 2. HHI
@@ -1790,10 +1851,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
       DOM.riskHhiVal.textContent = `${hhiVal} (${tierLabel})`;
     }
   }
-  if (DOM.riskHhiBar) {
-    DOM.riskHhiBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(hhiVal * 100))}%`;
-    DOM.riskHhiBar.style.background = '#ffffff';
-  }
+  if (DOM.riskHhiBar) DOM.riskHhiBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(hhiVal * 100))}%`;
   if (DOM.riskHhiDesc) {
     if (isUnallocated) {
       DOM.riskHhiDesc.textContent = 'No active collateral backing';
@@ -1806,11 +1864,13 @@ function populateAuditModal(data, isQuietRefresh = false) {
   }
 
   // 3. Exit Liquidity & Stressed Interaction
-  const normalExitPct = verdict.liquidity?.instantExitCapacityPercent || 0;
+  // null = backend has no liquidity data for this vault; an absent field keeps the old 0 default
+  const normalExitPct = pickExitMetric(verdict.liquidity?.instantExitCapacityPercent, 0);
   const normalExitUsd = verdict.liquidity?.instantExitCapacityUsd || 0;
-  const stressedExitPct = verdict.liquidity?.stressedExitCapacityPercent ?? normalExitPct;
+  const stressedExitPct = pickExitMetric(verdict.liquidity?.stressedExitCapacityPercent, normalExitPct);
   const stressedExitUsd = verdict.liquidity?.stressedExitCapacityUsd ?? normalExitUsd;
-  const dropPct = Math.max(0, Math.round((normalExitPct - stressedExitPct) * 10) / 10);
+  const exitUnknown = normalExitPct === null || stressedExitPct === null;
+  const dropPct = exitUnknown ? 0 : Math.max(0, Math.round((normalExitPct - stressedExitPct) * 10) / 10);
   const topPeer = verdict.liquidity?.crowdedMarkets?.[0]?.topPeers?.[0] || 'competing vaults';
 
   currentModalExitState = {
@@ -1829,7 +1889,9 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   // Update Popover content
   if (DOM.riskExitPopoverBody) {
-    if (dropPct > 0) {
+    if (exitUnknown) {
+      DOM.riskExitPopoverBody.textContent = 'Worst-case exit cannot be estimated: liquidity data for this vault is unavailable.';
+    } else if (dropPct > 0) {
       DOM.riskExitPopoverBody.innerHTML = `During a mass withdrawal (bank run), competing vaults (${escapeHtml(topPeer)}) claim shared cash, reducing available exit from <strong>${normalExitPct}%</strong> to <strong>${stressedExitPct}%</strong> (${formatCurrency(stressedExitUsd)}).`;
     } else {
       DOM.riskExitPopoverBody.innerHTML = `During a mass withdrawal, available exit remains fully preserved at <strong>${normalExitPct}%</strong> (${formatCurrency(normalExitUsd)}) with no competing vault crowding.`;
@@ -1904,8 +1966,8 @@ function populateAuditModal(data, isQuietRefresh = false) {
     allocations.forEach(a => {
       const isMarketFlagged = a.isFlagged === true || (a.isFlagged === undefined && !a.isClean && ((a.supplyAssetsUsd || 0) > ((v.totalAssetsUsd || 0) * 0.01)));
       const statusBadge = isMarketFlagged
-        ? '<span class="badge" style="color:var(--accent-red); border-color:rgba(239,68,68,0.3); font-size:10px;">FLAGGED</span>'
-        : '<span class="badge badge-listed" style="color:var(--accent-green); border-color:rgba(16,185,129,0.3); font-size:10px;">CLEAN</span>';
+        ? '<span class="badge badge-status badge-flagged">FLAGGED</span>'
+        : '<span class="badge badge-listed badge-status badge-clean">CLEAN</span>';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -2077,6 +2139,29 @@ function formatPercent(val, decimals = 2, fallback = '—') {
   if (!Number.isFinite(num)) return fallback;
   const text = (num * 100).toFixed(decimals);
   return `${/^-0(\.0+)?$/.test(text) ? text.slice(1) : text}%`; // no "-0.00%" for tiny negatives
+}
+
+/**
+ * Exit-capacity value: a number, null when the backend marks it unknown (null, "unknown", NaN),
+ * or undefined when the field is absent (older API), so the caller can fall back.
+ */
+function exitMetric(val) {
+  if (val === undefined) return undefined;
+  const num = Number(val);
+  return val === null || val === '' || !Number.isFinite(num) ? null : num;
+}
+
+/** First source that carries the field; an explicit unknown stops the chain instead of falling through. */
+function pickExitMetric(...vals) {
+  for (const val of vals) {
+    const metric = exitMetric(val);
+    if (metric !== undefined) return metric;
+  }
+  return undefined;
+}
+
+function formatExitCap(pct) {
+  return pct === null || pct === undefined ? 'Exit Cap N/A' : `${pct}% Exit Cap`;
 }
 
 function escapeHtml(str) {

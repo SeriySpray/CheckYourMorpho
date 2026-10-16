@@ -28,6 +28,7 @@ const biasedRand = (min, max, bias = 0, base = 10) => {
   return min + Math.pow(Math.random(), Math.pow(base, -b)) * (max - min);
 };
 const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 function gcd(a, b) {
   while (b) {
@@ -822,12 +823,13 @@ export class ParticleSphere {
     const now = performance.now();
     const dt = Math.min(3.0, (now - this.lastTime) / 16.666);
     this.lastTime = now;
-    this.elapsedFrames += dt;
+    // Reduced motion freezes the clock: no auto-spin, cloud drift or pulses; dragging still rotates
+    const motionDt = REDUCED_MOTION.matches ? 0 : dt;
+    this.elapsedFrames += motionDt;
 
-    // Continuous, uninterrupted auto-rotation - NEVER stops under any circumstances
-    // (modal opening, closing, UI clicks, hovering, or drag interactions)
-    this.rotY += this.autoSpeedY * dt;
-    this.rotX += this.autoSpeedX * dt;
+    // Continuous auto-rotation, not interrupted by modal opening, closing, clicks, hovering or drag
+    this.rotY += this.autoSpeedY * motionDt;
+    this.rotX += this.autoSpeedX * motionDt;
 
     if (!this.isDragging) {
       this.velX *= 0.94;

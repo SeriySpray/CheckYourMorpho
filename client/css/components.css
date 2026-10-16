@@ -442,6 +442,15 @@
   color: var(--accent-green);
 }
 
+/* Market status in the allocations table */
+.badge-status {
+  font-size: 10px;
+}
+
+.badge-flagged {
+  color: var(--accent-red);
+}
+
 .vault-name {
   font-size: 22px;
   font-weight: 700;
@@ -491,6 +500,14 @@
   font-weight: 800;
   font-family: var(--font-mono);
   color: var(--accent-green);
+}
+
+.score-grade[data-tone="warn"] {
+  color: var(--accent-orange);
+}
+
+.score-grade[data-tone="bad"] {
+  color: var(--accent-red);
 }
 
 .score-number {
@@ -782,8 +799,25 @@
 }
 
 
-.meter-fill.yellow {
+.meter-fill.yellow,
+.meter-fill[data-tone="warn"] {
   background: var(--accent-orange);
+}
+
+.meter-fill[data-tone="bad"] {
+  background: var(--accent-red);
+}
+
+.exit-stressed-tag {
+  color: var(--accent-orange);
+  font-size: 10px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.exit-stressed-usd {
+  color: var(--accent-orange);
+  font-weight: 500;
 }
 
 .meter-desc {
@@ -889,6 +923,10 @@
   border-radius: 6px;
   line-height: 1.4;
   border-left: 3px solid;
+  /* Neutral look for levels without their own style (e.g. low / info) */
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-highlight);
+  color: var(--text-secondary);
 }
 
 .flag-item.critical {
@@ -1347,6 +1385,10 @@
   font-weight: 600;
   color: #ffffff;
   letter-spacing: -0.01em;
+}
+
+.explorer-header .stale-indicator {
+  margin-top: 4px;
 }
 
 /* Search Box */
