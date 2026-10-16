@@ -930,7 +930,7 @@ function renderPinnedRichPills(animate = false) {
     const exitCapText = formatExitCap(pickExitMetric(
       cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent,
       v.exitCapPercent,
-      totalAssetsUsd > 0 ? Number(((liquidityUsd / totalAssetsUsd) * 100).toFixed(1)) : 0
+      liquidityUsd === null ? null : (totalAssetsUsd > 0 ? Number(((liquidityUsd / totalAssetsUsd) * 100).toFixed(1)) : 0)
     ));
 
     const card = document.createElement('div');

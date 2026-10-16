@@ -2,7 +2,7 @@
   "name": "checkyourmorpho",
   "version": "1.0.0",
   "type": "module",
-  "description": "Risk audit, curator track record, and protocol architecture analytics platform for MetaMorpho Vaults",
+  "description": "Risk audit platform for Morpho vaults: market quality, collateral concentration and exit liquidity",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

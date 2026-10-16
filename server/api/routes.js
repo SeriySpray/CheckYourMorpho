@@ -43,10 +43,20 @@ const rateHits = new Map();
 /** Client IP: the peer address, or nginx's appended X-Forwarded-For entry when the peer is the local proxy. */
 export function clientIp(req) {
   const peer = req.socket?.remoteAddress || '';
-  if (!/^(127\.|::1$|::ffff:127\.)/.test(peer)) return peer;
+  if (!/^(127\.|::1$|::ffff:127\.)/.test(peer)) return ipv6Prefix(peer);
   // nginx appends $remote_addr last; earlier entries come from the client and can be forged
   const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
-  return forwarded.length > 0 ? forwarded[forwarded.length - 1] : peer;
+  return forwarded.length > 0 ? ipv6Prefix(forwarded[forwarded.length - 1]) : peer;
+}
+
+/** Rate-limit key: an IPv6 client owns a whole /64, so rotating addresses inside it does not reset the budget. */
+function ipv6Prefix(ip) {
+  if (!ip.includes(':') || ip.includes('.')) return ip;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right] : left;
+  return groups.slice(0, 4).map(g => g.replace(/^0+(?=.)/, '')).join(':') + '::/64';
 }
 
 /** Counts one request for ip; returns seconds to wait when over budget, otherwise 0. */

@@ -310,7 +310,13 @@ export default {
       assert.equal(f(fromIp('GET', '/', '127.0.0.1', { 'x-forwarded-for': ' , ' })), '127.0.0.1');
     }],
     ['адреса, що лише починається з 127 у тексті, не вважається loopback', ({ clientIp: f }) => {
-      assert.equal(f(fromIp('GET', '/', '::1:5', { 'x-forwarded-for': '1.2.3.4' })), '::1:5');
+      assert.equal(f(fromIp('GET', '/', '::1:5', { 'x-forwarded-for': '1.2.3.4' })), '0:0:0:0::/64');
+    }],
+    ['IPv6-клієнт ключується за /64: ротація в межах префікса не змінює ключ', ({ clientIp: f }) => {
+      const key = a => f(fromIp('GET', '/', a));
+      assert.equal(key('2001:db8:1:2::1'), key('2001:DB8:1:2:ffff:aaaa:bbbb:cccc'));
+      assert.notEqual(key('2001:db8:1:2::1'), key('2001:db8:1:3::1'));
+      assert.equal(f(fromIp('GET', '/', '127.0.0.1', { 'x-forwarded-for': '2001:db8:1:2:3:4:5:6' })), '2001:db8:1:2::/64');
     }],
     ['запит без сокета -> порожній ключ, без винятку', ({ clientIp: f }) => assert.equal(f(mockReq('GET', '/')), '')],
   ],
