@@ -1,92 +1,116 @@
 # CheckYourMorpho
 
-> **Live Application**: [https://checkyourmorpho.duckdns.org](https://checkyourmorpho.duckdns.org)
->
-> Risk intelligence, collateral concentration auditing, and real-time visualization terminal for MetaMorpho Vaults.
-
 [![Live](https://img.shields.io/badge/Live-checkyourmorpho.duckdns.org-2470FF?style=flat-square&logo=googlechrome&logoColor=white)](https://checkyourmorpho.duckdns.org)
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B%20LTS-161B22?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![SQLite](https://img.shields.io/badge/SQLite-WAL%20Native-161B22?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
-[![Morpho Blue](https://img.shields.io/badge/Morpho-Blue%20%26%20Vaults-161B22?style=flat-square)](https://morpho.org)
+[![Node.js](https://img.shields.io/badge/Node.js-22.13%2B-161B22?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Tests](https://github.com/SeriySpray/CheckYourMorpho/actions/workflows/tests.yml/badge.svg)](https://github.com/SeriySpray/CheckYourMorpho/actions/workflows/tests.yml)
 
-Zero npm runtime dependencies (native Node.js 22+ & SQLite WAL).
+CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho Vaults V2). It looks at a vault from the depositor's side: where the capital is lent, how concentrated the collateral behind it is, and how much of it can be withdrawn right now. The server has no npm dependencies; it uses Node's built-in `node:http` and `node:sqlite`.
 
----
+## What it does
 
+- Lists every vault that Morpho marks as listed, on all chains the Morpho API returns, with search by name, symbol, curator or address and filters by network, asset and curator.
+- Sorts vaults by TVL, APY, liquidity, MQI or HHI.
+- Opens an audit panel for a vault: its allocations by market, MQI, collateral concentration, instant and crowded exit capacity, and a list of red flags.
+- Lets you pin vaults in the browser (stored in `localStorage`).
+- Shows the vaults as a WebGL 2 particle sphere.
 
-## Core Metrics & Formulas
+## How it works
 
-### 1. Market Quality Index (MQI)
-Measures the percentage of vault capital allocated to safe, whitelisted, and non-defaulted markets.
+1. Data comes from the public Morpho GraphQL API (`https://api.morpho.org/graphql`): listed V1 vaults with their allocations, listed V2 vaults with their market caps and adapters, and the curator directory.
+2. The server syncs 5 seconds after start-up and then every 180 seconds. A sync writes vaults, markets and allocations in one SQLite transaction. Unlisted vaults are deleted, and a vault that is missing from 3 syncs in a row is deleted too. A V2 vault that holds a V1 vault through a MetaMorpho adapter is expanded into that V1 vault's markets pro rata.
+3. Everything is stored in `data/morpho.db` (SQLite in WAL mode). The metrics are not stored: they are computed on each request from the current rows.
+4. A small REST API serves the vault list and the per-vault audit, and keeps the computed results in memory until the next finished sync or a short timeout.
+5. The client in `client/` is plain HTML, CSS and JavaScript. It polls the API every 60 seconds.
 
-$$MQI = \sum_{i=1}^N (w_i \times \text{IsClean}_i) + w_{\text{cash}}$$
+## Metrics
 
-Where $\text{IsClean}_i = 1$ if and only if:
-- `isListed == true` (verified in official Morpho registry)
-- `badDebt == 0` and `realizedBadDebt == 0` (zero unrecovered defaults)
-- `oracle_address != 0x0` (valid oracle contract)
-- `protocol_warnings == 0` (no critical security warnings)
+**MQI (Market Quality Index)** is the share of vault capital in clean markets, from 0 to 100%. A market is clean when all of these hold:
 
-*Defective markets are flagged only if their allocation exceeds the material threshold of 1.0% TVL.*
+- Morpho lists it.
+- Its bad debt and realized bad debt are both under a dust level of $10 or 0.01% of the market's supply, whichever is larger.
+- It has an oracle address (not empty, `0x` or the zero address). Idle 0-LLTV markets are exempt.
+- Morpho has not flagged it `not_whitelisted` and has given it no RED warning other than a liquidity warning. Liquidity warnings are left to the exit metrics.
 
-### 2. Collateral Concentration (HHI)
-Measures systemic exposure to underlying collateral assets using the Herfindahl-Hirschman Index.
+A failing market only lowers MQI when it is material: the allocation is at least 1% of TVL or $250K, whichever is smaller, or all failing allocations together reach that amount. Unallocated cash counts as clean. Capital the sync could not expand (see Limitations) does not: it is treated as unknown and lowers MQI once it is material.
 
-$$HHI = \sum_{k=1}^M \left(\frac{\text{Collateral USD}_k}{\text{Total Active Collateral USD}}\right)^2$$
+**HHI (Herfindahl-Hirschman Index)** measures how concentrated the collateral behind the vault's loans is. It groups active allocations by collateral asset and ignores idle 0-LLTV markets. The response also gives the number of effective assets and the top collateral with its share of TVL. A tier needs both the HHI level and a minimum share of TVL in the top collateral:
 
-- **DIVERSIFIED**: $HHI < 0.15$
-- **MODERATE**: $0.15 \le HHI < 0.25$
-- **CONCENTRATED**: $0.25 \le HHI \le 0.50$
-- **CRITICAL**: $HHI > 0.50$
-- **Effective Assets**: $N_{\text{eff}} = \frac{1}{HHI}$
-- **UNALLOCATED**: 100% idle cash or 0-LLTV reserve markets (0 Effective Assets, no false concentration alerts).
+| Tier | HHI | Top collateral share of TVL |
+|---|---|---|
+| EXTREME | above 0.50 | 40% or more |
+| CONCENTRATED | 0.25 or more | 20% or more |
+| MODERATE | 0.15 or more | 10% or more |
+| DIVERSIFIED | anything else | |
 
-### 3. Instant Exit Capacity
-Calculates the exact percentage and dollar amount of capital immediately withdrawable in the current block without waiting for borrower repayments.
+A vault with less than 30% of TVL in active collateral is DIVERSIFIED regardless of HHI. A vault with less than 1% is UNALLOCATED and gets no HHI.
 
-$$\text{ExitCapacity} = \frac{\text{Direct Cash} + \sum \min(\text{Supply}_i, \text{Available Liquidity}_i)}{\text{Total Assets}} \times 100\%$$
+**Instant exit** is the share of TVL a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 20% the vault is marked illiquid.
 
-*0-LLTV idle reserves are isolated from loan markets to prevent liquidity double-counting.*
+**Crowded exit** is the same figure when every other vault in the database that lends to the same markets withdraws at once and free liquidity is shared pro rata. Only peer positions above $1K count, and V2 look-through positions are skipped so the same capital is not counted twice. A market is crowded when the peers' supply is at least its free liquidity, the vault's own exit there drops by more than 30% (or the market has no free liquidity), and the vault's position is over 1% of TVL.
 
----
+**Verdict** combines the above into a one-line summary and red flags:
 
-## Quick Start
+| Flag | Level |
+|---|---|
+| Compromised Market Exposure (a material market fails the MQI check) | CRITICAL |
+| Extreme Collateral Concentration (tier EXTREME) | HIGH |
+| Elevated Collateral Concentration (tier CONCENTRATED) | MEDIUM |
+| Restricted Exit Liquidity (instant exit under 20%) | HIGH |
+| Critical Crowded Exit Deficit / Elevated Crowded Exit Contagion | CRITICAL / HIGH, depending on how far crowded exit falls below instant exit and how much TVL sits in crowded markets |
+| Unresolved Exposure (capital in adapters that could not be expanded) | HIGH |
+| Unknown Exit Liquidity (Morpho reported no liquidity figure) | MEDIUM |
+| Negative Net APY | CRITICAL below -5%, otherwise HIGH |
 
-### Prerequisites
-- Node.js v22.0.0+ LTS (or Windows automatic portable setup via `sync.bat`)
-- Modern web browser with WebGL 2 support
+## API
 
-### 1. Clone Repository
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/status` | Row counts, time of the last full sync, whether a sync is running, last sync result, `stale` (no successful sync for over three sync intervals) and `lastSuccessAt`. |
+| GET | `/api/vaults` | Vault list with MQI, HHI and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
+| GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations. |
+| POST | `/api/sync` | Starts a sync. Needs `Authorization: Bearer <SYNC_TOKEN>`. Returns 202, or waits and returns 200 with `?await=1`. Returns 403 if `SYNC_TOKEN` is not set, 401 for a wrong token, 409 while a sync is running and 413 for a body over 1 KB. |
+
+GET routes also answer HEAD. Unknown `/api/` paths return 404; every other path is served from `client/`. Requests to `/api/` are limited per client IP (300 per minute, set in `server/config.js`) and get 429 above that.
+
+## Running locally
+
+Requirements: Node.js 22.13 or newer (`node:sqlite` needs no flag from that version on). On Windows, `start.bat` and `sync.bat` download a portable Node 22.14 into `.node/` if no suitable Node is installed.
+
 ```bash
 git clone https://github.com/SeriySpray/CheckYourMorpho.git
 cd CheckYourMorpho
+npm start        # or start.bat on Windows
 ```
 
-### 2. Initial Setup & Data Sync (Run First)
-Before starting the server for the first time, run `sync.bat` (or `npm run sync`). This automatically configures the Node.js runtime if missing and downloads live on-chain vaults, markets, and allocations into the local SQLite database:
+The server listens on http://localhost:3000 (`start.bat` also opens it in the browser) and fills an empty database with the first sync about 5 seconds after start. To sync once without the server, run `npm run sync` (or `sync.bat`).
+
+Environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | HTTP port. |
+| `HOST` | `localhost` | Bind address. |
+| `SYNC_TOKEN` | not set | Enables `POST /api/sync`. When it is not set, manual sync is disabled. |
+
+The sync interval, database path and Morpho API URL are fixed in `server/config.js`.
+
+## Tests
+
 ```bash
-# On Windows:
-sync.bat
-
-# Or via npm:
-npm run sync
+npm test             # all cases, prints a summary, exits 1 on failure
+npm run tests:tui    # interactive terminal runner
+npm run tests        # browser runner at http://127.0.0.1:4173
 ```
 
-### 3. Launch Application
-Once the initial sync completes, start the server:
-```bash
-# On Windows:
-start.bat
+The tests need neither network nor a synced database. The Morpho API is mocked, and the runner works on a temporary copy of `data/morpho.db` (an empty one if the file does not exist). GitHub Actions runs `npm test` on Node 22 for every push and pull request to `main`.
 
-# Or via npm:
-npm start
-```
-The interface will automatically open at [http://localhost:3000](http://localhost:3000).
+## Deployment
 
-*(Note: Once launched, the server keeps on-chain data updated in the background every 180 seconds).*
+The public instance runs on an Oracle Cloud VM as a systemd service behind nginx, which proxies to `127.0.0.1:3000` and serves HTTPS. The deploy scripts and nginx config are not in the repository. `.github/workflows/deploy-pages.yml` publishes `docs/time_audit.html` to GitHub Pages.
 
-### Live Production Instance
-The public monitoring terminal is accessible at:
-- **[https://checkyourmorpho.duckdns.org](https://checkyourmorpho.duckdns.org)**
+## Limitations
 
-
+- The analysis is per vault and from the lender's side. There are no user positions, health factors or borrower views.
+- Crowded exit only knows about listed vaults in the database. Direct lenders and unlisted vaults in the same market are not counted as competitors.
+- V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. Their capital is not counted as cash: it is flagged as Unresolved Exposure, lowers MQI once material, and is left out of HHI and of the exit figure.
+- Only the current state is kept. There is no history, no charts over time and no alerts.

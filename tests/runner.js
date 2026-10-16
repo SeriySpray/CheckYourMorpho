@@ -212,6 +212,8 @@ async function tui(files) {
 }
 
 async function main() {
+  // exit 1 by default so a hung async case (empty event loop) cannot end as success
+  process.exitCode = 1;
   useDbCopy();
   const files = await scan();
   if (process.argv.includes('--all')) {
