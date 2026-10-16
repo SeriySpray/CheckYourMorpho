@@ -23,16 +23,56 @@ const AUDIT_CACHE_TTL_MS = 30000;
 const AUDIT_CACHE_MAX_SIZE = 500;
 const vaultAuditCache = new Map();
 
-// Short-lived cache of the /api/vaults list: every miss recomputes all engines for up to 1000 vaults
-const LIST_CACHE_TTL_MS = 15000;
-const LIST_CACHE_MAX_SIZE = 50;
-const vaultListCache = new Map();
+// Engine metrics for the whole catalogue, computed once per sync epoch; /api/vaults filters this in memory.
+// The TTL only covers writers outside this process (the server/sync.js CLI), whose syncs fire no listener here.
+const CATALOG_TTL_MS = 60000;
+let vaultCatalog = null;
+
+export const DEFAULT_VAULTS_LIMIT = 500;
 
 // Every successful sync (manual or scheduled) invalidates both caches
 onSyncSuccess(() => {
   vaultAuditCache.clear();
-  vaultListCache.clear();
+  vaultCatalog = null;
 });
+
+// Sliding-window counter per client IP for /api/* (two fixed windows, weighted): O(1) memory per IP
+const RATE_LIMIT_MAX_TRACKED_IPS = 10000;
+const rateHits = new Map();
+
+/** Client IP: the peer address, or nginx's appended X-Forwarded-For entry when the peer is the local proxy. */
+export function clientIp(req) {
+  const peer = req.socket?.remoteAddress || '';
+  if (!/^(127\.|::1$|::ffff:127\.)/.test(peer)) return peer;
+  // nginx appends $remote_addr last; earlier entries come from the client and can be forged
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  return forwarded.length > 0 ? forwarded[forwarded.length - 1] : peer;
+}
+
+/** Counts one request for ip; returns seconds to wait when over budget, otherwise 0. */
+export function checkRateLimit(ip, now = Date.now()) {
+  const { windowMs, maxRequests } = CONFIG.server.rateLimit;
+  const win = Math.floor(now / windowMs);
+  let entry = rateHits.get(ip);
+  if (!entry || entry.win < win - 1) entry = { win, cur: 0, prev: 0 };
+  else if (entry.win === win - 1) entry = { win, cur: 0, prev: entry.cur };
+  const elapsed = (now % windowMs) / windowMs;
+  if (entry.prev * (1 - elapsed) + entry.cur >= maxRequests) {
+    rateHits.set(ip, entry);
+    return Math.max(1, Math.ceil((windowMs - (now % windowMs)) / 1000));
+  }
+  entry.cur++;
+  rateHits.set(ip, entry);
+  if (rateHits.size > RATE_LIMIT_MAX_TRACKED_IPS) {
+    for (const [k, e] of rateHits) if (e.win < win - 1) rateHits.delete(k);
+    // Trim to 90% (oldest first) so a flood of new IPs does not pay for a full sweep on every request
+    for (const k of rateHits.keys()) {
+      if (rateHits.size <= RATE_LIMIT_MAX_TRACKED_IPS * 0.9) break;
+      rateHits.delete(k);
+    }
+  }
+  return 0;
+}
 
 /**
  * Peer supply for one allocation: other vaults' positions in the same market (> $1K).
@@ -85,15 +125,34 @@ const MIME_TYPES = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8'
 };
+
+// style 'unsafe-inline' is needed for style="" attributes in index.html and innerHTML templates; scripts stay 'self' only
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'"
+].join('; ');
+const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=(), payment=(), usb=()';
 
 /**
  * Sends a standardized JSON response.
  */
-export function sendJson(res, statusCode, data, req = null) {
+export function sendJson(res, statusCode, data, req = null, extraHeaders = {}) {
   const json = JSON.stringify(data);
   res.writeHead(statusCode, {
+    ...extraHeaders,
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(json),
     'X-Content-Type-Options': 'nosniff',
@@ -195,15 +254,19 @@ export function serveFile(filePath, req, res) {
       sendJson(res, 500, { error: 'Internal server error reading asset' }, req);
       return;
     }
+    // Code and markup must update on deploy; images and fonts rarely change and are safe to cache for a day
+    const longLived = contentType.startsWith('image/') || contentType.startsWith('font/');
     res.writeHead(200, {
       'Content-Type': contentType,
       'Content-Length': content.length,
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'SAMEORIGIN',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-      'Pragma': 'no-cache',
-      'Expires': '0'
+      'Content-Security-Policy': CONTENT_SECURITY_POLICY,
+      'Permissions-Policy': PERMISSIONS_POLICY,
+      ...(longLived
+        ? { 'Cache-Control': 'public, max-age=86400' }
+        : { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0', 'Pragma': 'no-cache', 'Expires': '0' })
     });
     if (req && req.method === 'HEAD') {
       res.end();
@@ -224,9 +287,14 @@ export function handleGetStatus(req, res) {
     const listedVaultsCount = db.prepare('SELECT COUNT(*) as count FROM vaults WHERE is_listed = 1').get()?.count || 0;
     const marketsCount = db.prepare('SELECT COUNT(*) as count FROM markets').get()?.count || 0;
     const allocationsCount = db.prepare('SELECT COUNT(*) as count FROM vault_allocations').get()?.count || 0;
+    // last_sync_all is written only by a committed full sync, and survives restarts unlike lastSyncResult
+    const lastSuccessSec = syncRow ? Number(syncRow.value) : NaN;
+    const hasSucceeded = Number.isFinite(lastSuccessSec) && lastSuccessSec > 0;
 
     sendJson(res, 200, {
       status: 'ok',
+      stale: !hasSucceeded || Date.now() - lastSuccessSec * 1000 > 3 * CONFIG.sync.intervalMs,
+      lastSuccessAt: hasSucceeded ? new Date(lastSuccessSec * 1000).toISOString() : null,
       isSyncInProgress: isSyncing(),
       lastSync: {
         timestamp: syncRow ? Number(syncRow.value) : null,
@@ -306,194 +374,129 @@ export async function handlePostSync(req, res, url) {
   }
 }
 
+// Map, not an object: sortBy=constructor or __proto__ must not resolve to a prototype property
+const SORT_FIELDS = new Map([
+  ['liquidity_usd', 'liquidityUsd'],
+  ['total_assets_usd', 'totalAssetsUsd'],
+  ['net_apy', 'netApy'],
+  ['apy', 'apy'],
+  ['name', 'name']
+]);
+const MAX_SEARCH_LENGTH = 64;
+
+// SQLite ordering: NULL sorts below every value
+function compareNullsFirst(a, b) {
+  if (a == null) return b == null ? 0 : -1;
+  if (b == null) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /**
  * Handler for GET /api/vaults
  */
 export function handleGetVaults(req, res, url) {
   try {
-    const db = getDatabase();
-
     // Query parameters with strict validation
-    const rawLimit = parseInt(url.searchParams.get('limit') || '500', 10);
-    const limit = Number.isFinite(rawLimit) ? Math.min(1000, Math.max(1, rawLimit)) : 500;
+    const rawLimit = parseInt(url.searchParams.get('limit') || String(DEFAULT_VAULTS_LIMIT), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(1000, Math.max(1, rawLimit)) : DEFAULT_VAULTS_LIMIT;
     const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
-    // SQLite binds only 64-bit integers: an absurdly large offset is clamped (it yields an empty page)
     const offset = Number.isFinite(rawOffset) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, rawOffset)) : 0;
     const rawChainId = url.searchParams.get('chainId');
     const parsedChainId = rawChainId ? parseInt(rawChainId, 10) : null;
     const chainId = (parsedChainId !== null && Number.isFinite(parsedChainId) && parsedChainId > 0) ? parsedChainId : null;
     const listedOnly = url.searchParams.get('listedOnly') === '1' || url.searchParams.get('listedOnly') === 'true';
-    const rawSearch = (url.searchParams.get('search') || '').trim();
-    const search = rawSearch.slice(0, 64);
-    const sortBy = url.searchParams.get('sortBy') || 'liquidity_usd';
-    const sortOrder = (url.searchParams.get('sortOrder') || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const search = (url.searchParams.get('search') || '').trim().slice(0, MAX_SEARCH_LENGTH).toLowerCase();
+    const sortField = SORT_FIELDS.get(url.searchParams.get('sortBy')) || 'liquidityUsd';
+    const direction = (url.searchParams.get('sortOrder') || 'desc').toUpperCase() === 'ASC' ? 1 : -1;
 
-    // Whitelist sort columns via Set (prevents prototype property injection like sortBy=constructor)
-    const ALLOWED_SORT_COLUMNS = new Set([
-      'liquidity_usd',
-      'total_assets_usd',
-      'net_apy',
-      'apy',
-      'name'
-    ]);
-    const orderColumn = ALLOWED_SORT_COLUMNS.has(sortBy) ? sortBy : 'liquidity_usd';
+    const matches = getVaultCatalog().filter(v =>
+      (chainId === null || v.chainId === chainId) &&
+      (!listedOnly || v.isListed) &&
+      (!search || [v.name, v.symbol, v.address, v.curatorName, v.asset.symbol]
+        .some(f => f != null && String(f).toLowerCase().includes(search)))
+    );
+    matches.sort((a, b) => direction * compareNullsFirst(a[sortField], b[sortField]));
 
-    // Key built from validated values only, so junk query parameters cannot bypass or flood the cache
-    const cacheKey = [chainId, listedOnly, search, orderColumn, sortOrder, limit, offset].join('|');
-    const cachedList = vaultListCache.get(cacheKey);
-    if (cachedList && Date.now() - cachedList.timestamp < LIST_CACHE_TTL_MS) {
-      sendJson(res, 200, cachedList.data, req);
-      return;
-    }
-
-    // Build filter query
-    const whereConditions = [];
-    const params = [];
-
-    if (chainId !== null) {
-      whereConditions.push('chain_id = ?');
-      params.push(chainId);
-    }
-
-    if (listedOnly) {
-      whereConditions.push('is_listed = 1');
-    }
-
-    if (search) {
-      const escapedSearch = search.replace(/([%_\\])/g, '\\$1');
-      whereConditions.push('(name LIKE ? ESCAPE \'\\\' OR symbol LIKE ? ESCAPE \'\\\' OR address LIKE ? ESCAPE \'\\\' OR curator_name LIKE ? ESCAPE \'\\\' OR asset_symbol LIKE ? ESCAPE \'\\\')');
-      const pattern = `%${escapedSearch}%`;
-      params.push(pattern, pattern, pattern, pattern, pattern);
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    // Count matching rows
-    const countSql = `SELECT COUNT(*) as count FROM vaults ${whereClause}`;
-    const totalCount = db.prepare(countSql).get(...params)?.count || 0;
-
-    // Fetch vaults
-    const selectSql = `
-      SELECT 
-        address,
-        chain_id,
-        name,
-        symbol,
-        curator_name,
-        asset_address,
-        asset_symbol,
-        asset_decimals,
-        asset_price_usd,
-        total_assets,
-        total_assets_usd,
-        liquidity_usd,
-        apy,
-        net_apy,
-        fee,
-        owner,
-        pending_owner,
-        version,
-        is_listed,
-        metadata_updated_at
-      FROM vaults
-      ${whereClause}
-      ORDER BY ${orderColumn} ${sortOrder}
-      LIMIT ? OFFSET ?
-    `;
-
-    const rows = db.prepare(selectSql).all(...params, limit, offset);
-
-    // Batch load allocations using json_each(?) to avoid parameter limits and VDBE bytecode churn
-    const vaultAddresses = rows.map(r => r.address);
-    const allocMap = new Map();
-    if (vaultAddresses.length > 0) {
-      const allocRows = db.prepare(`
-        SELECT va.*, m.* 
-        FROM vault_allocations va 
-        JOIN markets m ON va.market_unique_key = m.unique_key 
-        WHERE va.vault_address IN (SELECT value FROM json_each(?))
-      `).all(JSON.stringify(vaultAddresses));
-
-      // Batch aggregate peer supplies per market
-      const marketKeys = Array.from(new Set(allocRows.map(a => a.market_unique_key)));
-      if (marketKeys.length > 0) {
-        const peerRowsByMarket = new Map();
-        const peerRows = db.prepare(`
-          SELECT market_unique_key, vault_address, supply_assets_usd, via_vault
-          FROM vault_allocations
-          WHERE market_unique_key IN (SELECT value FROM json_each(?))
-        `).all(JSON.stringify(marketKeys));
-        for (const r of peerRows) {
-          if (!peerRowsByMarket.has(r.market_unique_key)) peerRowsByMarket.set(r.market_unique_key, []);
-          peerRowsByMarket.get(r.market_unique_key).push(r);
-        }
-        for (const a of allocRows) {
-          a.peer_supply_usd = summarizePeers(peerRowsByMarket.get(a.market_unique_key), a.vault_address, a).total;
-        }
-      }
-
-      for (const a of allocRows) {
-        const k = a.vault_address.toLowerCase();
-        if (!allocMap.has(k)) allocMap.set(k, []);
-        allocMap.get(k).push(a);
-      }
-    }
-
-    const vaults = rows.map(row => {
-      const allocs = allocMap.get(row.address.toLowerCase()) || [];
-      const scored = withEffectiveTotal(row, allocs);
-      const mqi = calculateMQI(scored, allocs);
-      const hhi = calculateHHI(scored, allocs);
-      const liq = calculateLiquidityMetrics(scored, allocs);
-
-      return {
-        address: row.address,
-        chainId: row.chain_id,
-        name: row.name,
-        symbol: row.symbol,
-        curatorName: row.curator_name,
-        version: row.version,
-        isListed: Boolean(row.is_listed),
-        asset: {
-          address: row.asset_address,
-          symbol: row.asset_symbol,
-          decimals: row.asset_decimals,
-          priceUsd: row.asset_price_usd
-        },
-        totalAssets: row.total_assets,
-        totalAssetsHuman: formatUnits(row.total_assets, row.asset_decimals),
-        totalAssetsUsd: row.total_assets_usd,
-        liquidityUsd: row.liquidity_usd,
-        exitCapPercent: liq.instantExitCapacityPercent,
-        exitCapUsd: liq.instantExitCapacityUsd,
-        stressedExitCapPercent: liq.stressedExitCapacityPercent,
-        stressedExitCapUsd: liq.stressedExitCapacityUsd,
-        isCrowded: liq.isCrowded,
-        crowdedMarketsCount: liq.crowdedMarkets?.length || 0,
-        apy: row.apy,
-        netApy: row.net_apy,
-        fee: row.fee,
-        mqiPercent: mqi.mqiPercent,
-        isAllClean: mqi.isAllClean,
-        compromisedCount: mqi.compromisedMarkets?.length || 0,
-        hhi: hhi.hhi,
-        hhiTier: hhi.tier,
-        effectiveAssets: hhi.effectiveAssets,
-        updatedAt: row.metadata_updated_at
-      };
-    });
-
-
-    const listPayload = { total: totalCount, limit, offset, vaults };
-    if (vaultListCache.size >= LIST_CACHE_MAX_SIZE) {
-      vaultListCache.delete(vaultListCache.keys().next().value);
-    }
-    vaultListCache.set(cacheKey, { timestamp: Date.now(), data: listPayload });
-    sendJson(res, 200, listPayload, req);
+    sendJson(res, 200, { total: matches.length, limit, offset, vaults: matches.slice(offset, offset + limit) }, req);
   } catch (err) {
     console.error('[API] Failed to fetch vaults list:', err);
     sendJson(res, 500, { error: 'Failed to fetch vaults list' });
   }
+}
+
+/** List entries with MQI/HHI/liquidity for every vault, ordered by address so sort ties stay stable. */
+export function getVaultCatalog() {
+  if (vaultCatalog && Date.now() - vaultCatalog.timestamp < CATALOG_TTL_MS) return vaultCatalog.vaults;
+  const db = getDatabase();
+  // SELECT * like the audit endpoint, so engines see the same vault fields in the list and in the audit
+  const rows = db.prepare('SELECT * FROM vaults ORDER BY address').all();
+
+  const allocRows = db.prepare(`
+    SELECT va.*, m.*
+    FROM vault_allocations va
+    JOIN markets m ON va.market_unique_key = m.unique_key
+  `).all();
+
+  // Peer supplies per market come from the same rows: every allocation of every vault is loaded anyway
+  const peerRowsByMarket = new Map();
+  for (const a of allocRows) {
+    if (!peerRowsByMarket.has(a.market_unique_key)) peerRowsByMarket.set(a.market_unique_key, []);
+    peerRowsByMarket.get(a.market_unique_key).push(a);
+  }
+  const allocMap = new Map();
+  for (const a of allocRows) {
+    a.peer_supply_usd = summarizePeers(peerRowsByMarket.get(a.market_unique_key), a.vault_address, a).total;
+    const k = a.vault_address.toLowerCase();
+    if (!allocMap.has(k)) allocMap.set(k, []);
+    allocMap.get(k).push(a);
+  }
+
+  const vaults = rows.map(row => {
+    const allocs = allocMap.get(row.address.toLowerCase()) || [];
+    const scored = withEffectiveTotal(row, allocs);
+    const mqi = calculateMQI(scored, allocs);
+    const hhi = calculateHHI(scored, allocs);
+    const liq = calculateLiquidityMetrics(scored, allocs);
+
+    return {
+      address: row.address,
+      chainId: row.chain_id,
+      name: row.name,
+      symbol: row.symbol,
+      curatorName: row.curator_name,
+      version: row.version,
+      isListed: Boolean(row.is_listed),
+      asset: {
+        address: row.asset_address,
+        symbol: row.asset_symbol,
+        decimals: row.asset_decimals,
+        priceUsd: row.asset_price_usd
+      },
+      totalAssets: row.total_assets,
+      totalAssetsHuman: formatUnits(row.total_assets, row.asset_decimals),
+      totalAssetsUsd: row.total_assets_usd,
+      liquidityUsd: row.liquidity_usd,
+      exitCapPercent: liq.instantExitCapacityPercent,
+      exitCapUsd: liq.instantExitCapacityUsd,
+      stressedExitCapPercent: liq.stressedExitCapacityPercent,
+      stressedExitCapUsd: liq.stressedExitCapacityUsd,
+      isCrowded: liq.isCrowded,
+      crowdedMarketsCount: liq.crowdedMarkets?.length || 0,
+      apy: row.apy,
+      netApy: row.net_apy,
+      fee: row.fee,
+      mqiPercent: mqi.mqiPercent,
+      isAllClean: mqi.isAllClean,
+      compromisedCount: mqi.compromisedMarkets?.length || 0,
+      hhi: hhi.hhi,
+      hhiTier: hhi.tier,
+      effectiveAssets: hhi.effectiveAssets,
+      updatedAt: row.metadata_updated_at
+    };
+  });
+
+  vaultCatalog = { timestamp: Date.now(), vaults };
+  return vaults;
 }
 
 /**
@@ -690,13 +693,24 @@ export function handleRequest(req, res) {
   // REST API Routes
   const isRead = req.method === 'GET' || req.method === 'HEAD';
 
+  if (pathname.startsWith('/api/')) {
+    const retryAfterSec = checkRateLimit(clientIp(req));
+    if (retryAfterSec > 0) {
+      sendJson(res, 429, { error: 'Too Many Requests' }, req, { 'Retry-After': String(retryAfterSec) });
+      return;
+    }
+  }
+
   if (pathname === '/api/status' && isRead) {
     handleGetStatus(req, res);
     return;
   }
 
   if (pathname === '/api/sync' && req.method === 'POST') {
-    handlePostSync(req, res, parsedUrl);
+    handlePostSync(req, res, parsedUrl).catch(err => {
+      console.error('[API] Sync request handler failed:', err);
+      if (!res.headersSent) sendJson(res, 500, { error: 'Internal server error' });
+    });
     return;
   }
 

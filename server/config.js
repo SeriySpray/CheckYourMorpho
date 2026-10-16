@@ -33,7 +33,9 @@ export const CONFIG = {
   },
   server: {
     port: 3000,
-    host: 'localhost'
+    host: 'localhost',
+    // Per-IP budget for /api/*: well above a human clicking through vaults, below a scripted flood
+    rateLimit: { windowMs: 60000, maxRequests: 300 }
   },
   sync: {
     intervalMs: 180000, // 3 minutes for background full sync

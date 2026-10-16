@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { CONFIG } from './config.js';
 import { getDatabase, closeDatabase } from './db/database.js';
-import { handleRequest } from './api/routes.js';
+import { handleRequest, DEFAULT_VAULTS_LIMIT } from './api/routes.js';
 import { syncAllVaults, isSyncing } from './services/syncEngine.js';
 
 // Global process error safety guards
@@ -40,7 +40,7 @@ server.listen(PORT, HOST, () => {
   console.log(`[Server] CheckYourMorpho REST API running at http://${HOST}:${PORT}`);
   console.log(`[Server] Endpoints:`);
   console.log(`  - GET  /api/status`);
-  console.log(`  - GET  /api/vaults (default limit: 300, sorted by liquidity)`);
+  console.log(`  - GET  /api/vaults (default limit: ${DEFAULT_VAULTS_LIMIT}, sorted by liquidity)`);
   console.log(`  - GET  /api/vaults/:address`);
   console.log(`  - POST /api/sync`);
   console.log(`  - Static frontend assets served from client/`);

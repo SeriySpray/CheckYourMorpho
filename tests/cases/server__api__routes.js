@@ -28,6 +28,17 @@ const withEnv = async (name, value, fn) => {
 };
 const peerRow = (over = {}) => ({ vault_address: '0xp1', vault_name: 'P1', supply_assets_usd: 5000, via_vault: null, ...over });
 
+// Моки без сокета мають один ключ ліміту на весь набір: знімаємо ліміт, його кейси вмикають свій через withLimit.
+CONFIG.server.rateLimit.maxRequests = Number.MAX_SAFE_INTEGER;
+const withLimit = async (maxRequests, fn, windowMs = 60000) => {
+  const saved = { ...CONFIG.server.rateLimit };
+  Object.assign(CONFIG.server.rateLimit, { maxRequests, windowMs });
+  try { return await fn(); } finally { Object.assign(CONFIG.server.rateLimit, saved); }
+};
+const fromIp = (method, url, remoteAddress, headers = {}) => ({ ...mockReq(method, url, headers), socket: { remoteAddress } });
+// Початок вікна ліміту, кратний 60 с, щоб зважування попереднього вікна було передбачуваним.
+const W0 = 60000 * 1e6;
+
 // --- Контрольована БД ---
 const addr = n => '0x' + n.toString(16).padStart(40, '0');
 const ins = (db, table, row) => db.prepare(
@@ -96,7 +107,7 @@ const list = (mod, qs = '') => getJson(mod, '/api/vaults' + qs).body;
 // Ринок mk1: вільна ліквідність 2M - 1.5M = 500K. P і Q мають по 1M, R - дрібна позиція, S - look-through V2 через Q.
 function seedCrowded(db) {
   ins(db, 'markets', M('mk1'));
-  ins(db, 'vaults', V(0x10, { name: 'Vault P', total_assets_usd: 1e6 }));
+  ins(db, 'vaults', V(0x10, { name: 'Vault P', total_assets_usd: 1e6, liquidity_usd: 1e6 }));
   ins(db, 'vaults', V(0x11, { name: 'Peer Q', total_assets_usd: 1e6 }));
   ins(db, 'vaults', V(0x12, { name: 'Peer R', total_assets_usd: 900 }));
   ins(db, 'vaults', V(0x13, { name: 'Look S', total_assets_usd: 4e5, liquidity_usd: 4e5, version: 'v2' }));
@@ -255,6 +266,78 @@ export default {
         const r = await rawHttp(port, 'GET', p); assert.notEqual(r.status, 200, p); assert.ok(!r.body.includes('"scripts"'), p);
       }
     })],
+    ['ліміт /api/*: понад бюджет -> 429 з Retry-After і JSON, інший IP не зачеплений', async ({ handleRequest }) => withLimit(3, async () => {
+      for (let i = 0; i < 3; i++) {
+        const r = mockRes(); handleRequest(fromIp('GET', '/api/nope', '203.0.113.10'), r); assert.equal(r.statusCode, 404, `запит ${i + 1}`);
+      }
+      const r = mockRes(); handleRequest(fromIp('GET', '/api/status', '203.0.113.10'), r);
+      assert.equal(r.statusCode, 429); assert.deepEqual(JSON.parse(r.body), { error: 'Too Many Requests' });
+      assert.ok(Number(r.headers['Retry-After']) >= 1, r.headers['Retry-After']);
+      const other = mockRes(); handleRequest(fromIp('GET', '/api/nope', '203.0.113.11'), other); assert.equal(other.statusCode, 404);
+    })],
+    ['ліміт не стосується статики, а зворотний слеш як і раніше -> 400', async ({ handleRequest }) => withLimit(1, async () => {
+      const first = mockRes(); handleRequest(fromIp('GET', '/api/nope', '203.0.113.20'), first); assert.equal(first.statusCode, 404);
+      const blocked = mockRes(); handleRequest(fromIp('GET', '/api/nope', '203.0.113.20'), blocked); assert.equal(blocked.statusCode, 429);
+      const page = mockRes(); handleRequest(fromIp('GET', '/', '203.0.113.20'), page); await page.done; assert.equal(page.statusCode, 200);
+      const slash = mockRes(); handleRequest(fromIp('GET', '/api\\vaults', '203.0.113.20'), slash); assert.equal(slash.statusCode, 400);
+    })],
+    ['за nginx ліміт рахується по X-Forwarded-For, підробка заголовка ззовні не обходить ліміт', async ({ handleRequest }) => withLimit(1, async () => {
+      const proxied = ip => { const r = mockRes(); handleRequest(fromIp('GET', '/api/nope', '127.0.0.1', { 'x-forwarded-for': ip }), r); return r.statusCode; };
+      assert.equal(proxied('198.51.100.1'), 404); assert.equal(proxied('198.51.100.1'), 429); assert.equal(proxied('198.51.100.2'), 404);
+      const direct = xff => { const r = mockRes(); handleRequest(fromIp('GET', '/api/nope', '198.51.100.9', { 'x-forwarded-for': xff }), r); return r.statusCode; };
+      assert.equal(direct('10.0.0.1'), 404); assert.equal(direct('10.0.0.2'), 429, 'чужий XFF не має давати новий ключ');
+    })],
+    ['відмова обробника POST /api/sync перехоплюється: 500, а не необроблений проміс', async ({ handleRequest }) => withEnv('SYNC_TOKEN', 'secret', async () => {
+      const err = console.error; console.error = () => {};
+      try {
+        const headers = { get authorization() { throw new Error('boom'); } };
+        const res = mockRes(); handleRequest(mockReq('POST', '/api/sync', headers), res);
+        await res.done; assert.equal(res.statusCode, 500); assert.deepEqual(JSON.parse(res.body), { error: 'Internal server error' });
+      } finally { console.error = err; }
+    })],
+  ],
+  clientIp: [
+    ['прямий клієнт: адреса сокета, X-Forwarded-For ігнорується', ({ clientIp: f }) => {
+      assert.equal(f(fromIp('GET', '/', '203.0.113.5', { 'x-forwarded-for': '1.2.3.4' })), '203.0.113.5');
+    }],
+    ['від loopback (nginx): останній запис X-Forwarded-For, підроблені ліві записи відкидаються', ({ clientIp: f }) => {
+      for (const peer of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+        assert.equal(f(fromIp('GET', '/', peer, { 'x-forwarded-for': '6.6.6.6, 203.0.113.7' })), '203.0.113.7', peer);
+      }
+    }],
+    ['від loopback без X-Forwarded-For або з порожнім -> адреса сокета', ({ clientIp: f }) => {
+      assert.equal(f(fromIp('GET', '/', '127.0.0.1')), '127.0.0.1');
+      assert.equal(f(fromIp('GET', '/', '127.0.0.1', { 'x-forwarded-for': ' , ' })), '127.0.0.1');
+    }],
+    ['адреса, що лише починається з 127 у тексті, не вважається loopback', ({ clientIp: f }) => {
+      assert.equal(f(fromIp('GET', '/', '::1:5', { 'x-forwarded-for': '1.2.3.4' })), '::1:5');
+    }],
+    ['запит без сокета -> порожній ключ, без винятку', ({ clientIp: f }) => assert.equal(f(mockReq('GET', '/')), '')],
+  ],
+  checkRateLimit: [
+    ['рівно maxRequests дозволено, наступний -> секунди до кінця вікна', async ({ checkRateLimit: f }) => withLimit(3, () => {
+      for (let i = 0; i < 3; i++) assert.equal(f('rl-a', W0 + 1000), 0);
+      assert.equal(f('rl-a', W0 + 1000), 59);
+      assert.equal(f('rl-b', W0 + 1000), 0, 'інший IP має власний бюджет');
+    })],
+    ['відхилені запити не з\'їдають бюджет наступного вікна; через два вікна лічильник скинуто', async ({ checkRateLimit: f }) => withLimit(2, () => {
+      for (let i = 0; i < 2; i++) f('rl-c', W0 + 59999);
+      for (let i = 0; i < 50; i++) assert.ok(f('rl-c', W0 + 59999) > 0);
+      assert.equal(f('rl-c', W0 + 90000), 0, 'на половині наступного вікна 2 * 0.5 = 1 < 2');
+      assert.ok(f('rl-c', W0 + 90000) > 0);
+      assert.equal(f('rl-c', W0 + 60000 * 3), 0);
+    })],
+    ['ковзне вікно: одразу після межі попереднє вікно ще важить, на половині - вдвічі менше', async ({ checkRateLimit: f }) => withLimit(10, () => {
+      for (let i = 0; i < 10; i++) assert.equal(f('rl-d', W0 + 59000), 0);
+      assert.ok(f('rl-d', W0 + 60000) > 0,'стрибок через межу вікна не має обнуляти ліміт');
+      let allowed = 0; for (let i = 0; i < 10; i++) if (f('rl-d', W0 + 90000) === 0) allowed++;
+      assert.equal(allowed, 5);
+    })],
+    ['кількість IP обмежена: при переповненні найстаріші записи витісняються', async ({ checkRateLimit: f }) => withLimit(1, () => {
+      assert.equal(f('rl-old', W0), 0); assert.ok(f('rl-old', W0) > 0);
+      for (let i = 0; i < 10001; i++) f(`rl-flood-${i}`, W0);
+      assert.equal(f('rl-old', W0), 0, 'найстаріший запис мав бути витіснений');
+    })],
   ],
   summarizePeers: [
     ['порожні рядки -> total 0', ({ summarizePeers: f }) => assert.deepEqual(f(null, '0xv', {}), { total: 0, peers: [] })],
@@ -397,6 +480,34 @@ export default {
         assert.equal(res.headers['Content-Type'], type, name); assert.equal(res.body, 'x');
       }
     }],
+    ['HTML/JS/CSS: no-store, зображення і шрифти: public на добу без Pragma/Expires', async ({ serveFile: f }) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cym-cache-'));
+      const cases = { 'a.html': false, 'b.js': false, 'c.css': false, 'd.png': true, 'e.svg': true, 'f.woff2': true, 'g.json': false, 'h.xyz': false };
+      for (const [name, cached] of Object.entries(cases)) {
+        fs.writeFileSync(path.join(dir, name), 'x');
+        const res = mockRes(); f(path.join(dir, name), mockReq('GET', '/'), res); await res.done;
+        if (cached) {
+          assert.equal(res.headers['Cache-Control'], 'public, max-age=86400', name);
+          assert.equal(res.headers.Pragma, undefined, name); assert.equal(res.headers.Expires, undefined, name);
+        } else {
+          assert.match(res.headers['Cache-Control'], /no-store/, name); assert.equal(res.headers.Pragma, 'no-cache', name);
+        }
+      }
+    }],
+    ['статика має CSP, Permissions-Policy, nosniff і Referrer-Policy', async ({ serveFile: f }) => {
+      const res = mockRes(); f(path.join(ROOT, 'client', 'index.html'), mockReq('GET', '/'), res); await res.done;
+      const csp = res.headers['Content-Security-Policy'];
+      assert.match(csp, /default-src 'self'/); assert.match(csp, /script-src 'self'(;|$)/, 'скрипти без unsafe-inline/eval');
+      assert.match(csp, /object-src 'none'/); assert.match(csp, /frame-ancestors 'self'/);
+      assert.match(res.headers['Permissions-Policy'], /camera=\(\)/);
+      assert.equal(res.headers['X-Content-Type-Options'], 'nosniff'); assert.equal(res.headers['Referrer-Policy'], 'strict-origin-when-cross-origin');
+    }],
+    ['client/index.html сумісний з CSP: немає inline-скриптів, обробників on*= і зовнішніх ресурсів', () => {
+      const html = INDEX_HTML.toString();
+      for (const tag of html.match(/<script\b[^>]*>/gi) || []) assert.match(tag, /\ssrc=/, tag);
+      assert.doesNotMatch(html, /\son[a-z]+\s*=/i);
+      assert.doesNotMatch(html, /<(script|link|img)\b[^>]*(src|href)=["']?(https?:)?\/\//i);
+    }],
     ['відсутній файл -> 500', async ({ serveFile: f }) => {
       const res = mockRes(); f('/definitely/missing.html', mockReq('GET', '/'), res); await res.done; assert.equal(res.statusCode, 500);
     }],
@@ -412,6 +523,26 @@ export default {
       db.exec('DELETE FROM sync_state');
       const res = mockRes(); mod.handleGetStatus(mockReq('GET', '/api/status'), res);
       assert.deepEqual(JSON.parse(res.body).lastSync, { timestamp: null, updatedAt: null });
+    })],
+    ['до першої успішної синхронізації stale = true, lastSuccessAt = null', async mod => sandbox(async db => {
+      db.exec('DELETE FROM sync_state');
+      const body = getJson(mod, '/api/status').body;
+      assert.equal(body.stale, true); assert.equal(body.lastSuccessAt, null);
+    })],
+    ['stale: межа рівно 3 інтервали ще свіжа, на 1 мс більше - застаріла; lastSuccessAt в ISO', async mod => sandbox(async db => withClock(async clock => {
+      const sec = Math.floor(Date.now() / 1000);
+      db.prepare("UPDATE sync_state SET value = ? WHERE key = 'last_sync_all'").run(String(sec));
+      const at = () => getJson(mod, '/api/status').body;
+      clock.advance(sec * 1000 - Date.now());
+      assert.equal(at().stale, false); assert.equal(at().lastSuccessAt, new Date(sec * 1000).toISOString());
+      clock.advance(3 * CONFIG.sync.intervalMs); assert.equal(at().stale, false);
+      clock.advance(1); assert.equal(at().stale, true);
+    }))],
+    ['нові поля додано, наявні поля відповіді збережено', async mod => sandbox(async () => {
+      const body = getJson(mod, '/api/status').body;
+      assert.deepEqual(Object.keys(body).sort(), ['isSyncInProgress', 'lastSuccessAt', 'lastSync', 'lastSyncResult', 'stale', 'stats', 'status']);
+      assert.equal(typeof body.stale, 'boolean'); assert.equal(body.stale, false, 'щойно виконана синхронізація свіжа');
+      assert.equal(Date.parse(body.lastSuccessAt) / 1000, body.lastSync.timestamp);
     })],
   ],
   handlePostSync: [
@@ -488,6 +619,13 @@ export default {
     }))],
   ],
   handleGetVaults: [
+    ['нерозкрита експозиція: список і детальний ендпоінт дають однаковий MQI 0', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(0x30, { version: 'v2', total_assets_usd: 1e6, liquidity_usd: 1e6, unresolved_exposure_usd: 1e6 }));
+      const inList = list(mod).vaults.find(v => v.address === addr(0x30));
+      const detail = getJson(mod, '/api/vaults/' + addr(0x30)).body;
+      assert.equal(inList.mqiPercent, 0);
+      assert.equal(detail.verdict.mqi.mqiPercent, inList.mqiPercent);
+    })],
     ['відповідь містить total/limit/offset/vaults; за замовчуванням limit 500, offset 0', async mod => sandbox(async db => {
       seedCatalog(db);
       const b = list(mod); assert.equal(b.total, 4); assert.equal(b.limit, 500); assert.equal(b.offset, 0); assert.equal(b.vaults.length, 4);
@@ -618,14 +756,31 @@ export default {
       const z = list(mod).vaults[0];
       assert.equal(z.exitCapPercent, 0); assert.equal(z.stressedExitCapPercent, 0);
     })],
-    ['кеш списку: у межах 15 с віддає збережене, після 15 с - свіже', async mod => sandbox(async db => withClock(async clock => {
+    ['каталог без синхронізації живе 60 с (запасний TTL для CLI-синхронізації в іншому процесі)', async mod => sandbox(async db => withClock(async clock => {
       seedCatalog(db);
       assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
       db.prepare("UPDATE vaults SET name = 'Alpha NEW' WHERE address = ?").run(addr(1));
-      clock.advance(14999); assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
+      clock.advance(59999); assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha USDC');
       clock.advance(2); assert.equal(list(mod, '?search=Alpha').vaults[0].name, 'Alpha NEW');
     }))],
-    ['кожен валідований параметр входить у ключ кешу', async mod => sandbox(async db => {
+    ['рушії рахуються раз на епоху: будь-які нові фільтри, пошук і сторінки беруть той самий знімок', async mod => sandbox(async db => {
+      seedCatalog(db);
+      list(mod, '?limit=1');
+      db.prepare("UPDATE vaults SET name = 'Changed', liquidity_usd = 0 WHERE address = ?").run(addr(4));
+      ins(db, 'vaults', V(5, { name: 'Late' }));
+      for (const qs of ['?search=back', '?offset=0&limit=3&junk=1', '?sortBy=name&sortOrder=asc', '?chainId=1&listedOnly=1', '?search=x' + 'y'.repeat(500)]) {
+        const b = list(mod, qs);
+        assert.ok(!b.vaults.some(v => v.name === 'Changed' || v.name === 'Late'), qs);
+      }
+      assert.equal(list(mod).total, 4);
+    })],
+    ['однакові значення сортування впорядковуються за адресою; NULL - найменше значення', async mod => sandbox(async db => {
+      for (const n of [3, 1, 2]) ins(db, 'vaults', V(n, { liquidity_usd: 50 }));
+      ins(db, 'vaults', V(4, { liquidity_usd: null }));
+      assert.deepEqual(ids(list(mod)), [1, 2, 3, 4], 'DESC: NULL останнім');
+      assert.deepEqual(ids(list(mod, '?sortOrder=asc')), [4, 1, 2, 3], 'ASC: NULL першим');
+    })],
+    ['кожен параметр застосовується до кешованого каталогу', async mod => sandbox(async db => {
       seedCatalog(db);
       assert.deepEqual(ids(list(mod)), [4, 1, 2, 3]);
       assert.deepEqual(ids(list(mod, '?sortOrder=asc')), [3, 2, 1, 4]);
@@ -635,20 +790,6 @@ export default {
       assert.deepEqual(ids(list(mod, '?search=beta')), [2]);
       assert.deepEqual(ids(list(mod, '?limit=1')), [4]);
       assert.deepEqual(ids(list(mod, '?offset=3')), [3]);
-    })],
-    ['сторонні параметри не створюють нових записів кешу (ключ лише з валідованих значень)', async mod => sandbox(async db => {
-      seedCatalog(db);
-      list(mod, '?limit=7');
-      db.prepare("UPDATE vaults SET name = 'Changed' WHERE address = ?").run(addr(4));
-      assert.equal(list(mod, '?limit=7&junk=1&sortBy=evil').vaults[0].name, 'Back\\Slash');
-    })],
-    ['кеш списку обмежений 50 записами: 51-й витісняє найстаріший', async mod => sandbox(async db => {
-      seedCatalog(db);
-      for (let l = 1; l <= 50; l++) list(mod, `?limit=${l}`);
-      db.prepare("UPDATE vaults SET name = 'Fresh' WHERE address = ?").run(addr(4));
-      list(mod, '?limit=51');
-      assert.equal(list(mod, '?limit=2').vaults[0].name, 'Back\\Slash', 'limit=2 мав лишитися в кеші');
-      assert.equal(list(mod, '?limit=1').vaults[0].name, 'Fresh', 'limit=1 мав бути витіснений');
     })],
     ['успішна синхронізація інвалідує кеш списку', async mod => sandbox(async db => {
       seedCatalog(db);
@@ -748,6 +889,28 @@ export default {
       get(500);
       assert.equal(get(1), 'Old', 'другий запис мав лишитися в кеші');
       assert.equal(get(0), 'New', 'найстаріший запис мав бути витіснений');
+    })],
+  ],
+  getVaultCatalog: [
+    ['усі vaults (і нелістинговані) з метриками, впорядковані за адресою', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const c = mod.getVaultCatalog();
+      assert.deepEqual(c.map(v => parseInt(v.address, 16)), [1, 2, 3, 4]);
+      for (const v of c) assert.ok('mqiPercent' in v && 'hhi' in v && 'exitCapPercent' in v, v.address);
+    })],
+    ['повторний виклик повертає той самий масив до синхронізації, після неї - новий', async mod => sandbox(async db => {
+      seedCatalog(db);
+      const first = mod.getVaultCatalog();
+      assert.equal(mod.getVaultCatalog(), first);
+      await resetCaches();
+      assert.notEqual(mod.getVaultCatalog(), first);
+    })],
+  ],
+  DEFAULT_VAULTS_LIMIT: [
+    ['збігається з фактичним дефолтом /api/vaults і з логом старту index.js (C8)', async mod => sandbox(async () => {
+      assert.equal(list(mod).limit, mod.DEFAULT_VAULTS_LIMIT);
+      const index = fs.readFileSync(path.join(ROOT, 'server', 'index.js'), 'utf8');
+      assert.match(index, /default limit: \$\{DEFAULT_VAULTS_LIMIT\}/);
     })],
   ],
 };
