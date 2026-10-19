@@ -5,7 +5,7 @@ import path from 'node:path';
 import util from 'node:util';
 import { exec } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { useDbCopy, scan, runFn, runFile } from './runner.js';
+import { useDbCopy, scan, runFn, runFile, loadModule } from './runner.js';
 
 const UI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui', 'index.html');
 const PORT = Number(process.env.PORT) || 4173;
@@ -63,7 +63,7 @@ http.createServer(async (req, res) => {
           const one = fn && f.fns.find(x => x.name === fn);
           if (fn && !one) return send(res, 404, { error: 'Функцію не знайдено' });
           if (one) {
-            if (one.exported && one.cases.length) await runFn(f, one, await import(pathToFileURL(f.abs).href));
+            if (one.exported && one.cases.length) await runFn(f, one, await loadModule(f));
           } else await runFile(f);
         }
       } finally { busy = false; }

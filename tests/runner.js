@@ -7,9 +7,10 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CONFIG } from '../server/config.js';
+import { installClientEnv } from './clientEnv.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SCAN_DIRS = ['server'];
+const SCAN_DIRS = ['server', 'client/js'];
 const FN_RE = /^(export\s+)?(async\s+)?function\s+(\w+)|^export\s+(?:const|let)\s+(\w+)/gm;
 
 // Реальна БД лише для читання: працюємо з копією, щоб міграції getDatabase() не торкалися оригіналу.
@@ -37,8 +38,10 @@ export async function scan() {
     for (const abs of walk(path.join(ROOT, d))) {
       const rel = path.relative(ROOT, abs).split(path.sep).join('/');
       const src = fs.readFileSync(abs, 'utf8');
+      const client = rel.startsWith('client/');
+      // Код браузера завантажується з додатковим експортом усіх функцій (див. loadModule), тож він тестований як експортований
       const fns = [...src.matchAll(FN_RE)].map(m => ({
-        name: m[3] || m[4], exported: Boolean(m[1]) || !m[3], results: null
+        name: m[3] || m[4], exported: client || Boolean(m[1]) || !m[3], results: null
       }));
       if (!fns.length) continue;
       const casesPath = path.join(ROOT, 'tests', 'cases', rel.replace(/\//g, '__'));
@@ -47,10 +50,42 @@ export async function scan() {
       for (const fn of fns) fn.cases = cases[fn.name] || [];
       // Кейси для функцій, яких у коді вже немає: показуємо, щоб їх не забули прибрати
       const stale = Object.keys(cases).filter(n => !fns.some(f => f.name === n));
-      files.push({ rel, abs, fns, stale, open: false });
+      files.push({ rel, abs, fns, stale, client, open: false });
     }
   }
   return files.sort((a, b) => a.rel.localeCompare(b.rel));
+}
+
+const clientModules = new Map();
+let clientTmp = null;
+
+/**
+ * Імпортує файл для тестів. Файли client/js не мають експортів і чіпають DOM при завантаженні: їхня копія в тимчасовій
+ * теці отримує export усіх функцій та __state (читання й запис змінних верхнього рівня), а середовище браузера підміняється.
+ */
+export async function loadModule(file) {
+  if (!file.client) return import(pathToFileURL(file.abs).href);
+  if (clientModules.has(file.abs)) return clientModules.get(file.abs);
+  installClientEnv();
+  clientTmp ??= fs.mkdtempSync(path.join(os.tmpdir(), 'cym-client-'));
+  const srcDir = path.dirname(file.abs);
+  for (const name of fs.readdirSync(srcDir).filter(n => n.endsWith('.js'))) {
+    fs.writeFileSync(path.join(clientTmp, name), instrument(fs.readFileSync(path.join(srcDir, name), 'utf8')));
+  }
+  const mod = await import(pathToFileURL(path.join(clientTmp, path.basename(file.abs))).href);
+  clientModules.set(file.abs, mod);
+  return mod;
+}
+
+function instrument(src) {
+  const fnNames = [...src.matchAll(/^(?:async\s+)?function\s+(\w+)/gm)].map(m => m[1]);
+  const lets = [...src.matchAll(/^(?:let|var)\s+(\w+)/gm)].map(m => m[1]);
+  const consts = [...src.matchAll(/^const\s+(\w+)\s*=/gm)].map(m => m[1]);
+  const accessors = [
+    ...lets.map(n => `get ${n}() { return ${n}; }, set ${n}(v) { ${n} = v; }`),
+    ...consts.map(n => `get ${n}() { return ${n}; }`)
+  ].join(',\n  ');
+  return `${src}\nexport { ${fnNames.join(', ')} };\nexport const __state = {\n  ${accessors}\n};\n`;
 }
 
 export async function runFn(file, fn, mod) {
@@ -65,7 +100,7 @@ export async function runFn(file, fn, mod) {
 export async function runFile(file) {
   // Модулі з побічними ефектами (index.js, sync.js) імпортуємо лише якщо для них є кейси
   if (!file.fns.some(fn => fn.exported && fn.cases.length)) return;
-  const mod = await import(pathToFileURL(file.abs).href);
+  const mod = await loadModule(file);
   for (const fn of file.fns) if (fn.exported && fn.cases.length) await runFn(file, fn, mod);
 }
 
@@ -198,7 +233,7 @@ async function tui(files) {
           if (k === 'a') for (const f of files) await runFile(f);
           else if (row?.kind === 'file') await runFile(row.f);
           else if (row?.kind === 'fn' && row.fn.exported && row.fn.cases.length) {
-            await runFn(row.f, row.fn, await import(pathToFileURL(row.f.abs).href));
+            await runFn(row.f, row.fn, await loadModule(row.f));
             row.fn.show = true;
           }
           const s = stats(files); status = `Завершено: ok ${s.pass}, fail ${s.fail}.`;

@@ -166,6 +166,27 @@ const apiWith = (v1, counter = { n: 0 }, gate = null) => async (_url, init) => {
 const waitIdle = async isSyncing => { for (let i = 0; i < 200 && isSyncing(); i++) await new Promise(r => setTimeout(r, 10)); };
 
 export default {
+  ipv6Prefix: [
+    ['IPv4 і IPv4-mapped IPv6 повертаються без змін', ({ ipv6Prefix: f }) => {
+      assert.equal(f('1.2.3.4'), '1.2.3.4'); assert.equal(f('::ffff:1.2.3.4'), '::ffff:1.2.3.4');
+    }],
+    ['повна адреса зводиться до /64 без провідних нулів', ({ ipv6Prefix: f }) =>
+      assert.equal(f('2001:0db8:0000:0042:aaaa:bbbb:cccc:dddd'), '2001:db8:0:42::/64')],
+    ['скорочена форма з :: розгортається; різні хвости одного /64 дають один ключ', ({ ipv6Prefix: f }) => {
+      assert.equal(f('2001:db8::1'), '2001:db8:0:0::/64');
+      assert.equal(f('2001:db8:1:2::5'), f('2001:db8:1:2:ffff::9'));
+    }],
+    ['регістр не впливає на ключ', ({ ipv6Prefix: f }) => assert.equal(f('2001:DB8::1'), f('2001:db8::1'))],
+  ],
+  compareNullsFirst: [
+    ['null менший за будь-яке значення, два null рівні', ({ compareNullsFirst: f }) => {
+      assert.equal(f(null, 1), -1); assert.equal(f(1, null), 1); assert.equal(f(null, undefined), 0);
+    }],
+    ['числа й рядки порівнюються за зростанням, рівні дають 0', ({ compareNullsFirst: f }) => {
+      assert.equal(f(1, 2), -1); assert.equal(f(2, 1), 1); assert.equal(f(2, 2), 0); assert.equal(f('a', 'b'), -1);
+    }],
+    ['0 не плутається з null', ({ compareNullsFirst: f }) => { assert.equal(f(0, null), 1); assert.equal(f(null, 0), -1); }],
+  ],
   handleRequest: [
     ['OPTIONS на будь-який шлях -> 204, CORS-заголовки, порожнє тіло', ({ handleRequest }) => {
       const r = call(handleRequest, 'OPTIONS', '/api/vaults');

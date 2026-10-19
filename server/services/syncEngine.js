@@ -44,7 +44,7 @@ export function toBigInt(value) {
 }
 
 /** Underlying V1 vault of a MetaMorpho adapter, or null when it is not listed or empty. */
-function lookThroughVault(adapter, v1ByAddress, chainId) {
+export function lookThroughVault(adapter, v1ByAddress, chainId) {
   const under = v1ByAddress.get((adapter.metaMorpho?.address || '').toLowerCase());
   // the same address on another chain is a different vault: its markets are not this vault's
   if (under?.chain?.id != null && chainId != null && Number(under.chain.id) !== Number(chainId)) return null;
@@ -90,7 +90,7 @@ export function unresolvedAdapterAssets(rawV2, v1ByAddress) {
 }
 
 /** Sum of an underlying vault's reported positions and the denominator its shares are split by. */
-function underlyingTotals(under) {
+export function underlyingTotals(under) {
   const underTotal = toBigInt(under.state.totalAssets);
   const allocSum = (under.state.allocation || []).reduce((acc, a) => acc + toBigInt(a.supplyAssets), 0n);
   // Inconsistent API data (allocations above totalAssets) must not push the shares above the adapter's assets
@@ -105,7 +105,7 @@ export function unresolvedV1Assets(rawV) {
 }
 
 /** Unresolved raw assets priced as a share of the vault's own TVL, in the units the engines compare with. */
-function unresolvedUsd(unresolvedRaw, v) {
+export function unresolvedUsd(unresolvedRaw, v) {
   const totalHuman = formatUnits(v.total_assets, v.asset_decimals);
   if (!(totalHuman > 0)) return 0;
   const share = Math.min(1, formatUnits(String(unresolvedRaw), v.asset_decimals) / totalHuman);

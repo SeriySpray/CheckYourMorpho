@@ -61,6 +61,35 @@ const count = (db, table) => db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).ge
 const sync = (mod, api, options) => withFetch(mockApi(api), () => mod.syncAllVaults(options));
 
 export default {
+  lookThroughVault: [
+    ['порожній або відсутній базовий vault -> null, непорожній -> він сам', ({ lookThroughVault: f }) => {
+      const m = new Map([['0xa', { state: { totalAssets: '10' } }], ['0xb', { state: { totalAssets: '0' } }]]);
+      assert.equal(f({ metaMorpho: { address: '0xA' } }, m), m.get('0xa'));
+      assert.equal(f({ metaMorpho: { address: '0xB' } }, m), null); assert.equal(f({ metaMorpho: { address: '0xC' } }, m), null);
+      assert.equal(f({}, m), null);
+    }],
+    ['інша мережа -> null; невідома мережа з будь-якого боку не блокує', ({ lookThroughVault: f }) => {
+      const m = new Map([['0xa', { chain: { id: 1 }, state: { totalAssets: '10' } }]]);
+      assert.equal(f({ metaMorpho: { address: '0xa' } }, m, 8453), null);
+      assert.ok(f({ metaMorpho: { address: '0xa' } }, m, 1));
+      assert.ok(f({ metaMorpho: { address: '0xa' } }, m, undefined));
+    }],
+  ],
+  underlyingTotals: [
+    ['знаменник - більше з totalAssets і суми позицій', ({ underlyingTotals: f }) => {
+      assert.deepEqual(f({ state: { totalAssets: '100', allocation: [{ supplyAssets: '30' }, { supplyAssets: '20' }] } }), { allocSum: 50n, denominator: 100n });
+      assert.equal(f({ state: { totalAssets: '40', allocation: [{ supplyAssets: '30' }, { supplyAssets: '20' }] } }).denominator, 50n);
+    }],
+    ['без allocation сума 0, знаменник totalAssets', ({ underlyingTotals: f }) =>
+      assert.deepEqual(f({ state: { totalAssets: '7' } }), { allocSum: 0n, denominator: 7n })],
+  ],
+  unresolvedUsd: [
+    ['сума в токенах переводиться в USD пропорційно TVL і не перевищує TVL', ({ unresolvedUsd: f }) => {
+      const v = { total_assets: '1000000', asset_decimals: 6, total_assets_usd: 200 };
+      assert.equal(f(250000n, v), 50); assert.equal(f(5000000n, v), 200);
+    }],
+    ['TVL без токенів -> 0', ({ unresolvedUsd: f }) => assert.equal(f(1n, { total_assets: '0', asset_decimals: 6, total_assets_usd: 5 }), 0)],
+  ],
   syncAllVaults: [
     ['записує V1 і V2 vaults, ринки та алокації і повертає підсумок', async mod => sandbox(async db => {
       const r = await sync(mod, newApi([rawV1('0xaaa')], [rawV2('0xbbb')]));

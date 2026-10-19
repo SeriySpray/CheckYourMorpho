@@ -8,6 +8,14 @@ const rawVault = (over = {}) => ({
 });
 
 export default {
+  positivePrice: [
+    ['перша ціна понад нуль виграє; нуль, null, негативні й нечислові пропускаються', ({ positivePrice: f }) => {
+      assert.equal(f(0, null, -3, 'abc', 2, 5), 2); assert.equal(f('4'), 4);
+    }],
+    ['цін немає або всі нульові -> 0, а не вигадана 1', ({ positivePrice: f }) => {
+      assert.equal(f(), 0); assert.equal(f(null, undefined, 0), 0);
+    }],
+  ],
   formatUnits: [
     ['1000000 при 6 знаках = 1', ({ formatUnits: f }) => assert.equal(f('1000000', 6), 1)],
     ['порожнє/null/undefined = 0', ({ formatUnits: f }) => {

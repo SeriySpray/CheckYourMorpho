@@ -50,7 +50,7 @@ export function clientIp(req) {
 }
 
 /** Rate-limit key: an IPv6 client owns a whole /64, so rotating addresses inside it does not reset the budget. */
-function ipv6Prefix(ip) {
+export function ipv6Prefix(ip) {
   if (!ip.includes(':') || ip.includes('.')) return ip;
   const [head, tail = ''] = ip.toLowerCase().split('::');
   const left = head ? head.split(':') : [];
@@ -395,7 +395,7 @@ const SORT_FIELDS = new Map([
 const MAX_SEARCH_LENGTH = 64;
 
 // SQLite ordering: NULL sorts below every value
-function compareNullsFirst(a, b) {
+export function compareNullsFirst(a, b) {
   if (a == null) return b == null ? 0 : -1;
   if (b == null) return 1;
   return a < b ? -1 : a > b ? 1 : 0;

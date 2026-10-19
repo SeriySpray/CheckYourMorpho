@@ -227,7 +227,7 @@ export function normalizeMarket(raw, chainId = 1) {
 }
 
 /** First price above zero, else 0: an unknown price must stay unknown (0 USD), never be guessed as $1 or inherited as 0. */
-function positivePrice(...prices) {
+export function positivePrice(...prices) {
   return prices.map(Number).find(p => p > 0) || 0;
 }
 
