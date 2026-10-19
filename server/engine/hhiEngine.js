@@ -25,7 +25,8 @@
  */
 export function isIdleReserveMarket(alloc) {
   const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
-  const lltvKnown = (alloc.lltv ?? alloc.lltv_percent) != null && (alloc.lltv ?? alloc.lltv_percent) !== '';
+  const lltvRaw = alloc.lltv ?? alloc.lltv_percent;
+  const lltvKnown = lltvRaw != null && lltvRaw !== '' && Number.isFinite(Number(lltvRaw));
   // An absent address field is unknown; a present empty or zero address means the market has no collateral
   const colAddr = alloc.collateral_asset_address == null ? null : alloc.collateral_asset_address.trim().toLowerCase();
   const noCollateralAddress = colAddr !== null && (!colAddr || colAddr === '0x' || colAddr === '0x0000000000000000000000000000000000000000');

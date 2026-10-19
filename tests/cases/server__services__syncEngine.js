@@ -341,6 +341,10 @@ export default {
       assert.equal(f({ state: { totalAssets: '900', allocation: [{ supplyAssets: '100', market: null }, { supplyAssets: '50', market: { marketId: '0xA' } }, { supplyAssets: '30', market: null }] } }), 130n)],
   ],
   withResolvedPrice: [
+    ['є TVL у USD, а ціни токена немає -> ціна виводиться з TVL (6 / 3 токени = 2)', ({ withResolvedPrice: f }) => {
+      const r = f({ total_assets: '3000000', asset_decimals: 6, total_assets_usd: 6, asset_price_usd: 0 }, []);
+      assert.equal(r.asset_price_usd, 2); assert.equal(r.total_assets_usd, 6);
+    }],
     ['є total_assets_usd -> vault без змін', ({ withResolvedPrice: f }) => {
       const v = { total_assets: '1000000', asset_decimals: 6, total_assets_usd: 5, asset_price_usd: 5 };
       assert.equal(f(v, [{ loanAsset: { priceUsd: 9 } }]), v);

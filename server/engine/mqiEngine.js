@@ -117,6 +117,14 @@ export function isMarketClean(market) {
 }
 
 /**
+ * The vault as the concentration and exit engines should see it: unexpanded capital below the materiality
+ * threshold is dust there too, so all three metrics agree on what is unverified.
+ */
+export function withMaterialUnresolved(vault, mqi) {
+  return { ...vault, unresolved_exposure_usd: mqi.unresolvedAssetsUsd };
+}
+
+/**
  * Calculates Market Quality Index (MQI) for a vault and its allocations.
  * 
  * @param {object} vault Vault row from database

@@ -784,6 +784,11 @@ function applyVaultAuditData(vaultAddress, auditData) {
     if (verdict) {
       if (verdict.mqi?.mqiPercent !== undefined) matchingVault.mqiPercent = verdict.mqi.mqiPercent;
       if (verdict.mqi?.isAllClean !== undefined) matchingVault.isAllClean = verdict.mqi.isAllClean;
+      // the list badge reads these too, so they follow the audit together with the score
+      if (verdict.mqi?.compromisedMarkets) matchingVault.compromisedCount = verdict.mqi.compromisedMarkets.length;
+      if (verdict.mqi?.compromisedPercent !== undefined) matchingVault.compromisedPercent = verdict.mqi.compromisedPercent;
+      if (verdict.mqi?.unverifiedPercent !== undefined) matchingVault.unverifiedPercent = verdict.mqi.unverifiedPercent;
+      if (verdict.mqi?.unpriced !== undefined) matchingVault.isUnpriced = verdict.mqi.unpriced;
       if (verdict.liquidity?.instantExitCapacityPercent !== undefined) {
         matchingVault.exitCapPercent = verdict.liquidity.instantExitCapacityPercent;
       }
@@ -821,7 +826,7 @@ function applyVaultAuditData(vaultAddress, auditData) {
       const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
 
       const mqiPercent = firstDefined(verdict?.mqi?.mqiPercent, matchingVault?.mqiPercent, 100);
-      const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true, (verdict?.mqi?.compromisedMarkets?.length ?? matchingVault?.compromisedCount ?? 0) > 0);
+      const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true, (verdict?.mqi?.compromisedMarkets?.length ?? matchingVault?.compromisedCount ?? 0) > 0, verdict?.mqi?.unpriced ?? matchingVault?.isUnpriced);
       const mqiClass = isClean ? 'clean' : 'flagged';
       const exitCapText = formatExitCap(pickExitMetric(
         verdict?.liquidity?.instantExitCapacityPercent,
@@ -923,7 +928,7 @@ function renderPinnedRichPills(animate = false) {
     }
     const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
     const mqiPercent = firstDefined(cachedAudit?.verdict?.mqi?.mqiPercent, v.mqiPercent, 100);
-    const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true, (cachedAudit?.verdict?.mqi?.compromisedMarkets?.length ?? v.compromisedCount ?? 0) > 0);
+    const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true, (cachedAudit?.verdict?.mqi?.compromisedMarkets?.length ?? v.compromisedCount ?? 0) > 0, cachedAudit?.verdict?.mqi?.unpriced ?? v.isUnpriced);
     const mqiClass = isClean ? 'clean' : 'flagged';
     const exitCapText = formatExitCap(pickExitMetric(
       cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent,
@@ -1988,7 +1993,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong></td>
-        <td>${a.lltvPercent ? a.lltvPercent + '%' : '0%'}</td>
+        <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
         <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>
         <td>${formatCurrency(a.marketFreeLiquidityUsd)}</td>
@@ -2183,8 +2188,8 @@ function firstDefined(...values) {
  * One reading of a vault's MQI for every surface: null = unpriced vault (unknown), isAllClean decides "clean"
  * (the rounded percent can read 100 while a small but material market is flagged).
  */
-function mqiBadgeInfo(mqiPercent, isAllClean, hasCompromised = true) {
-  if (mqiPercent == null) return { text: 'MQI unknown', clean: false };
+function mqiBadgeInfo(mqiPercent, isAllClean, hasCompromised = true, isUnpriced = false) {
+  if (mqiPercent == null) return { text: isUnpriced ? 'Unpriced' : 'Unverified', clean: false };
   if (isAllClean !== false && mqiPercent === 100) return { text: '100% Clean', clean: true };
   return { text: mqiPercent === 100 ? (hasCompromised ? 'Flagged' : 'Unverified') : `${mqiPercent}% MQI`, clean: false };
 }

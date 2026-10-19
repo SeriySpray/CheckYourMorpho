@@ -144,6 +144,11 @@ export default {
     }],
   ],
   normalizeMarket: [
+    ['застава із символом, але без адреси -> адреса null (невідомо); ринок без застави -> порожня', ({ normalizeMarket: f }) => {
+      assert.equal(f({ marketId: '0xM', collateralAsset: { symbol: 'WETH' } }).collateral_asset_address, null);
+      assert.equal(f({ marketId: '0xM' }).collateral_asset_address, '');
+      assert.equal(f({ marketId: '0xM', collateralAsset: { symbol: 'WETH', address: '0xABC' } }).collateral_asset_address, '0xabc');
+    }],
     ['bad debt і попередження, яких API не повернуло, -> null (невідомо), а не 0 / "[]"', ({ normalizeMarket: f }) => {
       const r = f({ marketId: '0xM' });
       assert.equal(r.bad_debt_usd, null); assert.equal(r.realized_bad_debt_usd, null); assert.equal(r.warnings_json, null);

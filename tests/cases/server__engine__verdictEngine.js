@@ -16,6 +16,12 @@ const crowd = (S, F, P) => (S < 100e6 ? [mkt(0, S, F, P), mkt(1, 100e6 - S, 0)] 
 
 export default {
   generateVaultVerdict: [
+    ['дрібний нерозкритий капітал ($200K із $100M) ігнорується однаково в MQI, HHI і виході', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 200e3 }), []);
+      assert.equal(r.mqi.unverifiedPercent, 0); assert.equal(r.hhi.unverifiedPercent, 0); assert.equal(r.liquidity.unverifiedPercent, 0);
+      const big = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 30e6 }), []);
+      assert.equal(big.hhi.unverifiedPercent, 30); assert.equal(big.liquidity.unverifiedPercent, 30);
+    }],
     ['округлений до 100 MQI поряд з брудним ринком не читається як повністю чистий, малий відсоток не стає 0', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ total_assets_usd: 10e9 }), [alloc({ is_listed: 0, supply_assets_usd: 250e3, market_unique_key: '1:0xbad' })]);
       assert.equal(r.mqi.mqiPercent, 100);

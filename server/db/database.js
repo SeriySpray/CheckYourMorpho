@@ -24,15 +24,15 @@ export function getDatabase() {
   
   // Safe migrations for newly added columns if table already existed from an older schema
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN version TEXT DEFAULT 'v1';"); } catch {}
-  try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN liquidity_usd REAL DEFAULT 0;"); } catch {}
+  try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN liquidity_usd REAL;"); } catch {}
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN is_listed INTEGER DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN missed_syncs INTEGER DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN unresolved_exposure_usd REAL DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE vault_allocations ADD COLUMN via_vault TEXT;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN is_listed INTEGER DEFAULT 1;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN oracle_type TEXT DEFAULT 'ChainlinkOracleV2';"); } catch {}
-  try { dbInstance.exec("ALTER TABLE markets ADD COLUMN bad_debt_usd REAL DEFAULT 0;"); } catch {}
-  try { dbInstance.exec("ALTER TABLE markets ADD COLUMN realized_bad_debt_usd REAL DEFAULT 0;"); } catch {}
+  try { dbInstance.exec("ALTER TABLE markets ADD COLUMN bad_debt_usd REAL;"); } catch {}
+  try { dbInstance.exec("ALTER TABLE markets ADD COLUMN realized_bad_debt_usd REAL;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN warnings_count INTEGER DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN warnings_json TEXT;"); } catch {}
 

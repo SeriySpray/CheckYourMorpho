@@ -1,4 +1,4 @@
-import { calculateMQI } from './mqiEngine.js';
+import { calculateMQI, withMaterialUnresolved } from './mqiEngine.js';
 import { calculateHHI } from './hhiEngine.js';
 import { calculateLiquidityMetrics } from './liquidityEngine.js';
 
@@ -17,10 +17,10 @@ export function generateVaultVerdict(vault, allocations = []) {
   const mqi = calculateMQI(vault, allocations);
 
   // 2. Herfindahl-Hirschman Concentration Index (HHI) [0.00 - 1.00]
-  const hhi = calculateHHI(vault, allocations);
+  const hhi = calculateHHI(withMaterialUnresolved(vault, mqi), allocations);
 
   // 3. Instant Exit Liquidity
-  const liquidity = calculateLiquidityMetrics(vault, allocations);
+  const liquidity = calculateLiquidityMetrics(withMaterialUnresolved(vault, mqi), allocations);
 
   // 4. Objective, Fact-Based Audit Flags
   const redFlags = [];

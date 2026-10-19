@@ -51,7 +51,7 @@ const V = (n, over = {}) => ({
 });
 const M = (key, over = {}) => ({
   unique_key: key, chain_id: 1, loan_asset_symbol: 'USDC', collateral_asset_address: '0xweth', collateral_asset_symbol: 'WETH',
-  oracle_address: '0xoracle', lltv_percent: 86, total_supply_assets_usd: 2e6, total_borrow_assets_usd: 1.5e6, is_listed: 1,
+  oracle_address: '0xoracle', lltv: '860000000000000000', lltv_percent: 86, total_supply_assets_usd: 2e6, total_borrow_assets_usd: 1.5e6, is_listed: 1,
   warnings_json: '[]', ...over
 });
 const A = (vaultN, market, usd, over = {}) => ({ vault_address: addr(vaultN), market_unique_key: market, supply_assets_usd: usd, supply_assets_human: usd, ...over });

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
-import { calculateMQI, isMarketClean } from '../engine/mqiEngine.js';
+import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
@@ -465,8 +465,8 @@ export function getVaultCatalog() {
     const allocs = allocMap.get(row.address.toLowerCase()) || [];
     const scored = withEffectiveTotal(row, allocs);
     const mqi = calculateMQI(scored, allocs);
-    const hhi = calculateHHI(scored, allocs);
-    const liq = calculateLiquidityMetrics(scored, allocs);
+    const hhi = calculateHHI(withMaterialUnresolved(scored, mqi), allocs);
+    const liq = calculateLiquidityMetrics(withMaterialUnresolved(scored, mqi), allocs);
 
     return {
       address: row.address,
@@ -646,7 +646,8 @@ export function handleGetVaultByAddress(req, res, address) {
           marketUniqueKey: a.market_unique_key,
           loanSymbol: a.loan_asset_symbol,
           collateralSymbol: a.collateral_asset_symbol,
-          lltvPercent: a.lltv_percent,
+          // an LLTV the API did not report is unknown (null), not 0%
+          lltvPercent: a.lltv == null || a.lltv === '' ? null : a.lltv_percent,
           supplyAssetsHuman: a.supply_assets_human,
           supplyAssetsUsd: a.supply_assets_usd,
           weight: a.weight,

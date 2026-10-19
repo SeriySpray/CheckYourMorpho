@@ -66,12 +66,12 @@ export default {
       assert.ok(cols(db, 'vault_allocations').includes('via_vault'));
       for (const t of ['daily_apys', 'vault_snapshots', 'sync_state']) assert.ok(cols(db, t).length > 0, t);
     })],
-    ['мігрує стару схему: наявні рядки отримують значення за замовчуванням, дані збережено', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {
+    ['мігрує стару схему: наявні рядки отримують значення за замовчуванням (liquidity і bad debt невідомі, null), дані збережено', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {
       const db = getDatabase();
       assert.deepEqual({ ...db.prepare("SELECT name, version, liquidity_usd, is_listed, missed_syncs, unresolved_exposure_usd FROM vaults WHERE address = '0xold'").get() },
-        { name: 'Legacy', version: 'v1', liquidity_usd: 0, is_listed: 0, missed_syncs: 0, unresolved_exposure_usd: 0 });
+        { name: 'Legacy', version: 'v1', liquidity_usd: null, is_listed: 0, missed_syncs: 0, unresolved_exposure_usd: 0 });
       assert.deepEqual({ ...db.prepare("SELECT is_listed, oracle_type, bad_debt_usd, realized_bad_debt_usd, warnings_count, warnings_json FROM markets").get() },
-        { is_listed: 1, oracle_type: 'ChainlinkOracleV2', bad_debt_usd: 0, realized_bad_debt_usd: 0, warnings_count: 0, warnings_json: null });
+        { is_listed: 1, oracle_type: 'ChainlinkOracleV2', bad_debt_usd: null, realized_bad_debt_usd: null, warnings_count: 0, warnings_json: null });
       assert.deepEqual({ ...db.prepare('SELECT supply_assets_usd, via_vault FROM vault_allocations').get() }, { supply_assets_usd: 42, via_vault: null });
     })],
     ['мігрує стару схему: індекси на нових колонках створено', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {

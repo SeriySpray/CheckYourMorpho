@@ -117,7 +117,12 @@ function unresolvedUsd(unresolvedRaw, v) {
  * is the vault's price; without any, the vault stays unpriced (0 USD) and the engines report it as unknown.
  */
 export function withResolvedPrice(v, rawMarkets) {
-  if ((Number(v.total_assets_usd) || 0) > 0 || Number(v.asset_price_usd) > 0) return v;
+  if (Number(v.asset_price_usd) > 0) return v;
+  // The API priced the vault total but not the token: the price it implies prices the positions too, so they
+  // do not fall to 0 USD and read as clean cash.
+  const totalUsd = Number(v.total_assets_usd) || 0;
+  const totalHuman = formatUnits(v.total_assets, v.asset_decimals);
+  if (totalUsd > 0) return totalHuman > 0 ? { ...v, asset_price_usd: totalUsd / totalHuman } : v;
   const price = rawMarkets.map(m => Number(m?.loanAsset?.priceUsd)).find(p => p > 0);
   if (!price) return v;
   // A reported USD liquidity of 0 for an asset the API could not price is "not priced", not "nothing withdrawable"

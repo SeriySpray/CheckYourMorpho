@@ -5,6 +5,15 @@ const warn = (...list) => alloc({ warnings_json: JSON.stringify(list.map(([type,
 const dirty = (usd, over = {}) => alloc({ is_listed: 0, supply_assets_usd: usd, market_unique_key: `1:0xbad${usd}`, ...over });
 
 export default {
+  withMaterialUnresolved: [
+    ['підставляє суттєвий нерозкритий капітал з MQI, не мутує vault', ({ withMaterialUnresolved: f, calculateMQI: c }) => {
+      const v = vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 200e3 });
+      const r = f(v, c(v, []));
+      assert.equal(r.unresolved_exposure_usd, 0); assert.equal(v.unresolved_exposure_usd, 200e3);
+      const big = vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 30e6 });
+      assert.equal(f(big, c(big, [])).unresolved_exposure_usd, 30e6);
+    }],
+  ],
   getMaterialityThresholdUsd: [
     ['1% TVL для малого vault', ({ getMaterialityThresholdUsd: f }) => assert.equal(f(1e6), 10000)],
     ['рівно на межі стелі: TVL 25M -> 250K', ({ getMaterialityThresholdUsd: f }) => assert.equal(f(25e6), 250000)],

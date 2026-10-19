@@ -10,6 +10,9 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 
 export default {
   isIdleReserveMarket: [
+    ['нечисловий LLTV невідомий, а не нуль: ринок із заставою не резерв', ({ isIdleReserveMarket: f }) => {
+      assert.equal(f(alloc({ lltv: 'abc', lltv_percent: 0 })), false);
+    }],
     ['NONE-застава з LLTV 0 є резервом', ({ isIdleReserveMarket: f }) =>
       assert.equal(f({ collateral_asset_symbol: 'NONE', lltv_percent: 0 }), true)],
     ['WETH з LLTV 86 не є резервом', ({ isIdleReserveMarket: f }) =>

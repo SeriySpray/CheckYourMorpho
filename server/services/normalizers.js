@@ -195,7 +195,8 @@ export function normalizeMarket(raw, chainId = 1) {
     loan_asset_symbol: loanAsset.symbol || 'LOAN',
     loan_asset_decimals: loanDecimals,
     loan_asset_price_usd: loanPrice,
-    collateral_asset_address: (collateralAsset.address || '').toLowerCase(),
+    // no address but a symbol: the API left the address out, which is unknown (null), not "no collateral" ('')
+    collateral_asset_address: collateralAsset.address == null && collateralAsset.symbol ? null : (collateralAsset.address || '').toLowerCase(),
     // NONE only for a market without a collateral asset; a collateral with an unreported symbol is not a reserve
     collateral_asset_symbol: collateralAsset.symbol || (collateralAsset.address ? 'UNKNOWN' : 'NONE'),
     collateral_asset_decimals: collateralAsset.decimals ?? 18,
