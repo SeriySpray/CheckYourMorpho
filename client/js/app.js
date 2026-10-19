@@ -4,6 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261016_a11y';
+import { initActivity, onFavoritesChanged } from './activity.js?v=20261020_activity1';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -48,6 +49,9 @@ const DOM = {
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
+  explorerActivityBtn: document.getElementById('explorer-activity-btn'),
+  explorerActivityBadge: document.getElementById('explorer-activity-badge'),
+  activityPanel: document.getElementById('activity-panel'),
   explorerFavFilterBtn: document.getElementById('explorer-fav-filter-btn'),
   explorerFavCount: document.getElementById('explorer-fav-count'),
   explorerResetBtn: document.getElementById('explorer-reset-btn'),
@@ -142,6 +146,32 @@ async function initApp() {
 
   // 4. Start Live Periodic Polling (every 60s)
   startLivePolling();
+
+  // 5. Initialize Vault Activity Panel
+  initActivity({
+    apiFetch,
+    getPinnedAddresses,
+    openVaultAudit: (v, pos) => openVaultAudit(v, pos),
+    getVault: (addr) => {
+      const key = (addr || '').toLowerCase();
+      return allVaults.find(v => (v.address || '').toLowerCase() === key) || null;
+    },
+    formatChainName,
+    getChainClass,
+    escapeHtml,
+    DOM: {
+      vaultExplorerWidget: DOM.vaultExplorerWidget,
+      explorerVaultsList: DOM.explorerVaultsList,
+      explorerSearchBox: document.querySelector('.explorer-search-box'),
+      explorerFiltersGrid: document.querySelector('.explorer-filters-grid'),
+      activeFilterChips: DOM.activeFilterChips,
+      explorerHeading: document.querySelector('.explorer-heading'),
+      activityBtn: DOM.explorerActivityBtn,
+      activityBadge: DOM.explorerActivityBadge,
+      activityPanel: DOM.activityPanel
+    },
+    getSphereParticlePos: (addr) => sphere?.getParticleScreenPos?.(addr) || null
+  });
 }
 
 let livePollingTimer = null;
@@ -745,6 +775,7 @@ function togglePinVault(address) {
   updateFavBtnUI(addr);
   renderPinnedRichPills(true);
   renderVaultExplorer();
+  onFavoritesChanged();
 }
 
 function updateFavBtnUI(currentAddress) {
