@@ -1195,8 +1195,9 @@ function renderVaultExplorer() {
     const apyClass = apy < 0 ? 'negative' : '';
 
     const flaggedLabel = mqi === null ? 'Unpriced'
-      : (mqi ?? 100) < 100 ? `${(100 - mqi).toFixed(1)}% Flagged`
-      : `${v.compromisedCount || 1} Flagged`;
+      : v.compromisedCount > 0
+        ? ((mqi ?? 100) < 100 ? `${(100 - mqi).toFixed(1)}% Flagged` : `${v.compromisedCount} Flagged`)
+        : `${v.unresolvedPercent || (100 - (mqi ?? 100)).toFixed(1)}% Unverified`;
     const flaggedBadgeHtml = !isClean
       ? ` • <span class="vault-mini-badge flagged">${flaggedLabel}</span>`
       : '';
@@ -1410,7 +1411,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
   const cacheKey = (vault.address || '').toLowerCase();
   const cachedData = clientAuditCache.get(cacheKey);
   const initialVaultObj = cachedData?.vault ? Object.assign({}, vault, cachedData.vault, {
-    mqiPercent: cachedData.verdict?.mqi?.mqiPercent ?? vault.mqiPercent,
+    mqiPercent: firstDefined(cachedData.verdict?.mqi?.mqiPercent, vault.mqiPercent),
     exitCapPercent: pickExitMetric(cachedData.verdict?.liquidity?.instantExitCapacityPercent, vault.exitCapPercent)
   }) : vault;
   populateBasicVaultInfo(initialVaultObj);
@@ -2162,7 +2163,6 @@ function exitMetric(val) {
   return val === null || val === '' || !Number.isFinite(num) ? null : num;
 }
 
-/** First source that carries the field; an explicit unknown stops the chain instead of falling through. */
 /** Sort key for MQI: unknown first, then ascending; a flagged vault that rounds to 100 sits just below clean ones. */
 function mqiSortKey(v) {
   if (v.mqiPercent === null) return -1;
@@ -2185,6 +2185,7 @@ function mqiBadgeInfo(mqiPercent, isAllClean) {
   return { text: mqiPercent === 100 ? 'Flagged' : `${mqiPercent}% MQI`, clean: false };
 }
 
+/** First source that carries the field; an explicit unknown stops the chain instead of falling through. */
 function pickExitMetric(...vals) {
   for (const val of vals) {
     const metric = exitMetric(val);

@@ -20,6 +20,10 @@ export default {
       assert.equal(f({ collateral_asset_address: '0xabc', collateral_asset_symbol: 'WETH', lltv_percent: 0 }), true)],
     ['реальна застава без поля LLTV не вважається резервом (LLTV невідомий)', ({ isIdleReserveMarket: f }) =>
       assert.equal(f({ collateral_asset_address: '0xabc', collateral_asset_symbol: 'WETH' }), false)],
+    ['символ NONE при відомій реальній адресі застави й LLTV 86 не робить ринок резервом (символ міг бути підставлений)', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_address: '0xabc', collateral_asset_symbol: 'NONE', lltv_percent: 86 }), false)],
+    ['символ NONE без поля адреси (адреса невідома) лишається резервом', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_symbol: 'NONE', lltv_percent: 86 }), true)],
     ['порожній об\'єкт (нічого не відомо) не вважається резервом', ({ isIdleReserveMarket: f }) =>
       assert.equal(f({}), false)],
     ['поле адреси застави відсутнє (не порожнє) з відомим LLTV 86 -> не резерв', ({ isIdleReserveMarket: f }) =>

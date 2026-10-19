@@ -632,6 +632,18 @@ export default {
       assert.equal(inList.mqiPercent, 0);
       assert.equal(detail.verdict.mqi.mqiPercent, inList.mqiPercent);
     })],
+    ['vault без USD-ціни: у списку mqiPercent і exitCapPercent null, isAllClean false, у JSON null (не 100)', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(0x31, { version: 'v1', total_assets: '5000000', total_assets_usd: 0, liquidity_usd: null }));
+      const inList = list(mod).vaults.find(v => v.address === addr(0x31));
+      assert.equal(inList.mqiPercent, null); assert.equal(inList.exitCapPercent, null); assert.equal(inList.isAllClean, false);
+      const detail = getJson(mod, '/api/vaults/' + addr(0x31)).body;
+      assert.equal(detail.verdict.mqi.mqiPercent, null);
+      assert.ok(detail.verdict.redFlags.some(x => x.title === 'Unpriced Vault'));
+    })],
+    ['список віддає unresolvedPercent для vault з нерозкритим капіталом', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(0x32, { version: 'v2', total_assets_usd: 1e6, liquidity_usd: 1e6, unresolved_exposure_usd: 4e5 }));
+      assert.equal(list(mod).vaults.find(v => v.address === addr(0x32)).unresolvedPercent, 40);
+    })],
     ['відповідь містить total/limit/offset/vaults; за замовчуванням limit 500, offset 0', async mod => sandbox(async db => {
       seedCatalog(db);
       const b = list(mod); assert.equal(b.total, 4); assert.equal(b.limit, 500); assert.equal(b.offset, 0); assert.equal(b.vaults.length, 4);

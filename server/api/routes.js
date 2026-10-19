@@ -498,6 +498,7 @@ export function getVaultCatalog() {
       mqiPercent: mqi.mqiPercent,
       isAllClean: mqi.isAllClean,
       compromisedCount: mqi.compromisedMarkets?.length || 0,
+      unresolvedPercent: mqi.unresolvedPercent,
       hhi: hhi.hhi,
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,

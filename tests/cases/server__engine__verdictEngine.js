@@ -16,6 +16,10 @@ const crowd = (S, F, P) => (S < 100e6 ? [mkt(0, S, F, P), mkt(1, 100e6 - S, 0)] 
 
 export default {
   generateVaultVerdict: [
+    ['актив без USD-ціни: немає окремого Unknown Exit Liquidity з хибною причиною "not reported"', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ total_assets_usd: 0, total_assets: '1000000' }), []);
+      assert.equal(flag(r, 'Unknown Exit Liquidity'), undefined);
+    }],
     ['актив без USD-ціни -> прапорець Unpriced Vault, MQI та вихід unknown, жодного "100% clean"', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ total_assets_usd: 0, total_assets: '1000000' }), []);
       assert.equal(flag(r, 'Unpriced Vault').level, 'HIGH');

@@ -70,15 +70,19 @@ export function unresolvedAdapterAssets(rawV2, v1ByAddress) {
       continue;
     }
     // Underlying positions the API reports without a market cannot be attributed: their share of the adapter is unknown
-    const { allocSum, denominator } = underlyingTotals(under);
+    const { denominator } = underlyingTotals(under);
     const noMarket = under.state.allocation.filter(a => !a.market).reduce((acc, a) => acc + toBigInt(a.supplyAssets), 0n);
     if (noMarket > 0n) sum += (noMarket * assets) / denominator;
   }
-  // MorphoMarketV1 positions arrive as market caps; whatever they do not cover is unknown
+  // MorphoMarketV1 positions arrive as market caps; whatever they do not cover is unknown. A cap's allocation
+  // is only refreshed on allocate/deallocate while the adapter's assets accrue interest, so a gap of up to 2%
+  // is interest, not hidden capital.
+  // shortcut: fixed 2% tolerance, make it configurable if a real vault shows a larger accrual gap.
   const capsAllocated = (rawV2.caps?.items || [])
     .filter(cap => cap.data?.market)
     .reduce((acc, cap) => acc + toBigInt(cap.allocation), 0n);
-  if (marketV1Assets > capsAllocated) sum += marketV1Assets - capsAllocated;
+  const gap = marketV1Assets - capsAllocated;
+  if (gap * 50n > marketV1Assets) sum += gap;
   return sum;
 }
 
@@ -113,7 +117,11 @@ export function withResolvedPrice(v, rawMarkets) {
   if ((Number(v.total_assets_usd) || 0) > 0 || Number(v.asset_price_usd) > 0) return v;
   const price = rawMarkets.map(m => Number(m?.loanAsset?.priceUsd)).find(p => p > 0);
   if (!price) return v;
-  return { ...v, asset_price_usd: price, total_assets_usd: formatUnits(v.total_assets, v.asset_decimals) * price };
+  // A reported USD liquidity of 0 for an asset the API could not price is "not priced", not "nothing withdrawable"
+  return {
+    ...v, asset_price_usd: price, total_assets_usd: formatUnits(v.total_assets, v.asset_decimals) * price,
+    liquidity_usd: v.liquidity_usd === 0 ? null : v.liquidity_usd
+  };
 }
 
 /**

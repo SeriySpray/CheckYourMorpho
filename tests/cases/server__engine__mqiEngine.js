@@ -185,6 +185,16 @@ export default {
       const r = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 90e3 }), [dirty(90e3), dirty(0.5, { market_unique_key: '1:0xdust' })]);
       assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.compromisedMarkets[0].marketUniqueKey, '1:0xbad90000');
     }],
+    ['кумулятивне правило: нерозкритий 300K (поріг 250K) робить суттєвим брудний ринок $1M, але не брудний пил $50', ({ calculateMQI: f }) => {
+      const v = vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 300e3 });
+      const r = f(v, [dirty(1e6), dirty(50, { market_unique_key: '1:0xdust' })]);
+      assert.deepEqual(r.compromisedMarkets.map(m => m.marketUniqueKey), ['1:0xbad1000000']);
+      assert.equal(f(v, [dirty(50)]).compromisedMarkets.length, 0);
+    }],
+    ['кумулятивне правило: брудний $1M не робить суттєвим нерозкритий розрив $240 (нижче 10% порога)', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 240 }), [dirty(1e6)]);
+      assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.unresolvedAssetsUsd, 0);
+    }],
     ['негативне постачання вважається нулем і не робить ринок суттєвим', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 10e6 }), [dirty(-5e6)]);
       assert.equal(r.compromisedMarkets.length, 0); assert.equal(r.compromisedAssetsUsd, 0);

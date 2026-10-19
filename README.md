@@ -27,13 +27,13 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 **MQI (Market Quality Index)** is the share of vault capital in clean markets, from 0 to 100%. A market is clean when all of these hold:
 
 - Morpho lists it.
-- Its bad debt and realized bad debt are both under a dust level of $10 or 0.01% of the market's supply, whichever is larger.
-- It has an oracle address (not empty, `0x` or the zero address). Idle 0-LLTV markets are exempt.
+- Its bad debt and realized bad debt, added together, are under a dust level of $10 or 0.01% of the market's supply, whichever is larger.
+- It has an oracle address (not empty, `0x` or the zero address). Idle markets (no collateral asset, or LLTV 0) are exempt.
 - Morpho has not flagged it `not_whitelisted` and has given it no RED warning other than a liquidity warning. Liquidity warnings are left to the exit metrics.
 
-A failing market only lowers MQI when it is material: the allocation is at least 1% of TVL or $250K, whichever is smaller, or all failing allocations together reach that amount. Unallocated cash counts as clean. Capital the sync could not expand (see Limitations) does not: it is treated as unknown and lowers MQI once it is material.
+A failing market only lowers MQI when it is material: the allocation is at least 1% of TVL or $250K, whichever is smaller, or the failing allocations and the capital the sync could not expand (see Limitations) together reach that amount; in that case any single position above a tenth of that amount counts too. Unallocated cash counts as clean. Capital that could not be expanded is treated as unknown and lowers MQI once it is material. A vault that holds assets but has no USD price gets MQI `null` (unknown), not 100%; the price is taken from the vault's own markets when the API omits it.
 
-**HHI (Herfindahl-Hirschman Index)** measures how concentrated the collateral behind the vault's loans is. It groups active allocations by collateral asset and ignores idle 0-LLTV markets. The response also gives the number of effective assets and the top collateral with its share of TVL. A tier needs both the HHI level and a minimum share of TVL in the top collateral:
+**HHI (Herfindahl-Hirschman Index)** measures how concentrated the collateral behind the vault's loans is. It groups active allocations by collateral asset and ignores idle markets (no collateral asset, or LLTV 0). The response also gives the number of effective assets and the top collateral with its share of TVL. A tier needs both the HHI level and a minimum share of TVL in the top collateral:
 
 | Tier | HHI | Top collateral share of TVL |
 |---|---|---|
@@ -44,7 +44,7 @@ A failing market only lowers MQI when it is material: the allocation is at least
 
 A vault with less than 30% of TVL in active collateral is DIVERSIFIED regardless of HHI. A vault with less than 1% is UNALLOCATED and gets no HHI.
 
-**Instant exit** is the share of TVL a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 20% the vault is marked illiquid.
+**Instant exit** is the share of TVL a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, or the vault has no USD price, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 20% the vault is marked illiquid.
 
 **Crowded exit** is the same figure when every other vault in the database that lends to the same markets withdraws at once and free liquidity is shared pro rata. Only peer positions above $1K count, and V2 look-through positions are skipped so the same capital is not counted twice. A market is crowded when the peers' supply is at least its free liquidity, the vault's own exit there drops by more than 30% (or the market has no free liquidity), and the vault's position is over 1% of TVL.
 
@@ -57,7 +57,8 @@ A vault with less than 30% of TVL in active collateral is DIVERSIFIED regardless
 | Elevated Collateral Concentration (tier CONCENTRATED) | MEDIUM |
 | Restricted Exit Liquidity (instant exit under 20%) | HIGH |
 | Critical Crowded Exit Deficit / Elevated Crowded Exit Contagion | CRITICAL / HIGH, depending on how far crowded exit falls below instant exit and how much TVL sits in crowded markets |
-| Unresolved Exposure (capital in adapters that could not be expanded) | HIGH |
+| Unresolved Exposure (capital whose underlying markets could not be resolved) | HIGH |
+| Unpriced Vault (assets without a USD price) | HIGH |
 | Unknown Exit Liquidity (Morpho reported no liquidity figure) | MEDIUM |
 | Negative Net APY | CRITICAL below -5%, otherwise HIGH |
 
@@ -112,5 +113,5 @@ The public instance runs on an Oracle Cloud VM as a systemd service behind nginx
 
 - The analysis is per vault and from the lender's side. There are no user positions, health factors or borrower views.
 - Crowded exit only knows about listed vaults in the database. Direct lenders and unlisted vaults in the same market are not counted as competitors.
-- V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. Their capital is not counted as cash: it is flagged as Unresolved Exposure, lowers MQI once material, and is left out of HHI and of the exit figure.
+- V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. The same holds for V1 positions the API returns without a market, a V1 vault whose allocation is missing, and MorphoMarketV1 assets that the market caps cover by less than 98% (the rest is taken as accrued interest). Such capital is not counted as cash: it is flagged as Unresolved Exposure, lowers MQI once material, and is left out of HHI and of the exit figure.
 - Only the current state is kept. There is no history, no charts over time and no alerts.

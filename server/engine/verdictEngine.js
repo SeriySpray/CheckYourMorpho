@@ -51,7 +51,7 @@ export function generateVaultVerdict(vault, allocations = []) {
     redFlags.push({
       level: 'HIGH',
       title: 'Unresolved Exposure',
-      message: `${unresolvedPct}% of capital ($${(mqi.unresolvedAssetsUsd / 1e6).toFixed(2)}M) is held through adapters whose underlying markets could not be resolved; its quality, concentration and exit liquidity are unknown.`
+      message: `${unresolvedPct}% of capital ($${(mqi.unresolvedAssetsUsd / 1e6).toFixed(2)}M) sits in positions whose underlying markets could not be resolved; its quality, concentration and exit liquidity are unknown.`
     });
   }
 
@@ -71,7 +71,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 3: Severe Exit Liquidity Lockup (null < 20 is true in JS, so unknown exit is handled first)
-  if (liquidity.exitUnknown) {
+  if (liquidity.exitUnknown && !mqi.unpriced) {
     redFlags.push({
       level: 'MEDIUM',
       title: 'Unknown Exit Liquidity',

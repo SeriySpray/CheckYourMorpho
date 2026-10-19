@@ -154,10 +154,11 @@ export function calculateMQI(vault, allocations = []) {
   // Materiality evaluation: a defective or unresolved position counts on its own above 1% TVL (capped), and
   // all of them count once their combined size passes that threshold. Isolated sub-threshold dust stays clean.
   const isCumulativeMaterial = totalCompromisedRawUsd + unresolvedRawUsd >= minMaterialThresholdUsd;
+  // Even then, a position under a tenth of the threshold (at least $1) is dust: it adds a flag, not information
+  const dustFloorUsd = Math.max(1, minMaterialThresholdUsd * 0.1);
 
   for (const item of rawCompromisedItems) {
-    // below $1 is dust even when the cumulative rule fires, so it never appears as a flagged market
-    const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= 1);
+    const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= dustFloorUsd);
     if (isMaterial) {
       compromisedSupplyUsd += item.supplyUsd;
       compromisedMarkets.push({
@@ -173,7 +174,7 @@ export function calculateMQI(vault, allocations = []) {
     }
   }
 
-  const unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && unresolvedRawUsd >= 1)
+  const unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && unresolvedRawUsd >= dustFloorUsd)
     ? unresolvedRawUsd : 0;
 
   // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)

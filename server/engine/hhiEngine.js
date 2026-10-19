@@ -27,7 +27,9 @@ export function isIdleReserveMarket(alloc) {
   const colAddr = alloc.collateral_asset_address == null ? null : alloc.collateral_asset_address.trim().toLowerCase();
   const noCollateralAddress = colAddr !== null && (!colAddr || colAddr === '0x' || colAddr === '0x0000000000000000000000000000000000000000');
   const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
-  return noCollateralAddress || symbol === 'NONE' || symbol === 'IDLE' || (lltvKnown && lltvNum === 0);
+  // The NONE/IDLE symbol only counts when the address is not known: the normalizer also writes NONE for a missing symbol
+  const placeholderSymbol = colAddr === null && (symbol === 'NONE' || symbol === 'IDLE');
+  return noCollateralAddress || placeholderSymbol || (lltvKnown && lltvNum === 0);
 }
 
 /**

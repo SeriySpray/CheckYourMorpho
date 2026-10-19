@@ -307,6 +307,12 @@ export default {
       assert.equal(f({ adapters, caps: { items: [cap('1000')] } }, new Map()), 0n);
       assert.equal(f({ adapters, caps: { items: [cap('600')] } }, new Map()), 400n);
     }],
+    ['MorphoMarketV1: розрив до 2% (нараховані відсотки) не є нерозкритим капіталом, понад 2% є', ({ unresolvedAdapterAssets: f }) => {
+      const cap = a => ({ allocation: a, data: { market: { marketId: '0xA' } } });
+      const adapters = { items: [{ type: 'MorphoMarketV1', assets: '10000' }] };
+      assert.equal(f({ adapters, caps: { items: [cap('9800')] } }, new Map()), 0n);
+      assert.equal(f({ adapters, caps: { items: [cap('9799')] } }, new Map()), 201n);
+    }],
     ['MorphoMarketV1: cap з data: null не покриває нічого, активи нерозкриті', ({ unresolvedAdapterAssets: f }) =>
       assert.equal(f({ adapters: { items: [{ type: 'MorphoMarketV1', assets: '1000' }] }, caps: { items: [{ allocation: '1000', data: null }] } }, new Map()), 1000n)],
     ['базовий V1 з allocation: null -> увесь актив адаптера нерозкритий', ({ unresolvedAdapterAssets: f }) => {
@@ -336,6 +342,13 @@ export default {
     ['ціни немає, але ринок кредитує той самий токен -> ціна й TVL з ринку (2 * 3 = 6)', ({ withResolvedPrice: f }) => {
       const r = f({ total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 }, [null, { loanAsset: { priceUsd: 0 } }, { loanAsset: { priceUsd: 3 } }]);
       assert.equal(r.asset_price_usd, 3); assert.equal(r.total_assets_usd, 6);
+    }],
+    ['нульова USD-ліквідність непризначеного активу стає невідомою (null), ненульова лишається', ({ withResolvedPrice: f }) => {
+      const base = { total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 };
+      const markets = [{ loanAsset: { priceUsd: 3 } }];
+      assert.equal(f({ ...base, liquidity_usd: 0 }, markets).liquidity_usd, null);
+      assert.equal(f({ ...base, liquidity_usd: 4 }, markets).liquidity_usd, 4);
+      assert.equal(f({ ...base, liquidity_usd: null }, markets).liquidity_usd, null);
     }],
     ['жодного ринку з ціною -> vault лишається без ціни', ({ withResolvedPrice: f }) => {
       const v = { total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 };
