@@ -27,9 +27,9 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 **MQI (Market Quality Index)** is the share of vault capital in clean markets, from 0 to 100%. A market is clean when all of these hold:
 
 - Morpho lists it.
-- Its bad debt and realized bad debt, added together, are under a dust level of $10 or 0.01% of the market's supply, whichever is larger.
+- Its bad debt and realized bad debt, added together, are under a dust level of $10 or 0.01% of the market's supply, whichever is larger. If the API does not report them, the market counts as unverified, not as debt free.
 - It has an oracle address (not empty, `0x` or the zero address). Idle markets (no collateral asset, or LLTV 0) are exempt.
-- Morpho has not flagged it `not_whitelisted` and has given it no RED warning other than a liquidity warning. Liquidity warnings are left to the exit metrics.
+- Morpho has not flagged it `not_whitelisted` and has given it no RED warning other than a liquidity warning. Liquidity warnings are left to the exit metrics. Warnings the API did not report, or that cannot be read, also fail the check.
 
 A failing market only lowers MQI when it is material: the allocation is at least 1% of TVL or $250K, whichever is smaller, or the failing allocations and the capital the sync could not expand (see Limitations) together reach that amount; in that case any single position above a tenth of that amount counts too. Unallocated cash counts as clean. Capital that could not be expanded is treated as unknown and lowers MQI once it is material. A vault that holds assets but has no USD price gets MQI `null` (unknown), not 100%; the price is taken from the vault's own markets when the API omits it.
 

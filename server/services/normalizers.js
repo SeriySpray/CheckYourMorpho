@@ -177,8 +177,11 @@ export function normalizeMarket(raw, chainId = 1) {
   const borrowHuman = formatUnits(state.borrowAssets, loanDecimals);
   const freeLiquidityAssets = Math.max(0, supplyHuman - borrowHuman);
 
-  const loanPrice = loanAsset.priceUsd ?? 1;
+  // An unreported loan price stays 0 (unknown), never a guessed $1
+  const loanPrice = Number(loanAsset.priceUsd) > 0 ? Number(loanAsset.priceUsd) : 0;
   const freeLiquidityUsd = freeLiquidityAssets * loanPrice;
+  // USD totals the API omitted are priced from the token amount when the loan price is known, else unknown (0)
+  const usdOf = (reportedUsd, human) => reportedUsd ?? human * loanPrice;
 
   let utilization = 0;
   if (supplyHuman > 0) {
@@ -203,9 +206,9 @@ export function normalizeMarket(raw, chainId = 1) {
     lltv: raw.lltv == null ? '' : String(raw.lltv),
     lltv_percent: lltvPercent,
     total_supply_assets: String(state.supplyAssets || '0'),
-    total_supply_assets_usd: state.supplyAssetsUsd ?? 0,
+    total_supply_assets_usd: usdOf(state.supplyAssetsUsd, supplyHuman),
     total_borrow_assets: String(state.borrowAssets || '0'),
-    total_borrow_assets_usd: state.borrowAssetsUsd ?? 0,
+    total_borrow_assets_usd: usdOf(state.borrowAssetsUsd, borrowHuman),
     free_liquidity_assets: freeLiquidityAssets,
     free_liquidity_usd: freeLiquidityUsd,
     utilization: utilization,
@@ -213,10 +216,11 @@ export function normalizeMarket(raw, chainId = 1) {
     supply_apy: state.supplyApy ?? 0,
     is_listed: raw.listed === true ? 1 : 0,
     oracle_type: oracle.type || 'ChainlinkOracleV2',
-    bad_debt_usd: Number(raw.badDebt?.usd) || 0,
-    realized_bad_debt_usd: Number(raw.realizedBadDebt?.usd) || 0,
+    // null = the API did not report it; the MQI treats unreported bad debt and warnings as unverified, not as none
+    bad_debt_usd: raw.badDebt?.usd == null ? null : Number(raw.badDebt.usd) || 0,
+    realized_bad_debt_usd: raw.realizedBadDebt?.usd == null ? null : Number(raw.realizedBadDebt.usd) || 0,
     warnings_count: Array.isArray(raw.warnings) ? raw.warnings.length : 0,
-    warnings_json: JSON.stringify(raw.warnings || []),
+    warnings_json: Array.isArray(raw.warnings) ? JSON.stringify(raw.warnings) : null,
     updated_at: Math.floor(Date.now() / 1000)
   };
 }

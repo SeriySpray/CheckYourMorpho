@@ -15,6 +15,17 @@ export default {
     }],
   ],
   isMarketClean: [
+    ['bad debt, якого API не повернуло (null), -> ринок не підтверджений, не "без боргу"', ({ isMarketClean: f }) => {
+      assert.deepEqual(f(alloc({ bad_debt_usd: null })).reasons, ['Bad debt data not reported']);
+      assert.equal(f(alloc({ realized_bad_debt_usd: null })).isClean, false);
+    }],
+    ['відсутнє поле bad debt у фікстурі (undefined) лишається чистим, 0 теж', ({ isMarketClean: f }) => {
+      assert.equal(f(alloc()).isClean, true); assert.equal(f(alloc({ bad_debt_usd: 0, realized_bad_debt_usd: 0 })).isClean, true);
+    }],
+    ['попередження: null, зіпсований JSON і не масив -> не підтверджено; "[]" -> чисто', ({ isMarketClean: f }) => {
+      for (const bad of [null, '{oops', '{"a":1}']) assert.deepEqual(f(alloc({ warnings_json: bad })).reasons, ['Protocol warnings not available']);
+      assert.equal(f(alloc({ warnings_json: '[]' })).isClean, true);
+    }],
     ['unrealized і realized bad debt сумуються: 6 + 6 при пилі 10 -> брудний, 5 + 4 -> чистий', ({ isMarketClean: f }) => {
       assert.equal(f(alloc({ total_supply_assets_usd: 0, bad_debt_usd: 6, realized_bad_debt_usd: 6 })).isClean, false);
       assert.equal(f(alloc({ total_supply_assets_usd: 0, bad_debt_usd: 5, realized_bad_debt_usd: 4 })).isClean, true);
@@ -73,12 +84,12 @@ export default {
       assert.equal(f(warn(['unrecognized_collateral_asset', 'YELLOW'])).isClean, true)],
     ['warnings_json як масив (не рядок) теж перевіряється', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ warnings_json: [{ type: 'not_whitelisted', level: 'YELLOW' }] })).isClean, false)],
-    ['зіпсований JSON попереджень не кидає виняток і ринок чистий', ({ isMarketClean: f }) =>
-      assert.equal(f(alloc({ warnings_json: '{bad' })).isClean, true)],
-    ['warnings_json "null" не має кидати виняток, ринок чистий', ({ isMarketClean: f }) =>
-      assert.equal(f(alloc({ warnings_json: 'null' })).isClean, true)],
-    ['warnings_json "{}" не має кидати виняток, ринок чистий', ({ isMarketClean: f }) =>
-      assert.equal(f(alloc({ warnings_json: '{}' })).isClean, true)],
+    ['зіпсований JSON попереджень не кидає виняток, але ринок не підтверджений', ({ isMarketClean: f }) =>
+      assert.equal(f(alloc({ warnings_json: '{bad' })).isClean, false)],
+    ['warnings_json "null" не кидає виняток, але ринок не підтверджений', ({ isMarketClean: f }) =>
+      assert.equal(f(alloc({ warnings_json: 'null' })).isClean, false)],
+    ['warnings_json "{}" не кидає виняток, але ринок не підтверджений', ({ isMarketClean: f }) =>
+      assert.equal(f(alloc({ warnings_json: '{}' })).isClean, false)],
     ['null-елемент у масиві попереджень не має кидати виняток', ({ isMarketClean: f }) =>
       assert.equal(f(alloc({ warnings_json: '[null]' })).isClean, true)],
     ['усі чотири порушення -> чотири причини', ({ isMarketClean: f }) => {

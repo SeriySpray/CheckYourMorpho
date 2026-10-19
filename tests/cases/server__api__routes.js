@@ -119,7 +119,7 @@ function seedCrowded(db) {
 
 // F: 60% у чистому ринку, 39.5% + 0.5% у нелістингованих (сукупно матеріально). G: лише 0.5% пилу в нелістингованому.
 function seedQuality(db) {
-  ins(db, 'markets', M('clean', { total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0, oracle_type: null, bad_debt_usd: null }));
+  ins(db, 'markets', M('clean', { total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0, oracle_type: null }));
   ins(db, 'markets', M('unl', { is_listed: 0, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0 }));
   ins(db, 'markets', M('unl2', { is_listed: 0, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0 }));
   ins(db, 'vaults', V(0x20, { total_assets_usd: 1e6 }));

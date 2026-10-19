@@ -144,6 +144,24 @@ export default {
     }],
   ],
   normalizeMarket: [
+    ['bad debt і попередження, яких API не повернуло, -> null (невідомо), а не 0 / "[]"', ({ normalizeMarket: f }) => {
+      const r = f({ marketId: '0xM' });
+      assert.equal(r.bad_debt_usd, null); assert.equal(r.realized_bad_debt_usd, null); assert.equal(r.warnings_json, null);
+    }],
+    ['повернуті bad debt 0 і порожні попередження -> 0 і "[]"', ({ normalizeMarket: f }) => {
+      const r = f({ marketId: '0xM', badDebt: { usd: 0 }, realizedBadDebt: { usd: 5 }, warnings: [] });
+      assert.equal(r.bad_debt_usd, 0); assert.equal(r.realized_bad_debt_usd, 5); assert.equal(r.warnings_json, '[]');
+    }],
+    ['ціна позичального активу не повернута -> 0 USD вільної ліквідності, не вигадані $1', ({ normalizeMarket: f }) => {
+      const r = f({ marketId: '0xM', loanAsset: { decimals: 6 }, state: { supplyAssets: '2000000', borrowAssets: '1000000' } });
+      assert.equal(r.loan_asset_price_usd, 0); assert.equal(r.free_liquidity_usd, 0);
+    }],
+    ['USD постачання/боргу не повернуті, але ціна відома -> рахуються з кількості (2 * 3 = 6, 1 * 3 = 3)', ({ normalizeMarket: f }) => {
+      const r = f({ marketId: '0xM', loanAsset: { decimals: 6, priceUsd: 3 }, state: { supplyAssets: '2000000', borrowAssets: '1000000' } });
+      assert.equal(r.total_supply_assets_usd, 6); assert.equal(r.total_borrow_assets_usd, 3);
+    }],
+    ['повернуті USD постачання лишаються як є, навіть 0', ({ normalizeMarket: f }) =>
+      assert.equal(f({ marketId: '0xM', loanAsset: { decimals: 6, priceUsd: 3 }, state: { supplyAssets: '2000000', supplyAssetsUsd: 0 } }).total_supply_assets_usd, 0)],
     ['застава з адресою, але без символу -> UNKNOWN, не NONE (інакше стала б резервом)', ({ normalizeMarket: f }) =>
       assert.equal(f({ marketId: '0xM', collateralAsset: { address: '0xABC' } }).collateral_asset_symbol, 'UNKNOWN')],
     ['ринок без застави -> NONE', ({ normalizeMarket: f }) =>
@@ -163,10 +181,10 @@ export default {
       const r = f({ loanAsset: { decimals: 6 }, state: { supplyAssets: '0', borrowAssets: '0' } });
       assert.equal(r.utilization, 0); assert.equal(r.free_liquidity_assets, 0); assert.equal(r.free_liquidity_usd, 0);
     }],
-    ['вільна ліквідність у USD: без ціни 1$ (2), з ціною 2$ (4), з нульовою ціною 0', ({ normalizeMarket: f }) => {
+    ['вільна ліквідність у USD: без ціни 0 (невідомо), з ціною 2$ (4), з нульовою ціною 0', ({ normalizeMarket: f }) => {
       const st = { supplyAssets: '3000000', borrowAssets: '1000000' };
       const a = f({ loanAsset: { decimals: 6 }, state: st });
-      assert.equal(a.free_liquidity_usd, 2); assert.equal(a.loan_asset_price_usd, 1); assert.equal(a.utilization, 1 / 3);
+      assert.equal(a.free_liquidity_usd, 0); assert.equal(a.loan_asset_price_usd, 0); assert.equal(a.utilization, 1 / 3);
       assert.equal(f({ loanAsset: { decimals: 6, priceUsd: 2 }, state: st }).free_liquidity_usd, 4);
       assert.equal(f({ loanAsset: { decimals: 6, priceUsd: 0 }, state: st }).free_liquidity_usd, 0);
     }],
@@ -174,9 +192,9 @@ export default {
       const r = f({ state: { supplyAssets: '5000000000000000000', borrowAssets: '0' } });
       assert.equal(r.free_liquidity_assets, 5); assert.equal(r.loan_asset_decimals, 18); assert.equal(r.collateral_asset_decimals, 18);
     }],
-    ['bad debt парситься з рядка, null -> 0', ({ normalizeMarket: f }) => {
+    ['bad debt парситься з рядка, null -> null (не повернуто)', ({ normalizeMarket: f }) => {
       const r = f({ badDebt: { usd: '12.5' }, realizedBadDebt: { usd: null } });
-      assert.equal(r.bad_debt_usd, 12.5); assert.equal(r.realized_bad_debt_usd, 0);
+      assert.equal(r.bad_debt_usd, 12.5); assert.equal(r.realized_bad_debt_usd, null);
     }],
     ['ключ ринку містить chainId', ({ normalizeMarket: f }) => assert.equal(f({ marketId: '0xAB' }, 8453).unique_key, '8453:0xab')],
     ['warnings рахуються і серіалізуються', ({ normalizeMarket: f }) => {

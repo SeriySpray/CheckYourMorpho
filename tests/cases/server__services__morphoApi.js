@@ -198,6 +198,11 @@ export default {
       await assert.rejects(noRetries(() => withFetch(async () => page('vaults', [{ address: '0xa', asset: {} }]), () => f())), /Incomplete vaults item 0xa/);
       await assert.rejects(noRetries(() => withFetch(async () => page('vaults', [{ address: '0xb', state: {} }]), () => f())), /Incomplete vaults item 0xb/);
     }],
+    ['vault без chain.id -> помилка Incomplete, а не мовчазна Ethereum', async ({ fetchAllVaults: f }) => {
+      const item = { address: '0xc', state: {}, asset: {} };
+      await assert.rejects(noRetries(() => withFetch(async () => page('vaults', [item]), () => f())), /Incomplete vaults item 0xc/);
+      assert.equal((await noRetries(() => withFetch(async () => page('vaults', [{ ...item, chain: { id: 8453 } }]), () => f()))).length, 1);
+    }],
   ],
   fetchAllVaultV2s: [
     ['некоректна відповідь -> Malformed vaultV2s', async ({ fetchAllVaultV2s: f }) => {
@@ -212,9 +217,9 @@ export default {
       await withFetch(async (_u, init) => { vars = JSON.parse(init.body).variables; return page('vaultV2s', []); }, () => f([999]));
       assert.equal(vars.first, 10); assert.deepEqual(vars.where, { listed: true, chainId_in: [999] });
     }],
-    ['V2 без totalAssets, caps, adapters або asset -> помилка Incomplete; totalAssets "0" допустимий', async ({ fetchAllVaultV2s: f }) => {
-      const ok = { address: '0xok', asset: {}, totalAssets: '0', caps: { items: [] }, adapters: { items: [] } };
-      for (const miss of ['asset', 'totalAssets', 'caps', 'adapters']) {
+    ['V2 без totalAssets, caps, adapters, asset або chain -> помилка Incomplete; totalAssets "0" допустимий', async ({ fetchAllVaultV2s: f }) => {
+      const ok = { address: '0xok', asset: {}, chain: { id: 1 }, totalAssets: '0', caps: { items: [] }, adapters: { items: [] } };
+      for (const miss of ['asset', 'chain', 'totalAssets', 'caps', 'adapters']) {
         const item = { ...ok, address: `0x${miss}`, [miss]: null };
         await assert.rejects(noRetries(() => withFetch(async () => page('vaultV2s', [item]), () => f())), new RegExp(`Incomplete vaultV2s item 0x${miss}`));
       }

@@ -49,6 +49,10 @@ export function isMarketClean(market) {
   // market supply) so a historical sub-0.01% write-off does not taint a large market forever.
   const badDebtUsd = Number(market.bad_debt_usd || 0);
   const realizedBadDebtUsd = Number(market.realized_bad_debt_usd || 0);
+  // null = the API did not report it (an absent field on a plain object, as in fixtures, is not reported either way)
+  if (market.bad_debt_usd === null || market.realized_bad_debt_usd === null) {
+    reasons.push('Bad debt data not reported');
+  }
   const badDebtDustUsd = Math.max(10, (Number(market.total_supply_assets_usd) || 0) * 0.0001);
   const totalBadDebt = badDebtUsd + realizedBadDebtUsd;
   if (totalBadDebt > badDebtDustUsd) {
@@ -70,13 +74,18 @@ export function isMarketClean(market) {
   // Check 4: Protocol Warnings
   const warningsCount = Number(market.warnings_count || 0);
   let warningsJson = [];
+  let warningsUnreadable = market.warnings_json === null;
   try {
     if (typeof market.warnings_json === 'string' && market.warnings_json) {
       warningsJson = JSON.parse(market.warnings_json);
+      warningsUnreadable = !Array.isArray(warningsJson);
     } else if (Array.isArray(market.warnings_json)) {
       warningsJson = market.warnings_json;
     }
-  } catch {}
+  } catch {
+    warningsUnreadable = true;
+  }
+  if (warningsUnreadable) reasons.push('Protocol warnings not available');
 
   // Liquidity warnings (low_liquidity, sustained_low_liquidity) describe exit risk, not market integrity,
   // and are covered by the liquidity engine. Only RED integrity warnings or non-whitelisted markets compromise.
