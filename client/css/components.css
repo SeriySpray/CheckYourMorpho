@@ -830,6 +830,14 @@
   transition: color 0.2s ease;
 }
 
+.meter-note {
+  margin-top: 3px;
+  font-size: 10px;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
 .twr-metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2201,4 +2209,22 @@ button:focus-visible,
     position: absolute;
     inset: -10px;
   }
+}
+
+#risk-mix-popover {
+  bottom: auto;
+  top: calc(100% + 10px);
+  transform: translateY(-4px) scale(0.97);
+}
+
+#risk-mix-popover::after {
+  top: auto;
+  bottom: 100%;
+  border-color: transparent transparent rgba(255, 255, 255, 0.15) transparent;
+}
+
+.info-circle-wrap:hover #risk-mix-popover,
+.info-circle-btn:focus-visible ~ #risk-mix-popover,
+.info-circle-btn.active ~ #risk-mix-popover {
+  transform: translateY(0) scale(1);
 }

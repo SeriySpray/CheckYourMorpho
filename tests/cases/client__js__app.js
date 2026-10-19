@@ -1519,7 +1519,7 @@ const base = {
       assert.equal(D.overviewMarketsCount.textContent, '0 MARKETS');
       assert.equal(D.riskMqiPct.textContent, '100%'); assert.equal(D.riskMqiBar.style.width, '100%');
       assert.equal(D.riskMqiDesc.textContent, '100% of capital is deployed in verified, non-defaulted markets');
-      assert.equal(D.riskMixVal.textContent, '12.5% high-risk'); assert.equal(D.riskMixBar.style.width, '13%');
+      assert.equal(D.riskMixVal.textContent, '87.5%'); assert.equal(D.riskMixBar.style.width, '88%');
       assert.equal(D.riskMixDesc.textContent, 'ETH and ETH staking derivatives 50%, BTC and BTC wrappers 25% of total capital');
       assert.equal(D.riskEffectiveAssets.textContent, '2 collateral classes');
       assert.equal(collateral.length, 2);
@@ -1567,9 +1567,9 @@ const base = {
       assert.equal(D.riskMixDesc.textContent, 'No active collateral backing');
       f(audit({}, { collateral: { unverifiedPercent: 10, highPercent: 150 } }));
       assert.equal(D.riskMixDesc.textContent, 'ETH and ETH staking derivatives 50%, BTC and BTC wrappers 25% of verified capital');
-      assert.equal(D.riskMixBar.style.width, '100%');
+      assert.equal(D.riskMixBar.style.width, '0%'); assert.equal(D.riskMixVal.textContent, '0%');
       f(audit({}, { collateral: { classes: [] } }));
-      assert.equal(D.riskMixDesc.textContent, 'Share of capital lent against high-risk collateral classes');
+      assert.equal(D.riskMixDesc.textContent, 'Share of capital outside high-risk collateral classes');
       assert.equal(D.riskEffectiveAssets.textContent, '0 collateral classes');
     }),
     T('невідомий вихід: Exit Cap N/A, поповер без оцінки, стан виходу null', ({ populateAuditModal: f, __state: s }) => {

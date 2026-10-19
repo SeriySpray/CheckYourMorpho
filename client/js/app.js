@@ -1865,10 +1865,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const mix = verdict.collateral || {};
   const mixClasses = mix.classes || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
-  const highRiskPct = mix.highPercent ?? 0;
+  // inverted so a fuller bar is better, like the other meters
+  const safePct = Math.round(Math.max(0, 100 - (mix.highPercent ?? 0)) * 100) / 100;
 
-  if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${highRiskPct}% high-risk`;
-  if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(highRiskPct))}%`;
+  if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${safePct}%`;
+  if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.round(safePct)}%`;
   if (DOM.riskMixDesc) {
     if (isUnallocated) {
       DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
@@ -1876,7 +1877,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
       const top = mixClasses.slice(0, 3).map(c => `${c.label} ${c.percent}%`).join(', ');
       DOM.riskMixDesc.textContent = top
         ? `${top} of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`
-        : 'Share of capital lent against high-risk collateral classes';
+        : 'Share of capital outside high-risk collateral classes';
     }
   }
 
