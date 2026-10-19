@@ -27,9 +27,16 @@ export function generateVaultVerdict(vault, allocations = []) {
 
   // Flag 1: Compromised or Defaulted Markets (material allocations, see mqiEngine materiality rule).
   // Tested on the list itself: mqiPercent is rounded to 0.1 and can read 100 for a real but small share.
+  if (mqi.unpriced) {
+    redFlags.push({
+      level: 'HIGH',
+      title: 'Unpriced Vault',
+      message: 'The vault holds assets but no USD price is available for them, so market quality, concentration and exit liquidity cannot be measured.'
+    });
+  }
+
   if (mqi.compromisedMarkets.length > 0) {
-    const totalUsd = mqi.cleanAssetsUsd + mqi.compromisedAssetsUsd;
-    const compromisedPct = totalUsd > 0 ? Math.round((mqi.compromisedAssetsUsd / totalUsd) * 10000) / 100 : 0;
+    const compromisedPct = mqi.compromisedPercent;
     const reasonsSummary = mqi.compromisedMarkets.map(m => `${m.collateralSymbol}/${m.loanSymbol} (${m.weightPercent}% TVL): ${m.reasons.join(', ')}`).join('; ');
     redFlags.push({
       level: 'CRITICAL',
@@ -40,8 +47,7 @@ export function generateVaultVerdict(vault, allocations = []) {
 
   // Flag 1b: Material capital behind V2 adapters whose markets could not be resolved (see mqiEngine)
   if (mqi.unresolvedAssetsUsd > 0) {
-    const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
-    const unresolvedPct = totalAssetsUsd > 0 ? Math.round((mqi.unresolvedAssetsUsd / totalAssetsUsd) * 1000) / 10 : 0;
+    const unresolvedPct = mqi.unresolvedPercent;
     redFlags.push({
       level: 'HIGH',
       title: 'Unresolved Exposure',
@@ -132,9 +138,10 @@ export function generateVaultVerdict(vault, allocations = []) {
   if (liquidity.isCrowded) {
     exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
   }
+  const mqiText = mqi.mqiPercent == null ? 'unknown (no USD price)' : `${mqi.mqiPercent}% clean capital`;
   let summary = hhi.tier === 'UNALLOCATED'
-    ? `MQI: ${mqi.mqiPercent}% clean capital. Concentration: N/A. ${exitSummary}.`
-    : `MQI: ${mqi.mqiPercent}% clean capital. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;
+    ? `MQI: ${mqiText}. Concentration: N/A. ${exitSummary}.`
+    : `MQI: ${mqiText}. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;
 
   return {
     vaultAddress: vault.address,

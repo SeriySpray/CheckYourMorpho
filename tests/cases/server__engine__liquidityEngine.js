@@ -9,6 +9,14 @@ const mkt = (i, supply, free, peer = 0, over = {}) => alloc({
 
 export default {
   calculateLiquidityMetrics: [
+    ['актив без USD-ціни -> вихід невідомий (null), не 100%', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ total_assets_usd: 0, total_assets: '1000' }), []);
+      assert.equal(r.exitUnknown, true); assert.equal(r.instantExitCapacityPercent, null); assert.equal(r.stressedExitCapacityPercent, null);
+    }],
+    ['порожній vault (total_assets 0) лишається 100% і відомим', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ total_assets_usd: 0, total_assets: '0' }), []);
+      assert.equal(r.exitUnknown, false); assert.equal(r.instantExitCapacityPercent, 100);
+    }],
     ['нульовий TVL -> 100% і не crowded', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault({ total_assets_usd: 0 }), []);
       assert.equal(r.instantExitCapacityPercent, 100); assert.equal(r.stressedExitCapacityPercent, 100);

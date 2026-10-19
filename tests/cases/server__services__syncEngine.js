@@ -247,6 +247,39 @@ export default {
       const u = a => db.prepare('SELECT unresolved_exposure_usd AS u FROM vaults WHERE address = ?').get(a).u;
       assert.equal(u('0xbbb'), 300); assert.equal(u('0xaaa'), 0);
     })],
+    ['V1 з allocation: null -> увесь TVL нерозкритий (1000), а не чистий кеш', async mod => sandbox(async db => {
+      const noAlloc = rawV1('0xaaa', { state: { ...rawV1('0xaaa').state, allocation: null } });
+      await sync(mod, newApi([noAlloc]));
+      assert.equal(db.prepare('SELECT unresolved_exposure_usd AS u FROM vaults WHERE address = ?').get('0xaaa').u, 1000);
+    })],
+    ['V1 з позицією без ринку (400 із 1000) -> 400 нерозкрито', async mod => sandbox(async db => {
+      const base = rawV1('0xaaa').state;
+      const v = rawV1('0xaaa', { state: { ...base, allocation: [...base.allocation, { supplyAssets: '400000000', supplyAssetsUsd: 400, market: null }] } });
+      await sync(mod, newApi([v]));
+      assert.equal(db.prepare('SELECT unresolved_exposure_usd AS u FROM vaults WHERE address = ?').get('0xaaa').u, 400);
+    })],
+    ['V2 з MorphoMarketV1-адаптером на 500 без caps -> 500 нерозкрито', async mod => sandbox(async db => {
+      const v2 = rawV2('0xbbb', '0xm9', { caps: { items: [] }, adapters: { items: [{ type: 'MorphoMarketV1', assets: '500000000' }] } });
+      await sync(mod, newApi([], [v2]));
+      assert.equal(db.prepare('SELECT unresolved_exposure_usd AS u FROM vaults WHERE address = ?').get('0xbbb').u, 500);
+    })],
+    ['V2 без ціни активу бере ціну з ринків і рахує нерозкрите в USD (500 * 1)', async mod => sandbox(async db => {
+      const v2 = rawV2('0xbbb', '0xm9', {
+        asset: { ...asset('USDC'), priceUsd: null }, totalAssetsUsd: null, totalAssets: '1000000000',
+        caps: { items: [{ allocation: '500000000', absoluteCap: '0', data: { market: rawMarket('0xm9') } }] },
+        adapters: { items: [{ type: 'MorphoMarketV1', assets: '1000000000' }] }
+      });
+      await sync(mod, newApi([], [v2]));
+      const row = db.prepare('SELECT asset_price_usd AS p, total_assets_usd AS t, unresolved_exposure_usd AS u FROM vaults WHERE address = ?').get('0xbbb');
+      assert.equal(row.p, 1); assert.equal(row.t, 1000); assert.equal(row.u, 500);
+    })],
+    ['V1 без жодної ціни лишається з total_assets_usd 0 (unpriced), алокації 0 USD', async mod => sandbox(async db => {
+      const noPrice = { ...asset('USDC'), priceUsd: null };
+      const v = rawV1('0xaaa', { asset: noPrice, state: { totalAssets: '1000000000', curator: '0x0', allocation: [{ supplyAssets: '600000000', market: rawMarket('0xm1', { loanAsset: noPrice }) }] } });
+      await sync(mod, newApi([v]));
+      assert.equal(db.prepare('SELECT total_assets_usd AS t FROM vaults WHERE address = ?').get('0xaaa').t, 0);
+      assert.equal(db.prepare('SELECT supply_assets_usd AS s FROM vault_allocations WHERE vault_address = ?').get('0xaaa').s, 0);
+    })],
     ['C2: V1 без liquidity в API -> liquidity_usd NULL, із liquidity.usd 0 -> 0', async mod => sandbox(async db => {
       await sync(mod, newApi([rawV1('0xaaa'), rawV1('0xccc', { liquidity: { usd: 0 } })]));
       const l = a => db.prepare('SELECT liquidity_usd AS l FROM vaults WHERE address = ?').get(a).l;
@@ -254,7 +287,7 @@ export default {
     })],
   ],
   unresolvedAdapterAssets: [
-    ['MetaMorpho поза v1ByAddress, MetaMorpho з порожнім базовим і невідомий тип рахуються; MorphoMarketV1 і розв\'язаний - ні', ({ unresolvedAdapterAssets: f }) => {
+    ['MetaMorpho поза v1ByAddress, MetaMorpho з порожнім базовим, невідомий тип і MorphoMarketV1 без caps рахуються; розв\'язаний - ні', ({ unresolvedAdapterAssets: f }) => {
       const under = { address: '0xu', state: { totalAssets: '100', allocation: [{ supplyAssets: '100', market: { marketId: '0xA' } }] } };
       const empty = { address: '0xe', state: { totalAssets: '0', allocation: [] } };
       const items = [
@@ -265,9 +298,49 @@ export default {
         { type: 'MetaMorpho', assets: '500', metaMorpho: { address: '0xU' } },
         { type: 'Other', assets: '0' },
       ];
-      assert.equal(f({ adapters: { items } }, new Map([['0xu', under], ['0xe', empty]])), 70n);
+      assert.equal(f({ adapters: { items } }, new Map([['0xu', under], ['0xe', empty]])), 1070n);
     }],
     ['без адаптерів -> 0n', ({ unresolvedAdapterAssets: f }) => assert.equal(f({}, new Map()), 0n)],
+    ['MorphoMarketV1: caps покривають усі активи -> 0, покривають частину -> лишок', ({ unresolvedAdapterAssets: f }) => {
+      const cap = a => ({ allocation: a, data: { market: { marketId: '0xA' } } });
+      const adapters = { items: [{ type: 'MorphoMarketV1', assets: '1000' }] };
+      assert.equal(f({ adapters, caps: { items: [cap('1000')] } }, new Map()), 0n);
+      assert.equal(f({ adapters, caps: { items: [cap('600')] } }, new Map()), 400n);
+    }],
+    ['MorphoMarketV1: cap з data: null не покриває нічого, активи нерозкриті', ({ unresolvedAdapterAssets: f }) =>
+      assert.equal(f({ adapters: { items: [{ type: 'MorphoMarketV1', assets: '1000' }] }, caps: { items: [{ allocation: '1000', data: null }] } }, new Map()), 1000n)],
+    ['базовий V1 з allocation: null -> увесь актив адаптера нерозкритий', ({ unresolvedAdapterAssets: f }) => {
+      const under = { address: '0xu', state: { totalAssets: '100', allocation: null } };
+      assert.equal(f({ adapters: { items: [{ type: 'MetaMorpho', assets: '40', metaMorpho: { address: '0xu' } }] } }, new Map([['0xu', under]])), 40n);
+    }],
+    ['позиції базового V1 без ринку: їхня частка адаптера нерозкрита (25 зі 100 -> 10 із 40)', ({ unresolvedAdapterAssets: f }) => {
+      const under = { address: '0xu', state: { totalAssets: '100', allocation: [{ supplyAssets: '75', market: { marketId: '0xA' } }, { supplyAssets: '25', market: null }] } };
+      assert.equal(f({ adapters: { items: [{ type: 'MetaMorpho', assets: '40', metaMorpho: { address: '0xu' } }] } }, new Map([['0xu', under]])), 10n);
+    }],
+  ],
+  unresolvedV1Assets: [
+    ['allocation: null -> увесь totalAssets нерозкритий', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '900', allocation: null } }), 900n)],
+    ['allocation відсутня -> увесь totalAssets', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '900' } }), 900n)],
+    ['порожній масив allocation -> 0 (кеш, а не невідомість)', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '900', allocation: [] } }), 0n)],
+    ['позиції без ринку сумуються, позиції з ринком ні', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '900', allocation: [{ supplyAssets: '100', market: null }, { supplyAssets: '50', market: { marketId: '0xA' } }, { supplyAssets: '30', market: null }] } }), 130n)],
+  ],
+  withResolvedPrice: [
+    ['є total_assets_usd -> vault без змін', ({ withResolvedPrice: f }) => {
+      const v = { total_assets: '1000000', asset_decimals: 6, total_assets_usd: 5, asset_price_usd: 5 };
+      assert.equal(f(v, [{ loanAsset: { priceUsd: 9 } }]), v);
+    }],
+    ['ціни немає, але ринок кредитує той самий токен -> ціна й TVL з ринку (2 * 3 = 6)', ({ withResolvedPrice: f }) => {
+      const r = f({ total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 }, [null, { loanAsset: { priceUsd: 0 } }, { loanAsset: { priceUsd: 3 } }]);
+      assert.equal(r.asset_price_usd, 3); assert.equal(r.total_assets_usd, 6);
+    }],
+    ['жодного ринку з ціною -> vault лишається без ціни', ({ withResolvedPrice: f }) => {
+      const v = { total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 };
+      assert.equal(f(v, [{ loanAsset: {} }]).total_assets_usd, 0);
+    }],
   ],
   toBigInt: [
     ['рядок -> BigInt', ({ toBigInt: f }) => assert.equal(f('123'), 123n)],

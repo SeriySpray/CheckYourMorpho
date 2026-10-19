@@ -219,6 +219,11 @@ export function normalizeMarket(raw, chainId = 1) {
   };
 }
 
+/** First price above zero, else 0: an unknown price must stay unknown (0 USD), never be guessed as $1 or inherited as 0. */
+function positivePrice(...prices) {
+  return prices.map(Number).find(p => p > 0) || 0;
+}
+
 /**
  * Normalizes vault allocation item
  */
@@ -233,7 +238,7 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
 
   const calculatedUsd = (rawAlloc.supplyAssetsUsd !== null && rawAlloc.supplyAssetsUsd !== undefined && rawAlloc.supplyAssetsUsd > 0)
     ? rawAlloc.supplyAssetsUsd
-    : (supplyHuman * (rawAlloc.market?.loanAsset?.priceUsd ?? vaultAssetPriceUsd ?? 1));
+    : supplyHuman * positivePrice(rawAlloc.market?.loanAsset?.priceUsd, vaultAssetPriceUsd);
 
   return {
     vault_address: vaultAddress.toLowerCase(),
@@ -262,9 +267,7 @@ export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTot
   }
 
   const market = cap.data?.market;
-  const mktPrice = Number(market?.loanAsset?.priceUsd);
-  const vPrice = Number(vaultAssetPriceUsd);
-  const loanPrice = (mktPrice > 0 ? mktPrice : (vPrice > 0 ? vPrice : 1));
+  const loanPrice = positivePrice(market?.loanAsset?.priceUsd, vaultAssetPriceUsd);
 
   return {
     vault_address: vaultAddress.toLowerCase(),

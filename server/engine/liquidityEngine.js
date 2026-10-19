@@ -1,4 +1,5 @@
 import { isIdleReserveMarket } from './hhiEngine.js';
+import { isUnpricedVault } from './mqiEngine.js';
 
 /**
  * Liquidity & Exit Capacity Engine
@@ -29,17 +30,19 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   const directLiquidityUsd = exitUnknown ? 0 : Math.max(0, Number(reportedLiquidity));
 
   if (totalAssetsUsd <= 0) {
+    // Assets without a USD value: how much can be withdrawn is unknown, not 100%
+    const unpriced = isUnpricedVault(vault);
     return {
       directLiquidityUsd: 0,
       marketExitCapacityUsd: 0,
-      instantExitCapacityUsd: 0,
-      instantExitCapacityPercent: 100,
-      stressedExitCapacityUsd: 0,
-      stressedExitCapacityPercent: 100,
+      instantExitCapacityUsd: unpriced ? null : 0,
+      instantExitCapacityPercent: unpriced ? null : 100,
+      stressedExitCapacityUsd: unpriced ? null : 0,
+      stressedExitCapacityPercent: unpriced ? null : 100,
       crowdedMarkets: [],
-      isIlliquid: false,
+      isIlliquid: unpriced ? null : false,
       isCrowded: false,
-      exitUnknown: false
+      exitUnknown: unpriced
     };
   }
 

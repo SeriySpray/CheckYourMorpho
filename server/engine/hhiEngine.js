@@ -15,16 +15,19 @@
  */
 
 /**
- * Checks if an allocation points to an idle/cash reserve market (0 LLTV or uncollateralized).
+ * Checks if an allocation points to an idle/cash reserve market: nobody can borrow from it, because either
+ * there is no collateral asset or the LLTV is 0 (an unknown LLTV is not treated as 0).
  * @param {object} alloc Allocation record
  * @returns {boolean}
  */
 export function isIdleReserveMarket(alloc) {
   const lltvNum = Number(alloc.lltv) || Number(alloc.lltv_percent) || 0;
-  const colAddr = (alloc.collateral_asset_address || '').trim().toLowerCase();
-  const isZeroAddress = !colAddr || colAddr === '0x' || colAddr === '0x0000000000000000000000000000000000000000';
+  const lltvKnown = (alloc.lltv ?? alloc.lltv_percent) != null && (alloc.lltv ?? alloc.lltv_percent) !== '';
+  // An absent address field is unknown; a present empty or zero address means the market has no collateral
+  const colAddr = alloc.collateral_asset_address == null ? null : alloc.collateral_asset_address.trim().toLowerCase();
+  const noCollateralAddress = colAddr !== null && (!colAddr || colAddr === '0x' || colAddr === '0x0000000000000000000000000000000000000000');
   const symbol = (alloc.collateral_asset_symbol || '').trim().toUpperCase();
-  return (isZeroAddress || symbol === 'NONE' || symbol === 'IDLE') && lltvNum === 0;
+  return noCollateralAddress || symbol === 'NONE' || symbol === 'IDLE' || (lltvKnown && lltvNum === 0);
 }
 
 /**

@@ -820,9 +820,8 @@ function applyVaultAuditData(vaultAddress, auditData) {
       const symbol = v.asset?.symbol || matchingVault?.asset?.symbol || '';
       const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
 
-      const mqiPercent = verdict?.mqi?.mqiPercent ?? matchingVault?.mqiPercent ?? 100;
-      const isClean = mqiPercent === 100 && (verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true);
-      const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
+      const mqiPercent = firstDefined(verdict?.mqi?.mqiPercent, matchingVault?.mqiPercent, 100);
+      const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true);
       const mqiClass = isClean ? 'clean' : 'flagged';
       const exitCapText = formatExitCap(pickExitMetric(
         verdict?.liquidity?.instantExitCapacityPercent,
@@ -923,9 +922,8 @@ function renderPinnedRichPills(animate = false) {
       tokenAmount = price > 0 ? (totalAssetsUsd / price) : 0;
     }
     const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
-    const mqiPercent = cachedAudit?.verdict?.mqi?.mqiPercent ?? v.mqiPercent ?? 100;
-    const isClean = mqiPercent === 100 && (cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true);
-    const mqiText = isClean ? '100% Clean' : `${mqiPercent}% MQI`;
+    const mqiPercent = firstDefined(cachedAudit?.verdict?.mqi?.mqiPercent, v.mqiPercent, 100);
+    const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true);
     const mqiClass = isClean ? 'clean' : 'flagged';
     const exitCapText = formatExitCap(pickExitMetric(
       cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent,
@@ -1131,10 +1129,10 @@ function renderVaultExplorer() {
       return (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
     }
     if (explorerFilters.sort === 'mqi_asc') {
-      return (a.mqiPercent ?? 100) - (b.mqiPercent ?? 100);
+      return mqiSortKey(a) - mqiSortKey(b);
     }
     if (explorerFilters.sort === 'mqi_desc') {
-      return (b.mqiPercent ?? 100) - (a.mqiPercent ?? 100);
+      return mqiSortKey(b) - mqiSortKey(a);
     }
     if (explorerFilters.sort === 'hhi_desc') {
       return (b.hhi ?? 0) - (a.hhi ?? 0);
@@ -1191,13 +1189,16 @@ function renderVaultExplorer() {
     const curator = formatCuratorName(v.curatorName, v.name);
     const tvl = v.totalAssetsUsd || v.liquidityUsd || 0;
     const apy = v.netApy || 0;
-    const mqi = v.mqiPercent ?? 100;
-    const isClean = v.isAllClean ?? (mqi === 100);
+    const mqi = v.mqiPercent;
+    const isClean = mqi !== null && (v.isAllClean ?? ((mqi ?? 100) === 100));
     const isPinned = isVaultPinned(v.address, pinnedSet);
     const apyClass = apy < 0 ? 'negative' : '';
 
-    const flaggedBadgeHtml = (!isClean && mqi < 100)
-      ? ` • <span class="vault-mini-badge flagged">${(100 - mqi).toFixed(1)}% Flagged</span>`
+    const flaggedLabel = mqi === null ? 'Unpriced'
+      : (mqi ?? 100) < 100 ? `${(100 - mqi).toFixed(1)}% Flagged`
+      : `${v.compromisedCount || 1} Flagged`;
+    const flaggedBadgeHtml = !isClean
+      ? ` • <span class="vault-mini-badge flagged">${flaggedLabel}</span>`
       : '';
 
     li.innerHTML = `
@@ -1302,8 +1303,8 @@ function populateBasicVaultInfo(v) {
   if (DOM.modalNetApy) DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
   if (DOM.modalGrade && v.mqiPercent !== undefined) {
-    DOM.modalGrade.textContent = `${v.mqiPercent}%`;
-    DOM.modalGrade.dataset.tone = v.mqiPercent === 100 ? 'ok' : (v.mqiPercent >= 80 ? 'warn' : 'bad');
+    DOM.modalGrade.textContent = v.mqiPercent === null ? 'N/A' : `${v.mqiPercent}%`;
+    DOM.modalGrade.dataset.tone = v.mqiPercent === null ? 'bad' : (v.mqiPercent === 100 && v.isAllClean !== false ? 'ok' : (v.mqiPercent >= 80 ? 'warn' : 'bad'));
   }
 }
 
@@ -1791,18 +1792,26 @@ function populateAuditModal(data, isQuietRefresh = false) {
   DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName, v.name);
 
   // Market Quality Index (MQI) Header Pill
+  const mqiUnknown = verdict.mqi?.mqiPercent === null;
   const mqiVal = verdict.mqi?.mqiPercent ?? 100;
-  DOM.modalGrade.textContent = `${mqiVal}%`;
+  DOM.modalGrade.textContent = mqiUnknown ? 'N/A' : `${mqiVal}%`;
   // mqiPercent is rounded to 0.1, so 100 can still come with flagged (small but material) markets
   const flaggedMarketCount = verdict.mqi?.compromisedMarkets?.length || 0;
   const isFullyClean = Boolean(verdict.mqi?.isAllClean);
-  DOM.modalScore.textContent = isFullyClean
-    ? 'Clean Capital'
-    : (verdict.mqi?.unresolvedAssetsUsd > 0 && !flaggedMarketCount ? `${(100 - mqiVal).toFixed(1)}% Unverified`
-    : mqiVal < 100 ? `${(100 - mqiVal).toFixed(1)}% Flagged` : `${flaggedMarketCount} Flagged Market${flaggedMarketCount === 1 ? '' : 's'}`);
-  DOM.modalGrade.dataset.tone = mqiVal === 100
-    ? (isFullyClean ? 'ok' : 'warn')
-    : (mqiVal >= 80 ? 'warn' : 'bad');
+  const unresolvedPct = verdict.mqi?.unresolvedPercent ?? 0;
+  const compromisedPct = verdict.mqi?.compromisedPercent ?? 0;
+  DOM.modalScore.textContent = mqiUnknown
+    ? 'Unpriced Vault'
+    : isFullyClean
+      ? 'Clean Capital'
+      : flaggedMarketCount > 0
+        ? (compromisedPct > 0 ? `${compromisedPct}% Flagged` : `${flaggedMarketCount} Flagged Market${flaggedMarketCount === 1 ? '' : 's'}`)
+        : `${unresolvedPct}% Unverified`;
+  DOM.modalGrade.dataset.tone = mqiUnknown
+    ? 'bad'
+    : mqiVal === 100
+      ? (isFullyClean ? 'ok' : 'warn')
+      : (mqiVal >= 80 ? 'warn' : 'bad');
 
   // Financials
   DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
@@ -1823,11 +1832,13 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   // --- PANEL 2: PORTFOLIO AUDIT (MQI & HHI & EXIT) ---
   // 1. MQI
-  if (DOM.riskMqiPct) DOM.riskMqiPct.textContent = `${mqiVal}%`;
-  if (DOM.riskMqiBar) DOM.riskMqiBar.style.width = `${mqiVal}%`;
+  if (DOM.riskMqiPct) DOM.riskMqiPct.textContent = mqiUnknown ? 'N/A' : `${mqiVal}%`;
+  if (DOM.riskMqiBar) DOM.riskMqiBar.style.width = mqiUnknown ? '0%' : `${mqiVal}%`;
   if (DOM.riskMqiDesc) {
     const unresolvedUsd = verdict.mqi?.unresolvedAssetsUsd || 0;
-    DOM.riskMqiDesc.textContent = verdict.mqi?.isAllClean
+    DOM.riskMqiDesc.textContent = mqiUnknown
+      ? 'The vault has no USD price, so the quality of its capital cannot be measured'
+      : verdict.mqi?.isAllClean
       ? '100% of capital is deployed in verified, non-defaulted markets'
       : unresolvedUsd > 0 && !(verdict.mqi?.compromisedMarkets?.length)
         ? `${formatCurrency(unresolvedUsd)} sits in adapters that could not be expanded (unknown, not verified)`
@@ -2152,6 +2163,28 @@ function exitMetric(val) {
 }
 
 /** First source that carries the field; an explicit unknown stops the chain instead of falling through. */
+/** Sort key for MQI: unknown first, then ascending; a flagged vault that rounds to 100 sits just below clean ones. */
+function mqiSortKey(v) {
+  if (v.mqiPercent === null) return -1;
+  const mqi = v.mqiPercent ?? 100;
+  return mqi === 100 && v.isAllClean === false ? 99.95 : mqi;
+}
+
+/** First value that is not undefined (null is a real answer: "unknown"). */
+function firstDefined(...values) {
+  return values.find(value => value !== undefined);
+}
+
+/**
+ * One reading of a vault's MQI for every surface: null = unpriced vault (unknown), isAllClean decides "clean"
+ * (the rounded percent can read 100 while a small but material market is flagged).
+ */
+function mqiBadgeInfo(mqiPercent, isAllClean) {
+  if (mqiPercent == null) return { text: 'MQI unknown', clean: false };
+  if (isAllClean !== false && mqiPercent === 100) return { text: '100% Clean', clean: true };
+  return { text: mqiPercent === 100 ? 'Flagged' : `${mqiPercent}% MQI`, clean: false };
+}
+
 function pickExitMetric(...vals) {
   for (const val of vals) {
     const metric = exitMetric(val);

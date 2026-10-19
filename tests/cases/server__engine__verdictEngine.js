@@ -16,6 +16,17 @@ const crowd = (S, F, P) => (S < 100e6 ? [mkt(0, S, F, P), mkt(1, 100e6 - S, 0)] 
 
 export default {
   generateVaultVerdict: [
+    ['актив без USD-ціни -> прапорець Unpriced Vault, MQI та вихід unknown, жодного "100% clean"', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ total_assets_usd: 0, total_assets: '1000000' }), []);
+      assert.equal(flag(r, 'Unpriced Vault').level, 'HIGH');
+      assert.match(r.summary, /MQI: unknown \(no USD price\)/); assert.match(r.summary, /Exit Liquidity: unknown/);
+      assert.doesNotMatch(r.summary, /100%/);
+    }],
+    ['брудне і нерозкрите в одному вердикті рахуються від спільного знаменника (20% і 30% зі 100M)', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 30e6 }), [alloc({ supply_assets_usd: 50e6 }), alloc({ is_listed: 0, supply_assets_usd: 20e6, market_unique_key: '1:0xbad' })]);
+      assert.match(flag(r, 'Compromised Market Exposure').message, /^20% of capital .*\(20% TVL\)/);
+      assert.match(flag(r, 'Unresolved Exposure').message, /^30% of capital/);
+    }],
     ['здоровий vault без прапорців', ({ generateVaultVerdict: f }) =>
       assert.deepEqual(f(vault(), diversified()).redFlags, [])],
     ['повертає метадані vault і точний summary', ({ generateVaultVerdict: f }) => {

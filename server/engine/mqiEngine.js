@@ -26,6 +26,11 @@ export function getMaterialityThresholdUsd(totalAssetsUsd) {
   return Math.min((Number(totalAssetsUsd) || 0) * 0.01, 250000);
 }
 
+/** A vault that holds assets but has no USD value (the asset price is unknown): its USD metrics cannot be trusted. */
+export function isUnpricedVault(vault) {
+  return (Number(vault.total_assets_usd) || 0) <= 0 && (Number(vault.total_assets) || 0) > 0;
+}
+
 /**
  * Evaluates whether a market passes the strict binary clean test.
  * @param {object} market Market record from database
@@ -45,8 +50,8 @@ export function isMarketClean(market) {
   const badDebtUsd = Number(market.bad_debt_usd || 0);
   const realizedBadDebtUsd = Number(market.realized_bad_debt_usd || 0);
   const badDebtDustUsd = Math.max(10, (Number(market.total_supply_assets_usd) || 0) * 0.0001);
-  if (badDebtUsd > badDebtDustUsd || realizedBadDebtUsd > badDebtDustUsd) {
-    const totalBadDebt = badDebtUsd + realizedBadDebtUsd;
+  const totalBadDebt = badDebtUsd + realizedBadDebtUsd;
+  if (totalBadDebt > badDebtDustUsd) {
     reasons.push(`Bad debt detected ($${totalBadDebt.toLocaleString('en-US', { maximumFractionDigits: 0 })})`);
   }
 
@@ -104,12 +109,18 @@ export function calculateMQI(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
 
   if (totalAssetsUsd <= 0) {
+    // Assets without a USD value are unknown, not clean; a truly empty vault has nothing at risk
+    const unpriced = isUnpricedVault(vault);
     return {
-      mqiPercent: 100,
+      mqiPercent: unpriced ? null : 100,
+      unpriced,
       cleanAssetsUsd: 0,
       compromisedAssetsUsd: 0,
       unresolvedAssetsUsd: 0,
-      isAllClean: true,
+      compromisedPercent: 0,
+      unresolvedPercent: 0,
+      effectiveTotalUsd: 0,
+      isAllClean: !unpriced,
       cleanMarketsCount: 0,
       totalMarketsCount: 0,
       compromisedMarkets: []
@@ -125,7 +136,7 @@ export function calculateMQI(vault, allocations = []) {
   let totalCompromisedRawUsd = 0;
 
   for (const alloc of allocations) {
-    const supplyUsd = Number(alloc.supply_assets_usd) || 0;
+    const supplyUsd = Math.max(0, Number(alloc.supply_assets_usd) || 0);
     const test = isMarketClean(alloc);
 
     if (test.isClean) {
@@ -137,22 +148,23 @@ export function calculateMQI(vault, allocations = []) {
     }
   }
 
-  // Materiality evaluation:
-  // If individual allocation > 1% TVL OR cumulative compromised supply > 1% TVL,
-  // classify as compromised. Otherwise, treat isolated sub-1% dust as clean.
-  const isCumulativeCompromisedMaterial = totalCompromisedRawUsd >= minMaterialThresholdUsd;
+  // Capital behind V2 adapters we could not look through is unknown, not clean cash
+  const unresolvedRawUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
+
+  // Materiality evaluation: a defective or unresolved position counts on its own above 1% TVL (capped), and
+  // all of them count once their combined size passes that threshold. Isolated sub-threshold dust stays clean.
+  const isCumulativeMaterial = totalCompromisedRawUsd + unresolvedRawUsd >= minMaterialThresholdUsd;
 
   for (const item of rawCompromisedItems) {
-    const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || isCumulativeCompromisedMaterial;
+    // below $1 is dust even when the cumulative rule fires, so it never appears as a flagged market
+    const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= 1);
     if (isMaterial) {
       compromisedSupplyUsd += item.supplyUsd;
-      const weight = totalAssetsUsd > 0 ? item.supplyUsd / totalAssetsUsd : 0;
       compromisedMarkets.push({
         marketUniqueKey: item.alloc.market_unique_key,
         collateralSymbol: item.alloc.collateral_asset_symbol || 'None',
         loanSymbol: item.alloc.loan_asset_symbol || '',
         supplyAssetsUsd: Math.round(item.supplyUsd * 100) / 100,
-        weightPercent: Math.round(weight * 1000) / 10,
         reasons: item.test.reasons
       });
     } else {
@@ -161,9 +173,8 @@ export function calculateMQI(vault, allocations = []) {
     }
   }
 
-  // Capital behind V2 adapters we could not look through is unknown, not clean cash (sub-material dust stays clean)
-  const unresolvedRawUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
-  const unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd ? unresolvedRawUsd : 0;
+  const unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && unresolvedRawUsd >= 1)
+    ? unresolvedRawUsd : 0;
 
   // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)
   const totalAllocated = cleanSupplyUsd + compromisedSupplyUsd;
@@ -175,8 +186,16 @@ export function calculateMQI(vault, allocations = []) {
     ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / effectiveTotalUsd) * 1000) / 10))
     : 100;
 
+  // One denominator for every share reported below: the capital the verdict is measured against
+  const pctOfTotal = (usd, digits = 10) => effectiveTotalUsd > 0 ? Math.round((usd / effectiveTotalUsd) * 100 * digits) / digits : 0;
+  for (const m of compromisedMarkets) m.weightPercent = pctOfTotal(m.supplyAssetsUsd);
+
   return {
     mqiPercent,
+    unpriced: false,
+    effectiveTotalUsd: Math.round(effectiveTotalUsd * 100) / 100,
+    compromisedPercent: pctOfTotal(compromisedSupplyUsd, 100),
+    unresolvedPercent: pctOfTotal(unresolvedUsd, 100),
     cleanAssetsUsd: Math.round(totalCleanAssetsUsd * 100) / 100,
     compromisedAssetsUsd: Math.round(compromisedSupplyUsd * 100) / 100,
     unresolvedAssetsUsd: Math.round(unresolvedUsd * 100) / 100,

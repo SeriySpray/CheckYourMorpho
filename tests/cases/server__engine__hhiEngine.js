@@ -14,10 +14,16 @@ export default {
       assert.equal(f({ collateral_asset_symbol: 'NONE', lltv_percent: 0 }), true)],
     ['WETH з LLTV 86 не є резервом', ({ isIdleReserveMarket: f }) =>
       assert.equal(f(alloc()), false)],
-    ['нульова адреса, але LLTV > 0 не є резервом', ({ isIdleReserveMarket: f }) =>
-      assert.equal(f({ collateral_asset_address: '0x', lltv_percent: 86 }), false)],
-    ['порожній об\'єкт вважається резервом', ({ isIdleReserveMarket: f }) =>
-      assert.equal(f({}), true)],
+    ['нульова адреса без застави є резервом навіть з LLTV > 0 (позичати нема під що)', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_address: '0x', lltv_percent: 86 }), true)],
+    ['реальна застава з LLTV 0 є резервом (позичати неможливо)', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_address: '0xabc', collateral_asset_symbol: 'WETH', lltv_percent: 0 }), true)],
+    ['реальна застава без поля LLTV не вважається резервом (LLTV невідомий)', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_address: '0xabc', collateral_asset_symbol: 'WETH' }), false)],
+    ['порожній об\'єкт (нічого не відомо) не вважається резервом', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({}), false)],
+    ['поле адреси застави відсутнє (не порожнє) з відомим LLTV 86 -> не резерв', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_symbol: 'WETH', lltv_percent: 86 }), false)],
     ['символ IDLE з реальною адресою і LLTV 0 -> резерв', ({ isIdleReserveMarket: f }) =>
       assert.equal(f({ collateral_asset_address: '0xabc', collateral_asset_symbol: 'IDLE', lltv_percent: 0 }), true)],
     ['адреса "0x" з символом WETH і LLTV 0 -> резерв', ({ isIdleReserveMarket: f }) =>
@@ -26,8 +32,8 @@ export default {
       assert.equal(f({ collateral_asset_address: ZERO.toUpperCase(), collateral_asset_symbol: 'WETH', lltv_percent: 0 }), true)],
     ['символ " none " з пробілами і LLTV-рядком "0" -> резерв', ({ isIdleReserveMarket: f }) =>
       assert.equal(f({ collateral_asset_symbol: ' none ', lltv: '0', lltv_percent: '0' }), true)],
-    ['NONE-застава з LLTV у wei (0.86e18) не є резервом', ({ isIdleReserveMarket: f }) =>
-      assert.equal(f({ collateral_asset_symbol: 'NONE', lltv: '860000000000000000', lltv_percent: 0 }), false)],
+    ['NONE-застава з LLTV у wei (0.86e18) теж резерв: без застави ніхто не позичає', ({ isIdleReserveMarket: f }) =>
+      assert.equal(f({ collateral_asset_symbol: 'NONE', lltv: '860000000000000000', lltv_percent: 0 }), true)],
   ],
   calculateHHI: [
     ['порожній vault -> UNALLOCATED, hhi 0, порожній breakdown', ({ calculateHHI: f }) => {
