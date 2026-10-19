@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateMQI, isMarketClean, getMaterialityThresholdUsd } from './mqiEngine.js';
 import { calculateLiquidityMetrics } from './liquidityEngine.js';
 import { generateVaultVerdict } from './verdictEngine.js';
+import { diffAdminEvents, diffPendingConfigs, diffDerivedState } from './eventsEngine.js';
 import { normalizeVaultV2 } from '../services/normalizers.js';
 
 const market = (over = {}) => ({
@@ -77,3 +78,21 @@ test('a small but material compromised position still raises the CRITICAL flag',
   assert.equal(verdict.mqi.mqiPercent, 100); // rounded to 0.1, hides a 0.003% share
   assert.ok(verdict.redFlags.some(f => f.level === 'CRITICAL' && /Compromised/.test(f.title)));
 });
+
+test('eventsEngine baseline and transition rules work without DB or network', () => {
+  const now = 1_750_000_000;
+  const ctx = { address: '0x1111111111111111111111111111111111111111', chainId: 1, assetDecimals: 6, assetPriceUsd: 1 };
+  assert.deepEqual(diffDerivedState(null, { verdict_level: 'red' }, ctx, now), []);
+  const { events } = diffAdminEvents(ctx, [
+    { hash: '0xold', timestamp: now - 9 * 86400, type: 'setCurator', data: {} },
+    { hash: '0xnew', timestamp: now - 86400, type: 'setCurator', data: {} }
+  ], null, now);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'curator_changed');
+  const { statusUpdates } = diffPendingConfigs(ctx, [], [
+    { id: 1, dedupe_key: 'pending:0x1:SetCap:0xh:100:m1', status: 'pending', valid_at: now - 10 },
+    { id: 2, dedupe_key: 'pending:0x1:SetCap:0xh:200:m2', status: 'pending', valid_at: now + 10 }
+  ], now);
+  assert.deepEqual(statusUpdates.map(u => u.status), ['applied', 'revoked']);
+});
+

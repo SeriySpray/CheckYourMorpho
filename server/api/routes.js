@@ -10,6 +10,7 @@ import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/m
 import { calculateHHI } from '../engine/hhiEngine.js';
 import { calculateCollateralMix } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
+import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
 
@@ -686,6 +687,419 @@ export function handleGetVaultByAddress(req, res, address) {
   }
 }
 
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const EVENT_KINDS_SET = new Set(EVENT_KINDS);
+const EVENT_STATUS_SET = new Set(['final', 'pending', 'applied', 'revoked']);
+const SEVERITY_EXPAND = new Map([
+  ['info', ['info', 'warning', 'critical']],
+  ['warning', ['warning', 'critical']],
+  ['critical', ['critical']]
+]);
+
+/** Escapes special characters for safe inclusion in XML text and attribute values. */
+export function escapeXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Validates and normalizes query parameters for /api/events, /api/events/pending, and /api/events/feed.atom.
+ */
+export function validateEventQueryParams(searchParams, options = {}) {
+  const maxAddresses = options.maxAddresses || 50;
+  const defaultLimit = options.defaultLimit || 50;
+  const maxLimit = options.maxLimit || 200;
+
+  const addresses = [];
+  if (searchParams.has('address')) {
+    const rawAddr = searchParams.get('address').trim();
+    if (!ADDRESS_RE.test(rawAddr)) {
+      return { ok: false, error: 'Invalid address parameter (must be 0x followed by 40 hex characters)' };
+    }
+    addresses.push(rawAddr.toLowerCase());
+  }
+
+  if (searchParams.has('addresses')) {
+    const rawList = searchParams.get('addresses').trim();
+    if (!rawList) {
+      return { ok: false, error: 'Invalid addresses parameter (empty list)' };
+    }
+    const parts = rawList.split(',').map(s => s.trim());
+    if (parts.length > maxAddresses) {
+      return { ok: false, error: `Too many addresses (maximum ${maxAddresses})` };
+    }
+    for (const part of parts) {
+      if (!ADDRESS_RE.test(part)) {
+        return { ok: false, error: `Invalid address in addresses list: '${part}'` };
+      }
+      addresses.push(part.toLowerCase());
+    }
+  }
+
+  const uniqueAddresses = [...new Set(addresses)];
+  if (uniqueAddresses.length > maxAddresses) {
+    return { ok: false, error: `Too many addresses (maximum ${maxAddresses})` };
+  }
+
+  let since = null;
+  if (searchParams.has('since')) {
+    const rawSince = searchParams.get('since').trim();
+    if (!/^\d+$/.test(rawSince)) {
+      return { ok: false, error: 'Invalid since parameter (must be non-negative integer unix seconds)' };
+    }
+    since = Number(rawSince);
+    if (!Number.isSafeInteger(since) || since < 0) {
+      return { ok: false, error: 'Invalid since parameter' };
+    }
+  }
+
+  let before = null;
+  if (searchParams.has('before')) {
+    const rawBefore = searchParams.get('before').trim();
+    if (!/^\d+$/.test(rawBefore)) {
+      return { ok: false, error: 'Invalid before parameter (must be positive integer event id)' };
+    }
+    before = Number(rawBefore);
+    if (!Number.isSafeInteger(before) || before < 1) {
+      return { ok: false, error: 'Invalid before parameter' };
+    }
+  }
+
+  let limit = defaultLimit;
+  if (searchParams.has('limit')) {
+    const rawLimit = searchParams.get('limit').trim();
+    if (!/^\d+$/.test(rawLimit)) {
+      return { ok: false, error: `Invalid limit parameter (must be an integer between 1 and ${maxLimit})` };
+    }
+    limit = Number(rawLimit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > maxLimit) {
+      return { ok: false, error: `Invalid limit parameter (must be between 1 and ${maxLimit})` };
+    }
+  }
+
+  let kinds = null;
+  if (searchParams.has('kinds')) {
+    const rawKinds = searchParams.get('kinds').trim();
+    if (!rawKinds) {
+      return { ok: false, error: 'Invalid kinds parameter (empty list)' };
+    }
+    const parts = rawKinds.split(',').map(s => s.trim());
+    for (const k of parts) {
+      if (!EVENT_KINDS_SET.has(k)) {
+        return { ok: false, error: `Invalid event kind: '${k}'` };
+      }
+    }
+    kinds = [...new Set(parts)];
+  }
+
+  let severities = null;
+  if (searchParams.has('severity')) {
+    const rawSev = searchParams.get('severity').trim().toLowerCase();
+    if (!SEVERITY_EXPAND.has(rawSev)) {
+      return { ok: false, error: 'Invalid severity parameter (must be info, warning, or critical)' };
+    }
+    severities = SEVERITY_EXPAND.get(rawSev);
+  }
+
+  let status = null;
+  if (searchParams.has('status')) {
+    const rawStatus = searchParams.get('status').trim().toLowerCase();
+    if (!EVENT_STATUS_SET.has(rawStatus)) {
+      return { ok: false, error: 'Invalid status parameter (must be final, pending, applied, or revoked)' };
+    }
+    status = rawStatus;
+  }
+
+  return {
+    ok: true,
+    addresses: uniqueAddresses,
+    since,
+    before,
+    limit,
+    kinds,
+    severities,
+    status
+  };
+}
+
+/** Formats a vault_events database row into a response object with parsed details. */
+export function formatEventRow(row) {
+  let details = {};
+  if (row.details_json) {
+    try {
+      details = JSON.parse(row.details_json);
+    } catch {
+      details = {};
+    }
+  }
+  return {
+    id: row.id,
+    vault_address: row.vault_address,
+    vaultAddress: row.vault_address,
+    vault_name: row.vault_name ?? null,
+    vaultName: row.vault_name ?? null,
+    vault_symbol: row.vault_symbol ?? null,
+    vaultSymbol: row.vault_symbol ?? null,
+    chain_id: row.chain_id,
+    chainId: row.chain_id,
+    kind: row.kind,
+    source: row.source,
+    severity: row.severity,
+    status: row.status,
+    title: row.title,
+    details,
+    dedupe_key: row.dedupe_key,
+    dedupeKey: row.dedupe_key,
+    occurred_at: row.occurred_at,
+    occurredAt: row.occurred_at,
+    valid_at: row.valid_at ?? null,
+    validAt: row.valid_at ?? null,
+    detected_at: row.detected_at,
+    detectedAt: row.detected_at
+  };
+}
+
+/**
+ * Handler for GET /api/events
+ */
+export function handleGetEvents(req, res, url) {
+  try {
+    const parsed = validateEventQueryParams(url.searchParams, { defaultLimit: 50, maxLimit: 200 });
+    if (!parsed.ok) {
+      sendJson(res, 400, { error: parsed.error }, req);
+      return;
+    }
+
+    const db = getDatabase();
+    const conditions = [];
+    const params = [];
+
+    if (parsed.addresses.length === 1) {
+      conditions.push('ve.vault_address = ?');
+      params.push(parsed.addresses[0]);
+    } else if (parsed.addresses.length > 1) {
+      conditions.push('ve.vault_address IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.addresses));
+    }
+
+    if (parsed.since !== null) {
+      conditions.push('ve.occurred_at >= ?');
+      params.push(parsed.since);
+    }
+
+    if (parsed.kinds && parsed.kinds.length > 0) {
+      conditions.push('ve.kind IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.kinds));
+    }
+
+    if (parsed.severities && parsed.severities.length > 0) {
+      conditions.push('ve.severity IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.severities));
+    }
+
+    if (parsed.status !== null) {
+      conditions.push('ve.status = ?');
+      params.push(parsed.status);
+    }
+
+    if (parsed.before !== null) {
+      const cursorRow = db.prepare('SELECT id, occurred_at FROM vault_events WHERE id = ?').get(parsed.before);
+      if (cursorRow) {
+        conditions.push('(ve.occurred_at < ? OR (ve.occurred_at = ? AND ve.id < ?))');
+        params.push(cursorRow.occurred_at, cursorRow.occurred_at, cursorRow.id);
+      } else {
+        conditions.push('ve.id < ?');
+        params.push(parsed.before);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = db.prepare(`
+      SELECT ve.*, v.name AS vault_name, v.symbol AS vault_symbol
+      FROM vault_events ve
+      LEFT JOIN vaults v ON v.address = ve.vault_address
+      ${whereClause}
+      ORDER BY ve.occurred_at DESC, ve.id DESC
+      LIMIT ?
+    `).all(...params, parsed.limit + 1);
+
+    const hasMore = rows.length > parsed.limit;
+    const pageRows = hasMore ? rows.slice(0, parsed.limit) : rows;
+    const events = pageRows.map(formatEventRow);
+    const nextBefore = hasMore && events.length > 0 ? events[events.length - 1].id : null;
+
+    sendJson(res, 200, { events, nextBefore }, req);
+  } catch (err) {
+    console.error('[API] Failed to fetch events:', err);
+    sendJson(res, 500, { error: 'Failed to fetch events' }, req);
+  }
+}
+
+/**
+ * Handler for GET /api/events/pending
+ */
+export function handleGetPendingEvents(req, res, url) {
+  try {
+    const parsed = validateEventQueryParams(url.searchParams, { defaultLimit: 200, maxLimit: 200 });
+    if (!parsed.ok) {
+      sendJson(res, 400, { error: parsed.error }, req);
+      return;
+    }
+
+    const db = getDatabase();
+    const nowSec = Math.floor(Date.now() / 1000);
+    const conditions = ["ve.status = 'pending'", 've.valid_at > ?'];
+    const params = [nowSec];
+
+    if (parsed.addresses.length === 1) {
+      conditions.push('ve.vault_address = ?');
+      params.push(parsed.addresses[0]);
+    } else if (parsed.addresses.length > 1) {
+      conditions.push('ve.vault_address IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.addresses));
+    }
+
+    if (parsed.kinds && parsed.kinds.length > 0) {
+      conditions.push('ve.kind IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.kinds));
+    }
+
+    if (parsed.severities && parsed.severities.length > 0) {
+      conditions.push('ve.severity IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.severities));
+    }
+
+    const rows = db.prepare(`
+      SELECT ve.*, v.name AS vault_name, v.symbol AS vault_symbol
+      FROM vault_events ve
+      LEFT JOIN vaults v ON v.address = ve.vault_address
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY ve.valid_at ASC, ve.id ASC
+      LIMIT ?
+    `).all(...params, parsed.limit);
+
+    sendJson(res, 200, { events: rows.map(formatEventRow) }, req);
+  } catch (err) {
+    console.error('[API] Failed to fetch pending events:', err);
+    sendJson(res, 500, { error: 'Failed to fetch pending events' }, req);
+  }
+}
+
+/**
+ * Handler for GET /api/events/feed.atom
+ */
+export function handleGetEventsAtomFeed(req, res, url) {
+  try {
+    const parsed = validateEventQueryParams(url.searchParams, { defaultLimit: 50, maxLimit: 50 });
+    if (!parsed.ok) {
+      sendJson(res, 400, { error: parsed.error }, req);
+      return;
+    }
+
+    const db = getDatabase();
+    const conditions = [];
+    const params = [];
+
+    if (parsed.addresses.length === 1) {
+      conditions.push('ve.vault_address = ?');
+      params.push(parsed.addresses[0]);
+    } else if (parsed.addresses.length > 1) {
+      conditions.push('ve.vault_address IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.addresses));
+    }
+
+    if (parsed.since !== null) {
+      conditions.push('ve.occurred_at >= ?');
+      params.push(parsed.since);
+    }
+
+    if (parsed.kinds && parsed.kinds.length > 0) {
+      conditions.push('ve.kind IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.kinds));
+    }
+
+    if (parsed.severities && parsed.severities.length > 0) {
+      conditions.push('ve.severity IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(parsed.severities));
+    }
+
+    if (parsed.status !== null) {
+      conditions.push('ve.status = ?');
+      params.push(parsed.status);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = db.prepare(`
+      SELECT ve.*, v.name AS vault_name, v.symbol AS vault_symbol
+      FROM vault_events ve
+      LEFT JOIN vaults v ON v.address = ve.vault_address
+      ${whereClause}
+      ORDER BY ve.occurred_at DESC, ve.id DESC
+      LIMIT 50
+    `).all(...params);
+
+    const latestSec = rows.length > 0 ? Number(rows[0].occurred_at) : Math.floor(Date.now() / 1000);
+    const updatedIso = new Date(latestSec * 1000).toISOString();
+    const host = /^[a-zA-Z0-9.:_-]+$/.test(req.headers.host || '') ? req.headers.host : 'localhost';
+    const baseUrl = `http://${host}`;
+    const selfHref = `${baseUrl}${url.pathname}${url.search}`;
+
+    const entriesXml = rows.map(row => {
+      const ev = formatEventRow(row);
+      const entryUpdated = new Date(Number(ev.occurred_at) * 1000).toISOString();
+      const vaultLabel = ev.vault_name || ev.vault_symbol || ev.vault_address;
+      const entryTitle = `[${ev.severity.toUpperCase()}] ${vaultLabel}: ${ev.title}`;
+      const vaultLink = `${baseUrl}/?vault=${encodeURIComponent(ev.vault_address)}`;
+      const summaryText = `${ev.title} (kind: ${ev.kind}, status: ${ev.status}, chain: ${ev.chain_id})`;
+      return [
+        '  <entry>',
+        `    <id>urn:cym:event:${escapeXml(ev.dedupe_key)}</id>`,
+        `    <title>${escapeXml(entryTitle)}</title>`,
+        `    <updated>${escapeXml(entryUpdated)}</updated>`,
+        `    <link href="${escapeXml(vaultLink)}" rel="alternate" />`,
+        `    <category term="${escapeXml(ev.kind)}" label="${escapeXml(ev.severity)}" />`,
+        `    <summary type="text">${escapeXml(summaryText)}</summary>`,
+        '  </entry>'
+      ].join('\n');
+    }).join('\n');
+
+    const xml = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<feed xmlns="http://www.w3.org/2005/Atom">',
+      '  <id>urn:cym:feed:events</id>',
+      '  <title>CheckYourMorpho Vault Events</title>',
+      `  <updated>${escapeXml(updatedIso)}</updated>`,
+      `  <link href="${escapeXml(selfHref)}" rel="self" type="application/atom+xml" />`,
+      `  <link href="${escapeXml(baseUrl)}/" rel="alternate" type="text/html" />`,
+      entriesXml,
+      '</feed>'
+    ].filter(Boolean).join('\n') + '\n';
+
+    res.writeHead(200, {
+      'Content-Type': 'application/atom+xml; charset=utf-8',
+      'Content-Length': Buffer.byteLength(xml),
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    res.end(xml);
+  } catch (err) {
+    console.error('[API] Failed to build Atom feed:', err);
+    sendJson(res, 500, { error: 'Failed to build Atom feed' }, req);
+  }
+}
+
 /**
  * Main HTTP request router.
  */
@@ -746,11 +1160,26 @@ export function handleRequest(req, res) {
   const vaultMatch = pathname.match(/^\/api\/vaults\/([^/]+)$/);
   if (vaultMatch && isRead) {
     const address = vaultMatch[1].trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    if (!ADDRESS_RE.test(address)) {
       sendJson(res, 400, { error: 'Invalid Ethereum address format (must be 0x followed by 40 hex characters)' });
       return;
     }
     handleGetVaultByAddress(req, res, address.toLowerCase());
+    return;
+  }
+
+  if (pathname === '/api/events' && isRead) {
+    handleGetEvents(req, res, parsedUrl);
+    return;
+  }
+
+  if (pathname === '/api/events/pending' && isRead) {
+    handleGetPendingEvents(req, res, parsedUrl);
+    return;
+  }
+
+  if (pathname === '/api/events/feed.atom' && isRead) {
+    handleGetEventsAtomFeed(req, res, parsedUrl);
     return;
   }
 

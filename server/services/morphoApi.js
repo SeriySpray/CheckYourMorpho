@@ -166,6 +166,40 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
             curator
             owner
             pendingOwner
+            guardian
+            timelock
+            pendingConfigs {
+              items {
+                validAt
+                functionName
+                txHash
+                decodedData {
+                  __typename
+                  ... on VaultSetCapPendingData {
+                    supplyCap
+                    market {
+                      marketId
+                      loanAsset { symbol decimals }
+                      collateralAsset { symbol }
+                    }
+                  }
+                  ... on VaultRemoveMarketPendingData {
+                    caller { address }
+                    market {
+                      marketId
+                      loanAsset { symbol }
+                      collateralAsset { symbol }
+                    }
+                  }
+                  ... on VaultSetTimelockPendingData {
+                    timelock
+                  }
+                  ... on VaultSetGuardianPendingData {
+                    guardian { address }
+                  }
+                }
+              }
+            }
             allocation {
               market {
                 marketId
@@ -214,6 +248,74 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
               supplyShares
             }
           }
+          adminEvents(first: 25) {
+            items {
+              hash
+              timestamp
+              type
+              data {
+                __typename
+                ... on SetGuardianEventData { guardian }
+                ... on SetCuratorEventData { curatorAddress }
+                ... on OwnershipEventData { owner }
+                ... on SetIsAllocatorEventData { allocator isAllocator }
+                ... on SetSkimRecipientEventData { skimRecipient }
+                ... on SetFeeEventData { fee }
+                ... on SetFeeRecipientEventData { feeRecipient }
+                ... on TimelockEventData { timelock }
+                ... on CapEventData {
+                  cap
+                  market {
+                    marketId
+                    loanAsset { symbol decimals }
+                    collateralAsset { symbol }
+                  }
+                }
+                ... on SetSupplyQueueEventData {
+                  supplyQueue { marketId }
+                }
+                ... on SetWithdrawQueueEventData {
+                  withdrawQueue { marketId }
+                }
+                ... on ReallocateSupplyEventData {
+                  suppliedAssets
+                  suppliedShares
+                  market {
+                    marketId
+                    collateralAsset { symbol }
+                    loanAsset { symbol decimals }
+                  }
+                }
+                ... on ReallocateWithdrawEventData {
+                  withdrawnAssets
+                  withdrawnShares
+                  market {
+                    marketId
+                    collateralAsset { symbol }
+                    loanAsset { symbol decimals }
+                  }
+                }
+                ... on RevokeCapEventData {
+                  market {
+                    marketId
+                    collateralAsset { symbol }
+                    loanAsset { symbol }
+                  }
+                }
+                ... on RevokePendingMarketRemovalEventData {
+                  market {
+                    marketId
+                    collateralAsset { symbol }
+                    loanAsset { symbol }
+                  }
+                }
+                ... on SkimEventData {
+                  amount
+                  asset { address symbol decimals }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -252,6 +354,7 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
           apy
           netApy
           performanceFee
+          managementFee
           curator { address }
           curators {
             items {
@@ -259,6 +362,93 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
             }
           }
           owner { address }
+          timelocks {
+            functionName
+            selector
+            duration
+          }
+          pendingConfigs {
+            items {
+              validAt
+              functionName
+              txHash
+              data
+              decodedData {
+                __typename
+                ... on VaultV2TimelockPendingData {
+                  timelock
+                  selector
+                  functionName
+                }
+                ... on VaultV2SetPerformanceFeePendingData {
+                  performanceFee
+                }
+                ... on VaultV2SetManagementFeePendingData {
+                  managementFee
+                }
+                ... on VaultV2SetPerformanceFeeRecipientPendingData {
+                  performanceFeeRecipient
+                }
+                ... on VaultV2SetManagementFeeRecipientPendingData {
+                  managementFeeRecipient
+                }
+                ... on VaultV2AdapterPendingData {
+                  adapterAddress
+                }
+                ... on VaultV2SetAdapterRegistryPendingData {
+                  adapterRegistry
+                }
+                ... on VaultV2SetIsAllocatorPendingData {
+                  isAllocator
+                  account { address }
+                }
+                ... on VaultV2SetReceiveSharesGatePendingData {
+                  receiveSharesGate
+                }
+                ... on VaultV2SetSendSharesGatePendingData {
+                  sendSharesGate
+                }
+                ... on VaultV2SetReceiveAssetsGatePendingData {
+                  receiveAssetsGate
+                }
+                ... on VaultV2SetSendAssetsGatePendingData {
+                  sendAssetsGate
+                }
+                ... on VaultV2IncreaseCapPendingData {
+                  cap
+                  config {
+                    id
+                    type
+                    data {
+                      __typename
+                      ... on MarketV1CapData {
+                        market {
+                          marketId
+                          collateralAsset { symbol }
+                          loanAsset { symbol decimals }
+                        }
+                      }
+                      ... on AdapterCapData {
+                        adapterAddress
+                      }
+                      ... on CollateralCapData {
+                        collateralAddress
+                        collateralToken { symbol }
+                      }
+                    }
+                  }
+                }
+                ... on VaultV2SetForceDeallocatePenaltyPendingData {
+                  adapterAddress
+                  forceDeallocatePenalty
+                }
+                ... on VaultV2AbdicatePendingData {
+                  selector
+                  functionName
+                }
+              }
+            }
+          }
           adapters {
             items {
               type

@@ -966,4 +966,160 @@ export default {
       assert.match(index, /default limit: \$\{DEFAULT_VAULTS_LIMIT\}/);
     })],
   ],
+  escapeXml: [
+    ['екранує &, <, >, " та \' у рядках і перетворює null/undefined на порожній рядок', ({ escapeXml: f }) => {
+      assert.equal(f('A & B < C > "D" \'E\''), 'A &amp; B &lt; C &gt; &quot;D&quot; &apos;E&apos;');
+      assert.equal(f(null), '');
+      assert.equal(f(undefined), '');
+    }],
+  ],
+  validateEventQueryParams: [
+    ['приймає коректні параметри (address, addresses, since, before, limit, kinds, severity, status)', ({ validateEventQueryParams: f }) => {
+      const upperHex = '0x' + 'A'.repeat(40);
+      const sp = new URLSearchParams({
+        address: upperHex,
+        addresses: `${addr(2)},${addr(3)}`,
+        since: '1700000000',
+        before: '42',
+        limit: '100',
+        kinds: 'fee_changed,tvl_drop',
+        severity: 'warning',
+        status: 'final'
+      });
+      const r = f(sp);
+      assert.equal(r.ok, true);
+      assert.deepEqual(r.addresses, [upperHex.toLowerCase(), addr(2), addr(3)]);
+      assert.equal(r.since, 1700000000);
+      assert.equal(r.before, 42);
+      assert.equal(r.limit, 100);
+      assert.deepEqual(r.kinds, ['fee_changed', 'tvl_drop']);
+      assert.deepEqual(r.severities, ['warning', 'critical']);
+      assert.equal(r.status, 'final');
+    }],
+    ['відхиляє >50 адрес, невалідні адреси, невідомі kinds, некоректні severity/status та limit > 200', ({ validateEventQueryParams: f }) => {
+      const over50 = Array.from({ length: 51 }, (_, i) => addr(i + 1)).join(',');
+      assert.equal(f(new URLSearchParams({ addresses: over50 })).ok, false);
+      assert.equal(f(new URLSearchParams({ address: '0x123' })).ok, false);
+      assert.equal(f(new URLSearchParams({ addresses: `${addr(1)},not-an-address` })).ok, false);
+      assert.equal(f(new URLSearchParams({ kinds: 'fee_changed,not_a_real_kind' })).ok, false);
+      assert.equal(f(new URLSearchParams({ severity: 'fatal' })).ok, false);
+      assert.equal(f(new URLSearchParams({ status: 'archived' })).ok, false);
+      assert.equal(f(new URLSearchParams({ limit: '201' })).ok, false);
+      assert.equal(f(new URLSearchParams({ limit: '0' })).ok, false);
+      assert.equal(f(new URLSearchParams({ since: '-5' })).ok, false);
+      assert.equal(f(new URLSearchParams({ before: '0' })).ok, false);
+    }],
+  ],
+  formatEventRow: [
+    ['парсить details_json у details та повертає нормалізовані поля події', ({ formatEventRow: f }) => {
+      const r = f({
+        id: 7,
+        vault_address: addr(1),
+        vault_name: 'Alpha',
+        vault_symbol: 'aUSDC',
+        chain_id: 1,
+        kind: 'fee_changed',
+        source: 'admin_event',
+        severity: 'warning',
+        status: 'final',
+        title: 'Fee changed',
+        details_json: '{"newFee":0.1}',
+        dedupe_key: 'admin:0x1:0xh:setFee',
+        occurred_at: 1700000100,
+        valid_at: null,
+        detected_at: 1700000200
+      });
+      assert.equal(r.id, 7);
+      assert.deepEqual(r.details, { newFee: 0.1 });
+      assert.equal(r.vault_address, addr(1));
+      assert.equal(r.vaultAddress, addr(1));
+    }],
+  ],
+  handleGetEvents: [
+    ['фільтрує за address, addresses, since, kinds, severity, status та підтримує пагінацію before/limit', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(1, { name: 'Vault One' }));
+      ins(db, 'vaults', V(2, { name: 'Vault Two' }));
+      const baseEv = {
+        chain_id: 1, source: 'admin_event', status: 'final',
+        title: 'Event', details_json: '{"x":1}', valid_at: null, detected_at: 2000
+      };
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(1), kind: 'skim', severity: 'info', dedupe_key: 'k1', occurred_at: 1000 });
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(1), kind: 'fee_changed', severity: 'warning', dedupe_key: 'k2', occurred_at: 1200 });
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(2), kind: 'bad_debt_appeared', source: 'derived', severity: 'critical', dedupe_key: 'k3', occurred_at: 1400 });
+
+      const page1 = getJson(mod, '/api/events?limit=2');
+      assert.equal(page1.status, 200);
+      assert.equal(page1.body.events.length, 2);
+      assert.deepEqual(page1.body.events.map(e => e.dedupe_key), ['k3', 'k2']);
+      assert.deepEqual(page1.body.events[0].details, { x: 1 });
+      assert.ok(page1.body.nextBefore != null);
+
+      const page2 = getJson(mod, `/api/events?limit=2&before=${page1.body.nextBefore}`);
+      assert.equal(page2.status, 200);
+      assert.deepEqual(page2.body.events.map(e => e.dedupe_key), ['k1']);
+      assert.equal(page2.body.nextBefore, null);
+
+      const filtered = getJson(mod, `/api/events?address=${addr(1)}&severity=warning&since=1100&kinds=fee_changed&status=final`);
+      assert.equal(filtered.status, 200);
+      assert.deepEqual(filtered.body.events.map(e => e.dedupe_key), ['k2']);
+    })],
+    ['повертає 400 при >50 адресах, невалідній адресі, невідомому kind або limit > 200', async mod => sandbox(async () => {
+      const over50 = Array.from({ length: 51 }, (_, i) => addr(i + 1)).join(',');
+      assert.equal(getJson(mod, `/api/events?addresses=${over50}`).status, 400);
+      assert.equal(getJson(mod, '/api/events?address=0xbad').status, 400);
+      assert.equal(getJson(mod, '/api/events?kinds=unknown_kind').status, 400);
+      assert.equal(getJson(mod, '/api/events?limit=250').status, 400);
+    })],
+  ],
+  handleGetPendingEvents: [
+    ['повертає лише події зі status=pending та valid_at > now, впорядковані за valid_at ASC', async mod => sandbox(async db => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      ins(db, 'vaults', V(1, { name: 'Vault One' }));
+      ins(db, 'vaults', V(2, { name: 'Vault Two' }));
+      const base = { chain_id: 1, source: 'pending_config', severity: 'warning', title: 'Pending', details_json: '{}', occurred_at: nowSec - 100, detected_at: nowSec - 100 };
+      ins(db, 'vault_events', { ...base, vault_address: addr(1), kind: 'pending_timelock_change', status: 'pending', dedupe_key: 'p-later', valid_at: nowSec + 7200 });
+      ins(db, 'vault_events', { ...base, vault_address: addr(2), kind: 'pending_cap_increase', status: 'pending', dedupe_key: 'p-sooner', valid_at: nowSec + 1800 });
+      ins(db, 'vault_events', { ...base, vault_address: addr(1), kind: 'pending_cap_increase', status: 'pending', dedupe_key: 'p-expired', valid_at: nowSec - 10 });
+      ins(db, 'vault_events', { ...base, vault_address: addr(1), kind: 'pending_cap_increase', status: 'applied', dedupe_key: 'p-applied', valid_at: nowSec + 3600 });
+
+      const all = getJson(mod, '/api/events/pending');
+      assert.equal(all.status, 200);
+      assert.deepEqual(all.body.events.map(e => e.dedupe_key), ['p-sooner', 'p-later']);
+
+      const v1Only = getJson(mod, `/api/events/pending?address=${addr(1)}`);
+      assert.equal(v1Only.status, 200);
+      assert.deepEqual(v1Only.body.events.map(e => e.dedupe_key), ['p-later']);
+    })],
+  ],
+  handleGetEventsAtomFeed: [
+    ['віддає валідний Atom 1.0 XML з екрануванням спецсимволів і стабільним <id> із dedupe_key', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(1, { name: 'Alpha & <Beta> Vault' }));
+      ins(db, 'vault_events', {
+        vault_address: addr(1),
+        chain_id: 1,
+        kind: 'fee_changed',
+        source: 'admin_event',
+        severity: 'warning',
+        status: 'final',
+        title: 'Fee > 5% & < 10% "alert"',
+        details_json: '{}',
+        dedupe_key: 'admin:0x1:0xabc:setFee',
+        occurred_at: 1750000000,
+        valid_at: null,
+        detected_at: 1750000000
+      });
+
+      const r = call(mod.handleRequest, 'GET', `/api/events/feed.atom?addresses=${addr(1)}`);
+      assert.equal(r.statusCode, 200);
+      assert.match(r.headers['Content-Type'], /application\/atom\+xml/);
+      assert.match(r.body, /<\?xml version="1\.0" encoding="utf-8"\?>/);
+      assert.match(r.body, /<feed xmlns="http:\/\/www\.w3\.org\/2005\/Atom">/);
+      assert.match(r.body, /<id>urn:cym:event:admin:0x1:0xabc:setFee<\/id>/);
+      assert.match(r.body, /Alpha &amp; &lt;Beta&gt; Vault: Fee &gt; 5% &amp; &lt; 10% &quot;alert&quot;/);
+      assert.ok(!r.body.includes('<Beta>'));
+
+      const bad = call(mod.handleRequest, 'GET', '/api/events/feed.atom?addresses=not-an-address');
+      assert.equal(bad.statusCode, 400);
+    })],
+  ],
 };

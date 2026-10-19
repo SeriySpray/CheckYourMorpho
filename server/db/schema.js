@@ -138,4 +138,33 @@ CREATE TABLE IF NOT EXISTS sync_state (
   value TEXT,
   updated_at INTEGER
 );
+
+-- Vault events (admin actions, pending timelock configs, and derived state changes)
+CREATE TABLE IF NOT EXISTS vault_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vault_address TEXT NOT NULL,
+  chain_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'final',
+  title TEXT NOT NULL,
+  details_json TEXT NOT NULL,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  occurred_at INTEGER NOT NULL,
+  valid_at INTEGER,
+  detected_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vault_events_vault_occurred ON vault_events(vault_address, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vault_events_occurred ON vault_events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vault_events_status_valid ON vault_events(status, valid_at);
+
+-- Per-vault baseline state for diffing derived metrics and tracking admin event watermarks
+CREATE TABLE IF NOT EXISTS vault_watch_state (
+  vault_address TEXT PRIMARY KEY,
+  state_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;
+

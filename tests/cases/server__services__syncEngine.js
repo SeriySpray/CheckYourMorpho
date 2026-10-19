@@ -337,6 +337,19 @@ export default {
       const l = a => db.prepare('SELECT liquidity_usd AS l FROM vaults WHERE address = ?').get(a).l;
       assert.equal(l('0xaaa'), null); assert.equal(l('0xccc'), 0);
     })],
+    ['синхронізація записує vault_watch_state і події з adminEvents/pendingConfigs у vault_events', async mod => sandbox(async db => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const v1WithEvents = rawV1('0xaaa', {
+        adminEvents: {
+          items: [{ hash: '0xh1', timestamp: nowSec - 300, type: 'setCurator', data: { curatorAddress: '0xc1' } }]
+        }
+      });
+      await sync(mod, newApi([v1WithEvents]));
+      const watchCount = db.prepare('SELECT COUNT(*) AS c FROM vault_watch_state WHERE vault_address = ?').get('0xaaa').c;
+      const evs = db.prepare('SELECT kind, source, status FROM vault_events WHERE vault_address = ?').all('0xaaa');
+      assert.equal(watchCount, 1);
+      assert.deepEqual(evs.map(e => ({ ...e })), [{ kind: 'curator_changed', source: 'admin_event', status: 'final' }]);
+    })],
   ],
   unresolvedAdapterAssets: [
     ['MetaMorpho поза v1ByAddress, MetaMorpho з порожнім базовим, невідомий тип і MorphoMarketV1 без caps рахуються; розв\'язаний - ні', ({ unresolvedAdapterAssets: f }) => {

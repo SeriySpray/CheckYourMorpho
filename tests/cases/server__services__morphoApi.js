@@ -203,6 +203,17 @@ export default {
       await assert.rejects(noRetries(() => withFetch(async () => page('vaults', [item]), () => f())), /Incomplete vaults item 0xc/);
       assert.equal((await noRetries(() => withFetch(async () => page('vaults', [{ ...item, chain: { id: 8453 } }]), () => f()))).length, 1);
     }],
+    ['запит GetVaults включає guardian, timelock, pendingConfigs та adminEvents(first: 25)', async ({ fetchAllVaults: f }) => {
+      let queryStr = '';
+      await noRetries(() => withFetch(async (_u, init) => {
+        queryStr = JSON.parse(init.body).query;
+        return page('vaults', []);
+      }, () => f()));
+      assert.match(queryStr, /adminEvents\(first:\s*25\)/);
+      assert.match(queryStr, /pendingConfigs/);
+      assert.match(queryStr, /guardian/);
+      assert.match(queryStr, /timelock/);
+    }],
   ],
   fetchAllVaultV2s: [
     ['некоректна відповідь -> Malformed vaultV2s', async ({ fetchAllVaultV2s: f }) => {
@@ -224,6 +235,16 @@ export default {
         await assert.rejects(noRetries(() => withFetch(async () => page('vaultV2s', [item]), () => f())), new RegExp(`Incomplete vaultV2s item 0x${miss}`));
       }
       assert.equal((await noRetries(() => withFetch(async () => page('vaultV2s', [ok]), () => f()))).length, 1);
+    }],
+    ['запит GetVaultV2s включає managementFee, timelocks та pendingConfigs', async ({ fetchAllVaultV2s: f }) => {
+      let queryStr = '';
+      await noRetries(() => withFetch(async (_u, init) => {
+        queryStr = JSON.parse(init.body).query;
+        return page('vaultV2s', []);
+      }, () => f()));
+      assert.match(queryStr, /managementFee/);
+      assert.match(queryStr, /timelocks/);
+      assert.match(queryStr, /pendingConfigs/);
     }],
   ],
   fetchCuratorDirectory: [

@@ -2,6 +2,7 @@ import { getDatabase, checkpointDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { findUnknownCollateral } from '../engine/collateralEngine.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
+import { syncVaultEvents } from './eventsService.js';
 import {
   normalizeVault,
   normalizeVaultV2,
@@ -496,6 +497,13 @@ export async function syncAllVaults(options = {}) {
     }
 
     console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
+
+    try {
+      const evStats = syncVaultEvents(db, rawVaultsV1, rawVaultsV2, { chainIds: options.chainIds ?? null });
+      console.log(`[Events] Processed ${evStats.vaultsProcessed} vaults: +${evStats.insertedCount} events, ${evStats.updatedPendingCount} pending updated, ${evStats.prunedCount} pruned.`);
+    } catch (evErr) {
+      console.error('[Events] Failed to sync vault events:', evErr.message);
+    }
 
     reportUnknownCollateral(db);
 
