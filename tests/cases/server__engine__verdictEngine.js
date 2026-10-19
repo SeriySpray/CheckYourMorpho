@@ -55,10 +55,10 @@ export default {
     ['повертає метадані vault і точний summary', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), diversified());
       assert.equal(r.vaultAddress, '0xvault'); assert.equal(r.vaultName, 'Test Vault'); assert.equal(r.version, 'v1'); assert.equal(r.chainId, 1);
-      assert.equal(r.summary, 'MQI: 100% clean capital. Concentration HHI: 0.1 (High Diversification, top: C0 10%). Exit Liquidity: 100%.');
+      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral: .+ \d+(\.\d+)?%, high-risk 0%\. Exit Liquidity: 100%\.$/);
     }],
-    ['vault без активної застави -> summary "Concentration: N/A"', ({ generateVaultVerdict: f }) =>
-      assert.match(f(vault({ liquidity_usd: 100e6 }), []).summary, /Concentration: N\/A\. Exit Liquidity: 100%\.$/)],
+    ['vault без активної застави -> summary "Collateral: N/A"', ({ generateVaultVerdict: f }) =>
+      assert.match(f(vault({ liquidity_usd: 100e6 }), []).summary, /Collateral: N\/A\. Exit Liquidity: 100%\.$/)],
     ['брудний ринок -> CRITICAL Compromised Market Exposure', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ is_listed: 0, supply_assets_usd: 50e6 })]);
       assert.equal(flag(r, 'Compromised Market Exposure').level, 'CRITICAL');
@@ -72,18 +72,23 @@ export default {
       assert.equal(r.mqi.mqiPercent, 100);
       assert.equal(flag(r, 'Compromised Market Exposure').level, 'CRITICAL');
     }],
-    ['єдина застава -> HIGH Extreme Collateral Concentration', ({ generateVaultVerdict: f }) => {
+    ['100% у WETH (клас ETH) -> без прапорця застав, клас ETH 100%', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6 })]);
-      assert.equal(flag(r, 'Extreme Collateral Concentration').level, 'HIGH');
-      assert.ok(!titles(r).includes('Elevated Collateral Concentration'));
+      assert.equal(flag(r, 'High-Risk Collateral'), undefined); assert.equal(flag(r, 'Elevated-Risk Collateral'), undefined);
+      assert.equal(r.collateral.classes[0].class, 'ETH'); assert.equal(r.collateral.classes[0].percent, 100);
     }],
-    ['дві рівні застави (CONCENTRATED) -> MEDIUM Elevated Collateral Concentration', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [mkt(0, 50e6, 500e6), mkt(1, 50e6, 500e6)]);
-      assert.equal(flag(r, 'Elevated Collateral Concentration').level, 'MEDIUM');
-      assert.ok(!titles(r).includes('Extreme Collateral Concentration'));
+    ['невідома застава 100% -> HIGH High-Risk Collateral (невідоме не вважається безпечним)', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, collateral_asset_address: '0xunknowntoken', collateral_asset_symbol: 'NEWCOIN' })]);
+      const x = flag(r, 'High-Risk Collateral');
+      assert.equal(x.level, 'HIGH'); assert.match(x.message, /^100% of vault capital/);
+      assert.equal(r.collateral.level, 'RED'); assert.equal(r.collateral.unknownPercent, 100);
     }],
-    ['п\'ять рівних застав (MODERATE) -> жодного прапорця концентрації', ({ generateVaultVerdict: f }) =>
-      assert.deepEqual(f(vault(), [0, 1, 2, 3, 4].map(i => mkt(i, 20e6, 500e6))).redFlags, [])],
+    ['60% синтетичного долара (USDe) + 40% WETH -> MEDIUM Elevated-Risk Collateral', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 60e6, collateral_asset_address: '0x4c9edd5852cd905f086c759e8383e09bff1e68b3', collateral_asset_symbol: 'USDe' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 40e6 })]);
+      assert.equal(flag(r, 'Elevated-Risk Collateral').level, 'MEDIUM'); assert.equal(flag(r, 'High-Risk Collateral'), undefined);
+    }],
+    ["п'ять рівних застав низького ризику -> жодного прапорця застав", ({ generateVaultVerdict: f }) =>
+      assert.deepEqual(f(vault(), diversified().slice(0, 5).map(a => ({ ...a, supply_assets_usd: 20e6 }))).redFlags, [])],
     ['низька миттєва ліквідність -> HIGH Restricted Exit Liquidity з сумою', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6, total_supply_assets_usd: 200e6, total_borrow_assets_usd: 190e6 })]);
       const x = flag(r, 'Restricted Exit Liquidity');
@@ -195,7 +200,7 @@ export default {
       assert.equal(r.mqi.mqiPercent, null); assert.equal(r.mqi.isAllClean, false);
       assert.equal(r.liquidity.instantExitCapacityPercent, null); assert.equal(r.liquidity.exitUnknownReason, 'unresolved');
       assert.equal(flag(r, 'Unknown Exit Liquidity'), undefined); // the Unresolved Exposure flag already carries the reason
-      assert.equal(r.hhi.tier, 'UNKNOWN'); assert.match(r.summary, /Concentration: N\/A\. Exit Liquidity: unknown/);
+      assert.equal(r.hhi.tier, 'UNKNOWN'); assert.equal(r.collateral.tier, 'UNKNOWN'); assert.match(r.summary, /Collateral: N\/A\. Exit Liquidity: unknown/);
     }],
     ['C1: нерозкрита експозиція нижче порогу суттєвості -> без прапорця', ({ generateVaultVerdict: f }) =>
       assert.equal(flag(f(vault({ unresolved_exposure_usd: 200e3 }), diversified()), 'Unresolved Exposure'), undefined)],

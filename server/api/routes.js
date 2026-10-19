@@ -8,6 +8,7 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
+import { calculateCollateralMix } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
@@ -434,7 +435,7 @@ export function handleGetVaults(req, res, url) {
   }
 }
 
-/** List entries with MQI/HHI/liquidity for every vault, ordered by address so sort ties stay stable. */
+/** List entries with MQI/collateral mix/liquidity for every vault, ordered by address so sort ties stay stable. */
 export function getVaultCatalog() {
   if (vaultCatalog && Date.now() - vaultCatalog.timestamp < CATALOG_TTL_MS) return vaultCatalog.vaults;
   const db = getDatabase();
@@ -466,6 +467,7 @@ export function getVaultCatalog() {
     const scored = withEffectiveTotal(row, allocs);
     const mqi = calculateMQI(scored, allocs);
     const hhi = calculateHHI(withMaterialUnresolved(scored, mqi), allocs);
+    const collateral = calculateCollateralMix(withMaterialUnresolved(scored, mqi), allocs);
     const liq = calculateLiquidityMetrics(withMaterialUnresolved(scored, mqi), allocs);
 
     return {
@@ -505,6 +507,10 @@ export function getVaultCatalog() {
       hhi: hhi.hhi,
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
+      collateralTier: collateral.tier,
+      collateralLevel: collateral.level,
+      highRiskPercent: collateral.highPercent,
+      topCollateralClass: collateral.topClass,
       updatedAt: row.metadata_updated_at
     };
   });
@@ -604,7 +610,7 @@ export function handleGetVaultByAddress(req, res, address) {
       alloc.peer_vaults = peerData.peers;
     }
 
-    // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
+    // Compute comprehensive institutional audit verdict (MQI + collateral classes + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
     const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
     const unverifiedKeys = new Set(verdict.mqi.unverifiedMarkets.map(m => m.marketUniqueKey));

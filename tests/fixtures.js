@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 // Спільні фабрики тестових даних.
 // liquidity_usd за замовчуванням не обмежує вихід (0 тепер означає "нічого не можна вивести"), тож вихід визначають ринки.
 export const vault = (over = {}) => ({
@@ -8,14 +10,17 @@ export const vault = (over = {}) => ({
 // Алокація, приєднана до ринку: чистий ринок із повною ліквідністю.
 export const alloc = (over = {}) => ({
   market_unique_key: '1:0xabc', is_listed: 1, oracle_address: '0x1', lltv_percent: 86,
-  collateral_asset_address: '0xweth', collateral_asset_symbol: 'WETH', loan_asset_symbol: 'USDC',
+  chain_id: 1, collateral_asset_address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', collateral_asset_symbol: 'WETH', loan_asset_symbol: 'USDC',
   warnings_json: '[]', supply_assets_usd: 10e6, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0,
   peer_supply_usd: 0, ...over
 });
 
-// Десять різних застав по 10% TVL: здоровий vault без прапорців.
-export const diversified = () => Array.from({ length: 10 }, (_, i) =>
-  alloc({ market_unique_key: `1:0x${i}`, collateral_asset_address: `0xc${i}`, collateral_asset_symbol: `C${i}` }));
+// Десять різних застав по 10% TVL: здоровий vault без прапорців. Це справжні токени низького ризику з довідника класів
+// (адреса й символ мають бути в ньому, інакше застава рахується невідомою).
+const LOW_RISK_TOKENS = JSON.parse(fs.readFileSync(new URL('../server/data/collateralClasses.json', import.meta.url), 'utf8'))
+  .entries.filter(e => e.chainId === 1 && ['ETH', 'BTC', 'FIAT_STABLE'].includes(e.class)).slice(0, 10);
+export const diversified = () => LOW_RISK_TOKENS.map((t, i) =>
+  alloc({ market_unique_key: `1:0x${i}`, collateral_asset_address: t.address, collateral_asset_symbol: t.symbol }));
 
 export const idle = (over = {}) => alloc({
   collateral_asset_symbol: 'NONE', collateral_asset_address: '', lltv_percent: 0, oracle_address: '', ...over

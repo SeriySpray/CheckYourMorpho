@@ -61,6 +61,29 @@ const count = (db, table) => db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).ge
 const sync = (mod, api, options) => withFetch(mockApi(api), () => mod.syncAllVaults(options));
 
 export default {
+  reportUnknownCollateral: [
+    ['невідомі застави від порога потрапляють у лог і в результат, відомі - ні', ({ reportUnknownCollateral: f }) => {
+      const rows = [
+        { chain_id: 1, collateral_asset_address: '0xnew', collateral_asset_symbol: 'NEWCOIN', supply_assets_usd: 5e6 },
+        { chain_id: 1, collateral_asset_address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', collateral_asset_symbol: 'WETH', supply_assets_usd: 9e6 },
+        { chain_id: 1, collateral_asset_address: '0xsmall', collateral_asset_symbol: 'SMALL', supply_assets_usd: 1e5 }
+      ];
+      const warn = console.warn;
+      const logged = [];
+      console.warn = (...args) => logged.push(args.join(' '));
+      try {
+        const r = f({ prepare: () => ({ all: () => rows }) }, 1e6);
+        assert.deepEqual(r.map(x => x.symbol), ['NEWCOIN']);
+        assert.equal(logged.length, 1);
+        assert.match(logged[0], /NEWCOIN.*collateralClasses\.json/);
+      } finally { console.warn = warn; }
+    }],
+    ['помилка БД не кидає виняток: повертає порожній список', ({ reportUnknownCollateral: f }) => {
+      const warn = console.warn;
+      console.warn = () => {};
+      try { assert.deepEqual(f({ prepare: () => { throw new Error('no table'); } }), []); } finally { console.warn = warn; }
+    }],
+  ],
   lookThroughVault: [
     ['порожній або відсутній базовий vault -> null, непорожній -> він сам', ({ lookThroughVault: f }) => {
       const m = new Map([['0xa', { state: { totalAssets: '10' } }], ['0xb', { state: { totalAssets: '0' } }]]);

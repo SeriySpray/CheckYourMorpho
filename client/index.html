@@ -224,12 +224,12 @@
             <span class="item-text">Market Quality: Clean First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="hhi_desc" role="option" aria-selected="false">
-            <span class="item-text">Concentration: High HHI</span>
+          <div class="dropdown-item" data-value="risk_desc" role="option" aria-selected="false">
+            <span class="item-text">Collateral Risk: High First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="hhi_asc" role="option" aria-selected="false">
-            <span class="item-text">Diversification: Low HHI</span>
+          <div class="dropdown-item" data-value="risk_asc" role="option" aria-selected="false">
+            <span class="item-text">Collateral Risk: Low First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
 
@@ -367,7 +367,7 @@
 
       <!-- TAB 2: RISK & CONCENTRATION -->
       <div class="audit-tab-panel" id="tab-risk" role="tabpanel">
-        <div class="panel-section-title">PORTFOLIO AUDIT: MQI & HHI</div>
+        <div class="panel-section-title">PORTFOLIO AUDIT: MQI & COLLATERAL</div>
 
         <!-- 1. Market Quality Index (MQI) Meter -->
         <div class="meter-box">
@@ -381,16 +381,16 @@
           <div class="meter-desc" id="risk-mqi-desc">Capital deployed in verified, non-defaulted markets</div>
         </div>
 
-        <!-- 2. Collateral Concentration (HHI) Meter -->
+        <!-- 2. Collateral Risk Classes Meter -->
         <div class="meter-box">
           <div class="meter-header">
-            <span class="meter-label">Collateral Concentration (HHI)</span>
-            <span class="meter-value" id="risk-hhi-val">0.00</span>
+            <span class="meter-label">Collateral Risk Classes</span>
+            <span class="meter-value" id="risk-mix-val">0%</span>
           </div>
           <div class="meter-track">
-            <div class="meter-fill" id="risk-hhi-bar" style="width: 0%;"></div>
+            <div class="meter-fill" id="risk-mix-bar" style="width: 0%;"></div>
           </div>
-          <div class="meter-desc" id="risk-hhi-desc">Herfindahl-Hirschman single-asset risk index</div>
+          <div class="meter-desc" id="risk-mix-desc">Share of capital lent against high-risk collateral classes</div>
         </div>
 
         <!-- 3. Instant Exit Capacity Meter -->
@@ -426,7 +426,7 @@
         <div class="curator-audit-box">
           <div class="curator-audit-header">
             <span class="curator-audit-title">Collateral Allocation Breakdown</span>
-            <span class="discipline-badge" id="risk-effective-assets">1.0 Effective Assets</span>
+            <span class="discipline-badge" id="risk-effective-assets">1 collateral class</span>
           </div>
           <div class="collateral-breakdown-list" id="risk-collateral-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
             <!-- Rendered dynamically -->
@@ -446,7 +446,7 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261019_mqi"></script>
+  <script type="module" src="js/app.js?v=20261019_collateral"></script>
 </body>
 
 

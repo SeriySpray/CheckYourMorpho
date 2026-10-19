@@ -1,0 +1,85 @@
+{
+ "note": "Rules apply only to tokens that are NOT in mapping.json (matched by chainId+address). A rule may assign only classes with weight medium or high; low-weight classes (FIAT_STABLE, ETH, BTC) are granted only by address in mapping.json, so a token that copies a blue-chip symbol can never be treated as safe. First matching rule wins. Matching is case-sensitive unless flags say otherwise.",
+ "rules": [
+  {
+   "id": "pt",
+   "pattern": "^PT-(.+?)-(\\d{1,2}[A-Z]{3}\\d{4}|\\d{4}/\\d{2}/\\d{2})",
+   "flags": "",
+   "class": "PT",
+   "underlyingGroup": 1,
+   "maturityGroup": 2
+  },
+  {
+   "id": "yt-lp-pendle",
+   "pattern": "^(YT|LP|SY)-",
+   "flags": "",
+   "class": "UNKNOWN"
+  },
+  {
+   "id": "midas-mtoken",
+   "pattern": "^m[A-Z0-9][A-Za-z0-9-]*$",
+   "flags": "",
+   "class": "CREDIT_FUND",
+   "kind": "fund-strategy"
+  },
+  {
+   "id": "treasury",
+   "pattern": "(T?BILL|USTB|BUIDL|USYC|OUSG|EUTBL|JTRSY)",
+   "flags": "i",
+   "class": "CREDIT_FUND",
+   "kind": "treasury"
+  },
+  {
+   "id": "credit-keywords",
+   "pattern": "(CREDIT|CLO|HELOC|CARRY|BASIS|FALCON|SYRUP)",
+   "flags": "i",
+   "class": "CREDIT_FUND",
+   "kind": "fund-strategy"
+  },
+  {
+   "id": "tokenized-stock",
+   "pattern": "^[A-Z]{1,5}(c|on|x)$",
+   "flags": "",
+   "class": "VOLATILE",
+   "kind": "stock"
+  },
+  {
+   "id": "gold",
+   "pattern": "^(XAU|PAXG|GLD|GOLD)",
+   "flags": "i",
+   "class": "VOLATILE",
+   "kind": "gold"
+  },
+  {
+   "id": "alt-majors",
+   "pattern": "^(W?SOL|JitoSOL|mSOL|W?HYPE|kHYPE|stHYPE|W?MON|W?POL|W?AVAX|W?BNB|cbXRP|FXRP|XRP|cbADA|cbDOGE|cbLTC|cbZEC|cbHYPE|W?S|W?FTM|W?TRX)$",
+   "flags": "",
+   "class": "VOLATILE",
+   "kind": "alt"
+  },
+  {
+   "id": "usd-like-hint",
+   "pattern": "USD|EUR|DAI",
+   "flags": "i",
+   "class": "UNKNOWN"
+  },
+  {
+   "id": "eth-like-hint",
+   "pattern": "ETH",
+   "flags": "i",
+   "class": "UNKNOWN"
+  },
+  {
+   "id": "btc-like-hint",
+   "pattern": "BTC",
+   "flags": "i",
+   "class": "UNKNOWN"
+  },
+  {
+   "id": "default",
+   "pattern": ".*",
+   "flags": "",
+   "class": "UNKNOWN"
+  }
+ ]
+}

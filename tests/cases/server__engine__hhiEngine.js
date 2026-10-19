@@ -137,7 +137,7 @@ export default {
       assert.equal(r.tier, 'EXTREME'); assert.equal(r.breakdown.length, 1);
     }],
     ['одна застава в двох ринках (адреса в різному регістрі) зливається в одну позицію', ({ calculateHHI: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 30e6, collateral_asset_address: '0xWETH' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 70e6 })]);
+      const r = f(vault(), [alloc({ supply_assets_usd: 30e6, collateral_asset_address: '0xC02AAA39B223FE8D0A0E5C4F27EAD9083C756CC2' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 70e6 })]);
       assert.equal(r.hhi, 1); assert.deepEqual(r.breakdown, [{ symbol: 'WETH', usd: 100e6, sharePercent: 100 }]);
     }],
     ['від\'ємна і нечислова сума постачання ігноруються', ({ calculateHHI: f }) => {

@@ -74,13 +74,13 @@ const DOM = {
   modalFee: document.getElementById('modal-fee'),
   overviewMarketsCount: document.getElementById('overview-markets-count'),
 
-  // Panel 2: MQI, HHI & Exit
+  // Panel 2: MQI, collateral classes & Exit
   riskMqiPct: document.getElementById('risk-mqi-pct'),
   riskMqiBar: document.getElementById('risk-mqi-bar'),
   riskMqiDesc: document.getElementById('risk-mqi-desc'),
-  riskHhiVal: document.getElementById('risk-hhi-val'),
-  riskHhiBar: document.getElementById('risk-hhi-bar'),
-  riskHhiDesc: document.getElementById('risk-hhi-desc'),
+  riskMixVal: document.getElementById('risk-mix-val'),
+  riskMixBar: document.getElementById('risk-mix-bar'),
+  riskMixDesc: document.getElementById('risk-mix-desc'),
   riskExitMeterBox: document.getElementById('risk-exit-meter-box'),
   riskExitLabel: document.getElementById('risk-exit-label'),
   riskExitInfoBtn: document.getElementById('risk-exit-info-btn'),
@@ -464,8 +464,8 @@ function updateActiveFilterChips() {
       liq_desc: 'Free Liquidity: High to Low',
       mqi_asc: 'Market Quality: Flagged First',
       mqi_desc: 'Market Quality: Clean First',
-      hhi_desc: 'Concentration: High HHI',
-      hhi_asc: 'Diversification: Low HHI'
+      risk_desc: 'Collateral Risk: High First',
+      risk_asc: 'Collateral Risk: Low First'
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -799,8 +799,10 @@ function applyVaultAuditData(vaultAddress, auditData) {
       if (verdict.liquidity?.instantExitCapacityUsd !== undefined) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
       }
-      if (verdict.hhi?.hhi !== undefined) matchingVault.hhi = verdict.hhi.hhi;
-      if (verdict.hhi?.tier !== undefined) matchingVault.hhiTier = verdict.hhi.tier;
+      if (verdict.collateral?.highPercent !== undefined) matchingVault.highRiskPercent = verdict.collateral.highPercent;
+      if (verdict.collateral?.tier !== undefined) matchingVault.collateralTier = verdict.collateral.tier;
+      if (verdict.collateral?.level !== undefined) matchingVault.collateralLevel = verdict.collateral.level;
+      if (verdict.collateral?.topClass !== undefined) matchingVault.topCollateralClass = verdict.collateral.topClass;
     }
   }
 
@@ -1144,12 +1146,13 @@ function renderVaultExplorer() {
     if (explorerFilters.sort === 'mqi_desc') {
       return mqiSortKey(b) - mqiSortKey(a);
     }
-    if (explorerFilters.sort === 'hhi_desc') {
-      return (b.hhi ?? 0) - (a.hhi ?? 0);
+    if (explorerFilters.sort === 'risk_desc') {
+      return (b.highRiskPercent ?? 0) - (a.highRiskPercent ?? 0);
     }
-    if (explorerFilters.sort === 'hhi_asc') {
-      const aVal = a.hhiTier === 'UNALLOCATED' || a.hhiTier === 'UNKNOWN' ? 999 : (a.hhi ?? 0);
-      const bVal = b.hhiTier === 'UNALLOCATED' || b.hhiTier === 'UNKNOWN' ? 999 : (b.hhi ?? 0);
+    if (explorerFilters.sort === 'risk_asc') {
+      // vaults with no collateral picture go last, not first
+      const aVal = a.collateralTier === 'UNALLOCATED' || a.collateralTier === 'UNKNOWN' ? 999 : (a.highRiskPercent ?? 0);
+      const bVal = b.collateralTier === 'UNALLOCATED' || b.collateralTier === 'UNKNOWN' ? 999 : (b.highRiskPercent ?? 0);
       return aVal - bVal;
     }
     // Default: Total Deposits (TVL)
@@ -1858,32 +1861,22 @@ function populateAuditModal(data, isQuietRefresh = false) {
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
-  // 2. HHI
-  const hhiVal = verdict.hhi?.hhi ?? 0;
-  const isUnallocated = verdict.hhi?.tier === 'UNALLOCATED' || verdict.hhi?.tier === 'UNKNOWN';
+  // 2. Collateral classes: share of capital in high-risk classes, and the top classes behind it
+  const mix = verdict.collateral || {};
+  const mixClasses = mix.classes || [];
+  const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
+  const highRiskPct = mix.highPercent ?? 0;
 
-  // Read English tier labels directly from backend calculation
-  let tierLabel = verdict.hhi?.tierLabel || 'High Diversification';
-  if (isUnallocated) {
-    tierLabel = 'N/A';
-  }
-
-  if (DOM.riskHhiVal) {
+  if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${highRiskPct}% high-risk`;
+  if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(highRiskPct))}%`;
+  if (DOM.riskMixDesc) {
     if (isUnallocated) {
-      DOM.riskHhiVal.textContent = 'N/A';
+      DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
     } else {
-      DOM.riskHhiVal.textContent = `${hhiVal} (${tierLabel})`;
-    }
-  }
-  if (DOM.riskHhiBar) DOM.riskHhiBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(hhiVal * 100))}%`;
-  if (DOM.riskHhiDesc) {
-    if (isUnallocated) {
-      DOM.riskHhiDesc.textContent = verdict.hhi?.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
-    } else {
-      const top = verdict.hhi?.topCollateral;
-      DOM.riskHhiDesc.textContent = top && top.symbol !== 'None'
-        ? `Top collateral: ${top.symbol} (${top.sharePercent}% of ${verdict.hhi?.unverifiedPercent > 0 ? 'verified' : 'total'} capital)`
-        : 'Herfindahl-Hirschman single-asset concentration index';
+      const top = mixClasses.slice(0, 3).map(c => `${c.label} ${c.percent}%`).join(', ');
+      DOM.riskMixDesc.textContent = top
+        ? `${top} of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`
+        : 'Share of capital lent against high-risk collateral classes';
     }
   }
 
@@ -1928,14 +1921,14 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
     if (isUnallocated) {
-      DOM.riskEffectiveAssets.textContent = '0 Effective Assets';
+      DOM.riskEffectiveAssets.textContent = '0 collateral classes';
     } else {
-      DOM.riskEffectiveAssets.textContent = `${verdict.hhi?.effectiveAssets ?? 0} Effective Assets`;
+      DOM.riskEffectiveAssets.textContent = `${mixClasses.length} collateral class${mixClasses.length === 1 ? '' : 'es'}`;
     }
   }
   if (DOM.riskCollateralList) {
     DOM.riskCollateralList.innerHTML = '';
-    const breakdown = verdict.hhi?.breakdown || [];
+    const breakdown = mixClasses.map(c => ({ label: c.label, usd: c.usd, sharePercent: c.percent, weight: c.weight }));
     if (breakdown.length === 0) {
       DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
     } else {
@@ -1943,7 +1936,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.04);';
         row.innerHTML = `
-          <span style="font-weight:600; color:#fff;">${escapeHtml(item.symbol)}</span>
+          <span style="font-weight:600; color:#fff;">${escapeHtml(item.label)}</span>
           <span style="color:var(--text-muted);">${formatCurrency(item.usd)} <strong style="color:#fff; margin-left:6px;">${item.sharePercent}%</strong></span>
         `;
         DOM.riskCollateralList.appendChild(row);

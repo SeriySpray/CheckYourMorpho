@@ -9,8 +9,8 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 ## What it does
 
 - Lists every vault that Morpho marks as listed, on all chains the Morpho API returns, with search by name, symbol, curator or address and filters by network, asset and curator.
-- Sorts vaults by TVL, APY, liquidity, MQI or HHI.
-- Opens an audit panel for a vault: its allocations by market, MQI, collateral concentration, instant and crowded exit capacity, and a list of red flags.
+- Sorts vaults by TVL, APY, liquidity, MQI or collateral risk.
+- Opens an audit panel for a vault: its allocations by market, MQI, collateral risk classes, instant and crowded exit capacity, and a list of red flags.
 - Lets you pin vaults in the browser (stored in `localStorage`).
 - Shows the vaults as a WebGL 2 particle sphere.
 
@@ -35,16 +35,24 @@ A failing market only lowers MQI when it is material: the allocation is at least
 
 Missing data does not lower the score. A market is compromised only for a known defect. A market whose bad debt or warnings the API did not return, and capital the sync could not expand (see Limitations), are unverified: they are left out of the MQI denominator and reported separately as `unverifiedPercent`, with the market shown as UNVERIFIED, until the data returns. MQI is `null` when nothing could be verified. A vault that holds assets but has no USD price also gets MQI `null` (unknown), not 100%; the price is taken from the vault's own markets when the API omits it.
 
-**HHI (Herfindahl-Hirschman Index)** measures how concentrated the collateral behind the vault's loans is. It groups active allocations by collateral asset and ignores idle markets (no collateral asset, or LLTV 0). Shares are measured against the verified capital: capital behind adapters that could not be expanded is left out of the base and reported as `unverifiedPercent`, and a vault with nothing verifiable gets tier `UNKNOWN`. The response also gives the number of effective assets and the top collateral with its share of verified capital. A tier needs both the HHI level and a minimum share of TVL in the top collateral:
+**Collateral classes** group the capital the vault has lent out by the kind of risk behind the collateral, instead of counting every token as its own asset. Tokens that move together (WETH, wstETH, weETH) share one class. Idle markets (no collateral asset, or LLTV 0) are not collateral and are shown separately. Shares are measured against the verified capital: capital behind adapters that could not be expanded is left out of the base and reported as `unverifiedPercent`.
 
-| Tier | HHI | Top collateral share of TVL |
+| Class | What is in it | Weight |
 |---|---|---|
-| EXTREME | above 0.50 | 40% or more |
-| CONCENTRATED | 0.25 or more | 20% or more |
-| MODERATE | 0.15 or more | 10% or more |
-| DIVERSIFIED | anything else | |
+| BTC | cbBTC, WBTC, kBTC and other BTC wrappers | low |
+| ETH | WETH, wstETH, weETH and other staking derivatives | low |
+| Fiat stablecoins | USDC, USDT, EURCV as collateral | low |
+| Synthetic dollars | USDe, sUSDe, sUSDS, savings and structured stable tokens | medium |
+| Principal tokens (PT) | Pendle and Spectra fixed-maturity tokens; for the flag they weigh as their underlying asset, never below medium | medium |
+| Off-chain credit and funds | PRIME, syrupUSDC, Midas funds, private credit and RWA | high |
+| Volatile assets | other alts, governance tokens, tokenized stocks and gold | high |
+| Unclassified | any token that is not in the list yet | high |
 
-A vault with less than 30% of TVL in active collateral is DIVERSIFIED regardless of HHI. A vault with less than 1% is UNALLOCATED and gets no HHI.
+The class of a token comes from `server/data/collateralClasses.json`, one entry per chain and address, edited by hand. Only that file can give a low weight, so a token that copies the symbol of WETH can never look safe. A token that is not listed goes through the symbol rules in `server/data/collateralRules.json`, which can only give a medium or high weight, and otherwise stays Unclassified. After each sync, unclassified collateral holding $1M or more is written to the server log.
+
+A vault is flagged red when 25% or more of its verified capital sits in high-weight classes, and yellow when it is not red but 50% or more sits in medium- or high-weight classes. The class list and these thresholds are a judgement, not an official rating.
+
+The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audit response for reference, but no longer drives a flag or the summary: it counted each token separately and marked a vault holding only cbBTC as extremely concentrated.
 
 **Instant exit** is the share of the verified capital (TVL minus capital behind unexpanded adapters, reported as `unverifiedPercent`) a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, the vault has no USD price, or none of its capital could be verified, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 20% the vault is marked illiquid.
 
@@ -55,8 +63,8 @@ A vault with less than 30% of TVL in active collateral is DIVERSIFIED regardless
 | Flag | Level |
 |---|---|
 | Compromised Market Exposure (a material market fails the MQI check) | CRITICAL |
-| Extreme Collateral Concentration (tier EXTREME) | HIGH |
-| Elevated Collateral Concentration (tier CONCENTRATED) | MEDIUM |
+| High-Risk Collateral (25% or more in high-weight classes) | HIGH |
+| Elevated-Risk Collateral (50% or more in medium- or high-weight classes) | MEDIUM |
 | Restricted Exit Liquidity (instant exit under 20%) | HIGH |
 | Critical Crowded Exit Deficit / Elevated Crowded Exit Contagion | CRITICAL / HIGH, depending on how far crowded exit falls below instant exit and how much TVL sits in crowded markets |
 | Unresolved Exposure (capital whose underlying markets could not be resolved) | HIGH |
@@ -70,7 +78,7 @@ A vault with less than 30% of TVL in active collateral is DIVERSIFIED regardless
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/status` | Row counts, time of the last full sync, whether a sync is running, last sync result, `stale` (no successful sync for over three sync intervals) and `lastSuccessAt`. |
-| GET | `/api/vaults` | Vault list with MQI, HHI and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
+| GET | `/api/vaults` | Vault list with MQI, collateral risk and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
 | GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations. |
 | POST | `/api/sync` | Starts a sync. Needs `Authorization: Bearer <SYNC_TOKEN>`. Returns 202, or waits and returns 200 with `?await=1`. Returns 403 if `SYNC_TOKEN` is not set, 401 for a wrong token, 409 while a sync is running and 413 for a body over 1 KB. |
 
@@ -116,5 +124,5 @@ The public instance runs on an Oracle Cloud VM as a systemd service behind nginx
 
 - The analysis is per vault and from the lender's side. There are no user positions, health factors or borrower views.
 - Crowded exit only knows about listed vaults in the database. Direct lenders and unlisted vaults in the same market are not counted as competitors.
-- V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. The same holds for V1 positions the API returns without a market, a V1 vault whose allocation is missing, and MorphoMarketV1 assets that the market caps cover by less than 99.5% (a smaller gap is taken as accrued interest and counted as cash; the live API shows no gap at all). Such capital is not counted as cash: it is flagged as Unresolved Exposure, left out of the MQI score (shown as unverified once material), left out of HHI and of the exit figure (both are measured on the verified capital).
+- V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. The same holds for V1 positions the API returns without a market, a V1 vault whose allocation is missing, and MorphoMarketV1 assets that the market caps cover by less than 99.5% (a smaller gap is taken as accrued interest and counted as cash; the live API shows no gap at all). Such capital is not counted as cash: it is flagged as Unresolved Exposure, left out of the MQI score (shown as unverified once material), left out of the collateral shares and of the exit figure (both are measured on the verified capital).
 - Only the current state is kept. There is no history, no charts over time and no alerts.

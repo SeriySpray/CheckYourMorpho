@@ -1,11 +1,12 @@
 import { calculateMQI, withMaterialUnresolved } from './mqiEngine.js';
 import { calculateHHI } from './hhiEngine.js';
+import { calculateCollateralMix } from './collateralEngine.js';
 import { calculateLiquidityMetrics } from './liquidityEngine.js';
 
 /**
  * Synthesizes the institutional vault audit based strictly on:
  * 1. Market Quality Index (MQI)
- * 2. Herfindahl-Hirschman Index (HHI) Collateral Concentration
+ * 2. Collateral class mix (share of capital per risk class of the collateral); the HHI is still returned for reference
  * 3. Instant Exit Capacity
  * 
  * @param {object} vault Vault row from database
@@ -18,6 +19,7 @@ export function generateVaultVerdict(vault, allocations = []) {
 
   // 2. Herfindahl-Hirschman Concentration Index (HHI) [0.00 - 1.00]
   const hhi = calculateHHI(withMaterialUnresolved(vault, mqi), allocations);
+  const collateral = calculateCollateralMix(withMaterialUnresolved(vault, mqi), allocations);
 
   // 3. Instant Exit Liquidity
   const liquidity = calculateLiquidityMetrics(withMaterialUnresolved(vault, mqi), allocations);
@@ -65,19 +67,13 @@ export function generateVaultVerdict(vault, allocations = []) {
     });
   }
 
-  // Flag 2: Extreme Collateral Concentration
-  if (hhi.tier === 'EXTREME') {
-    redFlags.push({
-      level: 'HIGH',
-      title: 'Extreme Collateral Concentration',
-      message: `${hhi.topCollateral.sharePercent}% of vault capital is backed by a single collateral asset (${hhi.topCollateral.symbol}), creating critical concentration risk (HHI: ${hhi.hhi}).`
-    });
-  } else if (hhi.tier === 'CONCENTRATED') {
-    redFlags.push({
-      level: 'MEDIUM',
-      title: 'Elevated Collateral Concentration',
-      message: `Top collateral asset ${hhi.topCollateral.symbol} accounts for ${hhi.topCollateral.sharePercent}% of backing (HHI: ${hhi.hhi}).`
-    });
+  // Flag 2: Collateral class mix. Tokens are grouped by what can go wrong with them, so the share in high-risk
+  // classes (off-chain credit, volatile alts, unclassified) says more than how many different tokens there are.
+  if (collateral.level) {
+    const riskyClasses = collateral.classes.filter(c => c.weight !== 'low').map(c => `${c.label} ${c.percent}%`).join(', ');
+    redFlags.push(collateral.level === 'RED'
+      ? { level: 'HIGH', title: 'High-Risk Collateral', message: `${collateral.highPercent}% of vault capital is lent against high-risk collateral classes (${riskyClasses}).` }
+      : { level: 'MEDIUM', title: 'Elevated-Risk Collateral', message: `${collateral.mediumPlusPercent}% of vault capital is lent against synthetic, fixed-maturity or higher-risk collateral (${riskyClasses}).` });
   }
 
   // Flag 3: Severe Exit Liquidity Lockup (null < 20 is true in JS, so unknown exit is handled first)
@@ -158,9 +154,10 @@ export function generateVaultVerdict(vault, allocations = []) {
       : `${mqi.mqiPercent}% clean capital`;
   // A rounded 100 next to a real defect must not read as fully clean
   if (mqi.compromisedMarkets.length > 0 && mqi.mqiPercent === 100) mqiText += ` (${mqi.compromisedPercent}% in compromised markets)`;
-  let summary = hhi.tier === 'UNALLOCATED' || hhi.tier === 'UNKNOWN'
-    ? `MQI: ${mqiText}. Concentration: N/A. ${exitSummary}.`
-    : `MQI: ${mqiText}. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;
+  const top = collateral.classes[0];
+  let summary = collateral.tier === 'CLASSIFIED'
+    ? `MQI: ${mqiText}. Collateral: ${top.label} ${top.percent}%, high-risk ${collateral.highPercent}%. ${exitSummary}.`
+    : `MQI: ${mqiText}. Collateral: N/A. ${exitSummary}.`;
 
   return {
     vaultAddress: vault.address,
@@ -171,6 +168,7 @@ export function generateVaultVerdict(vault, allocations = []) {
     redFlags,
     mqi,
     hhi,
+    collateral,
     liquidity
   };
 }
