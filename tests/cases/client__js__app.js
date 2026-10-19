@@ -173,7 +173,7 @@ const pin = (...addrs) => localStorage.setItem('cym_pinned_vaults', JSON.stringi
 const pinned = () => JSON.parse(localStorage.getItem('cym_pinned_vaults') || '[]');
 const lastCall = (sphere, kind) => sphere.calls.filter(c => c[0] === kind).at(-1);
 
-export default {
+const base = {
   // ---------- Кеш аудитів ----------
   getFreshAudit: [
     T('свіжий запис повертається без урахування регістру адреси', ({ getFreshAudit: f, __state: s }) => {
@@ -1903,17 +1903,15 @@ export default {
   ],
 };
 
-// Знайдені дефекти: кейси правильної поведінки, які зараз падають. Не входять у default export.
-export const knownBugs = {
+// Кейси для виправлених дефектів, злиті з основними за назвою функції
+const fixed = {
   updateActiveFilterChips: [
-    // BUG: sortLabels не знає сортувань mqi_asc/mqi_desc/hhi_desc/hhi_asc з dropdown, чіп показує сирий ключ
-    T('чіп сортування mqi_asc має підпис з dropdown', ({ updateActiveFilterChips: f, __state: s }) => {
+        T('чіп сортування mqi_asc має підпис з dropdown', ({ updateActiveFilterChips: f, __state: s }) => {
       s.explorerFilters.sort = 'mqi_asc';
       f();
       assert.ok(s.DOM.chipsContainer.innerHTML.includes('>Market Quality: Flagged First<'));
     }),
-    // BUG: hasActiveFilters не враховує pinnedOnly, тож чіп "Favorites" не показується, коли це єдиний фільтр
-    T('лише фільтр обраних показує чіп Favorites', ({ updateActiveFilterChips: f, __state: s }) => {
+        T('лише фільтр обраних показує чіп Favorites', ({ updateActiveFilterChips: f, __state: s }) => {
       s.explorerFilters.pinnedOnly = true;
       f();
       assert.equal(s.DOM.activeFilterChips.classList.contains('hidden'), false);
@@ -1921,8 +1919,7 @@ export const knownBugs = {
     }),
   ],
   applyVaultAuditData: [
-    // BUG: liquidityUsd === null дає (null / tvl) * 100 = 0 -> "0% Exit Cap" замість "Exit Cap N/A" (renderPinnedRichPills це обробляє)
-    T('невідома ліквідність без метрики виходу -> "Exit Cap N/A"', ({ applyVaultAuditData: f, __state: s }) => {
+        T('невідома ліквідність без метрики виходу -> "Exit Cap N/A"', ({ applyVaultAuditData: f, __state: s }) => {
       s.allVaults = [cv({ exitCapPercent: undefined })];
       pin('0xaaa1');
       const p = fakePillCard();
@@ -1934,14 +1931,21 @@ export const knownBugs = {
     }),
   ],
   populateBasicVaultInfo: [
-    // BUG: `v.asset?.decimals || 6` підставляє 6 для токена з 0 знаків (populateAuditModal використовує ?? 6)
-    T('токен з 0 знаків: totalAssets "5" -> "5.00 X"', ({ populateBasicVaultInfo: f, __state: s }) => {
+        T('токен з 0 знаків: totalAssets "5" -> "5.00 X"', ({ populateBasicVaultInfo: f, __state: s }) => {
       f(cv({ totalAssets: '5', asset: { symbol: 'X', decimals: 0 } }));
       assert.equal(s.DOM.modalAssetsHuman.textContent, '5.00 X');
     }),
   ],
   escapeHtml: [
-    // BUG: `if (!str) return ''` перетворює число 0 на порожній рядок
-    ['0 -> "0"', ({ escapeHtml: f }) => assert.equal(f(0), '0')],
+        ['0 -> "0"', ({ escapeHtml: f }) => assert.equal(f(0), '0')],
+  ],
+  formatCurrency: [
+    ['негативна сума менша за цент за модулем: "> -$0.01", додатна: "< $0.01"', ({ formatCurrency: f }) => {
+      assert.equal(f(-0.004), '> -$0.01'); assert.equal(f(0.004), '< $0.01'); assert.equal(f(-0.01), '-$0.01');
+    }],
   ],
 };
+
+const merged = { ...base };
+for (const [name, cases] of Object.entries(fixed)) merged[name] = [...(base[name] || []), ...cases];
+export default merged;

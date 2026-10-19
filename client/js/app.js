@@ -409,7 +409,8 @@ function updateActiveFilterChips() {
     explorerFilters.network !== 'all' ||
     explorerFilters.asset !== 'all' ||
     explorerFilters.curator !== 'all' ||
-    explorerFilters.sort !== 'tvl_desc'
+    explorerFilters.sort !== 'tvl_desc' ||
+    explorerFilters.pinnedOnly
   );
 
   if (!hasActiveFilters) {
@@ -460,8 +461,11 @@ function updateActiveFilterChips() {
   if (explorerFilters.sort !== 'tvl_desc') {
     const sortLabels = {
       apy_desc: 'APY: High to Low',
-      liq_desc: 'Liquidity: High to Low',
-      score_desc: 'Safety: High to Low'
+      liq_desc: 'Free Liquidity: High to Low',
+      mqi_asc: 'Market Quality: Flagged First',
+      mqi_desc: 'Market Quality: Clean First',
+      hhi_desc: 'Concentration: High HHI',
+      hhi_asc: 'Diversification: Low HHI'
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -819,7 +823,7 @@ function applyVaultAuditData(vaultAddress, auditData) {
       if (v.totalAssets) {
         tokenAmount = Number(v.totalAssets) / Math.pow(10, decimals);
       } else {
-        const price = v.asset?.priceUsd || matchingVault?.asset?.priceUsd || 1;
+        const price = v.asset?.priceUsd ?? matchingVault?.asset?.priceUsd ?? 1;
         tokenAmount = price > 0 ? (v.totalAssetsUsd || 0) / price : 0;
       }
       const symbol = v.asset?.symbol || matchingVault?.asset?.symbol || '';
@@ -831,7 +835,8 @@ function applyVaultAuditData(vaultAddress, auditData) {
       const exitCapText = formatExitCap(pickExitMetric(
         verdict?.liquidity?.instantExitCapacityPercent,
         matchingVault?.exitCapPercent,
-        v.totalAssetsUsd > 0 ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : 0
+        // no reported liquidity is unknown, not 0%
+        v.totalAssetsUsd > 0 && v.liquidityUsd != null ? Number(((v.liquidityUsd / v.totalAssetsUsd) * 100).toFixed(1)) : null
       ));
 
       // Update MQI badge
@@ -1295,9 +1300,9 @@ function populateBasicVaultInfo(v) {
   if (DOM.modalAssetsHuman) {
     let tokenAmount = 0;
     if (v.totalAssets) {
-      tokenAmount = Number(v.totalAssets) / Math.pow(10, v.asset?.decimals || 6);
+      tokenAmount = Number(v.totalAssets) / Math.pow(10, v.asset?.decimals ?? 6);
     } else {
-      const price = v.asset?.priceUsd || 1;
+      const price = v.asset?.priceUsd ?? 1;
       tokenAmount = price > 0 ? (v.totalAssetsUsd || 0) / price : 0;
     }
     DOM.modalAssetsHuman.textContent = `${formatNumber(tokenAmount)} ${v.asset?.symbol || ''}`;
@@ -2136,7 +2141,7 @@ function formatCurrency(val, fallback = '—') {
   if (abs >= 999.95e6) return `${prefix}${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 999.95e3) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 999.95) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
-  if (abs > 0 && abs < 0.01) return `< ${prefix}0.01`;
+  if (abs > 0 && abs < 0.01) return isNegative ? '> -$0.01' : '< $0.01';
   return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -2208,7 +2213,7 @@ function formatExitCap(pct) {
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined || str === false) return '';
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

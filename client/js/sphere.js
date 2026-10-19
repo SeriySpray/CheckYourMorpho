@@ -40,7 +40,8 @@ function gcd(a, b) {
 }
 
 function getCoprimeStride(n) {
-  if (n <= 2) return 1;
+  // not a whole number: no stride to look for (the search below would never end)
+  if (!Number.isInteger(n) || n <= 2) return 1;
   let s = Math.max(1, Math.floor(n * 0.618033988749895));
   while (gcd(s, n) !== 1) {
     s++;

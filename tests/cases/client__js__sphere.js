@@ -12,7 +12,7 @@ const close = (actual, expected, eps = 1e-6) => {
 const col = (m, c) => [m[c * 4], m[c * 4 + 1], m[c * 4 + 2]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-export default {
+const base = {
   gcd: [
     ['типові пари: (12,18)=6, (18,12)=6, (17,5)=1, (100,75)=25', ({ gcd: f }) => {
       assert.equal(f(12, 18), 6); assert.equal(f(18, 12), 6); assert.equal(f(17, 5), 1); assert.equal(f(100, 75), 25);
@@ -90,11 +90,13 @@ export default {
   ],
 };
 
-// Дефект (не включено в default export, щоб npm test лишався зеленим): нецілі та NaN розміри зациклюють функцію.
-// Увага: цей кейс зависає назавжди, запускати лише в окремому процесі з таймаутом.
-// BUG: getCoprimeStride(NaN) і getCoprimeStride(2.5) ніколи не повертаються (while без виходу), очікувалось 1.
-export const knownBugs = {
+// Кейси для виправлених дефектів, злиті з основними за назвою функції
+const fixed = {
   getCoprimeStride: [
     ['NaN і дробові n не зависають', ({ getCoprimeStride: f }) => { assert.equal(f(NaN), 1); assert.equal(f(2.5), 1); }],
   ],
 };
+
+const merged = { ...base };
+for (const [name, cases] of Object.entries(fixed)) merged[name] = [...(base[name] || []), ...cases];
+export default merged;
