@@ -151,11 +151,13 @@ export function generateVaultVerdict(vault, allocations = []) {
   if (liquidity.isCrowded) {
     exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
   }
-  const mqiText = mqi.mqiPercent == null
+  let mqiText = mqi.mqiPercent == null
     ? (mqi.unpriced ? 'unknown (no USD price)' : 'not available (no capital could be verified)')
-    : mqi.unverifiedPercent > 0
+    : mqi.unverifiedAssetsUsd > 0
       ? `${mqi.mqiPercent}% of verified capital is clean (${mqi.unverifiedPercent}% of capital unverified)`
       : `${mqi.mqiPercent}% clean capital`;
+  // A rounded 100 next to a real defect must not read as fully clean
+  if (mqi.compromisedMarkets.length > 0 && mqi.mqiPercent === 100) mqiText += ` (${mqi.compromisedPercent}% in compromised markets)`;
   let summary = hhi.tier === 'UNALLOCATED' || hhi.tier === 'UNKNOWN'
     ? `MQI: ${mqiText}. Concentration: N/A. ${exitSummary}.`
     : `MQI: ${mqiText}. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;

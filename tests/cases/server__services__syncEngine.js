@@ -368,6 +368,13 @@ export default {
     ['дробове число -> 0n', ({ toBigInt: f }) => assert.equal(f(1.5), 0n)],
   ],
   expandMetaMorphoAdapters: [
+    ['базовий vault з тією ж адресою в іншій мережі не розкриває адаптер', ({ expandMetaMorphoAdapters: f, unresolvedAdapterAssets: u }) => {
+      const under = { address: '0xunder', chain: { id: 1 }, state: { totalAssets: '1000', allocation: [{ supplyAssets: '1000', market: { marketId: '0xA' } }] } };
+      const v2 = { chain: { id: 8453 }, adapters: { items: [{ type: 'MetaMorpho', assets: '500', metaMorpho: { address: '0xUNDER' } }] } };
+      assert.equal(f(v2, new Map([['0xunder', under]])).length, 0);
+      assert.equal(u(v2, new Map([['0xunder', under]])), 500n);
+      assert.equal(f({ ...v2, chain: { id: 1 } }, new Map([['0xunder', under]])).length, 1);
+    }],
     ['прямі caps переносяться як є', ({ expandMetaMorphoAdapters: f }) => {
       const r = f({ caps: { items: [{ allocation: '100', absoluteCap: '500', data: { market: { marketId: '0xA' } } }] } }, new Map());
       assert.equal(r.length, 1); assert.equal(r[0].allocation, '100'); assert.equal(r[0].viaVault, undefined);

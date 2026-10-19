@@ -16,6 +16,12 @@ const crowd = (S, F, P) => (S < 100e6 ? [mkt(0, S, F, P), mkt(1, 100e6 - S, 0)] 
 
 export default {
   generateVaultVerdict: [
+    ['округлений до 100 MQI поряд з брудним ринком не читається як повністю чистий, малий відсоток не стає 0', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ total_assets_usd: 10e9 }), [alloc({ is_listed: 0, supply_assets_usd: 250e3, market_unique_key: '1:0xbad' })]);
+      assert.equal(r.mqi.mqiPercent, 100);
+      assert.ok(r.summary.includes('compromised markets'), r.summary);
+      assert.ok(!flag(r, 'Compromised Market Exposure').message.startsWith('0%'));
+    }],
     ['актив без USD-ціни: немає й Restricted Exit Liquidity з "Only null%" (null < 20 у JS true)', ({ generateVaultVerdict: f }) => {
       for (const liquidity_usd of [null, 0, 5]) {
         const r = f(vault({ total_assets_usd: 0, total_assets: '1000000', liquidity_usd }), []);

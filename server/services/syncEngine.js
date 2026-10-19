@@ -44,8 +44,10 @@ export function toBigInt(value) {
 }
 
 /** Underlying V1 vault of a MetaMorpho adapter, or null when it is not listed or empty. */
-function lookThroughVault(adapter, v1ByAddress) {
+function lookThroughVault(adapter, v1ByAddress, chainId) {
   const under = v1ByAddress.get((adapter.metaMorpho?.address || '').toLowerCase());
+  // the same address on another chain is a different vault: its markets are not this vault's
+  if (under?.chain?.id != null && chainId != null && Number(under.chain.id) !== Number(chainId)) return null;
   return toBigInt(under?.state?.totalAssets) > 0n ? under : null;
 }
 
@@ -64,7 +66,7 @@ export function unresolvedAdapterAssets(rawV2, v1ByAddress) {
       marketV1Assets += assets;
       continue;
     }
-    const under = adapter.type === 'MetaMorpho' ? lookThroughVault(adapter, v1ByAddress) : null;
+    const under = adapter.type === 'MetaMorpho' ? lookThroughVault(adapter, v1ByAddress, rawV2.chain?.id) : null;
     if (!under || !Array.isArray(under.state.allocation)) {
       sum += assets;
       continue;
@@ -152,7 +154,7 @@ export function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
     if (adapter.type !== 'MetaMorpho') continue;
     const adapterAssets = toBigInt(adapter.assets);
     if (adapterAssets <= 0n) continue;
-    const under = lookThroughVault(adapter, v1ByAddress);
+    const under = lookThroughVault(adapter, v1ByAddress, rawV2.chain?.id);
     if (!under) {
       console.warn(`[SyncEngine] V2 vault ${rawV2.name}: MetaMorpho adapter not resolved (underlying vault not listed or empty).`);
       continue;

@@ -15,6 +15,11 @@ export default {
     }],
   ],
   isMarketClean: [
+    ['нечисловий bad debt -> ринок не підтверджений, негативний не компенсує додатний', ({ isMarketClean: f }) => {
+      assert.deepEqual(f(alloc({ bad_debt_usd: 'abc' })).unverifiedReasons, ['Bad debt data not reported']);
+      assert.equal(f(alloc({ bad_debt_usd: Infinity })).isClean, false);
+      assert.equal(f(alloc({ bad_debt_usd: 1e6, realized_bad_debt_usd: -1e6, total_supply_assets_usd: 1e6 })).isClean, false);
+    }],
     ['bad debt, якого API не повернуло (null), -> ринок не підтверджений, не "без боргу"', ({ isMarketClean: f }) => {
       const r = f(alloc({ bad_debt_usd: null }));
       assert.deepEqual(r.unverifiedReasons, ['Bad debt data not reported']); assert.deepEqual(r.reasons, []);
@@ -219,6 +224,26 @@ export default {
     ['нерозкритий $240K + брудний $24.9K у vault $100M: разом вище порога $250K, обидва позначаються', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 240e3 }), [dirty(24.9e3)]);
       assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.unresolvedAssetsUsd, 240e3);
+    }],
+    ['пил, що разом сягає порога, не ховається: додаткова позиція $260K не зменшує відомий брудний капітал', ({ calculateMQI: f }) => {
+      const many = Array.from({ length: 1000 }, (_, i) => dirty(20e3, { market_unique_key: `1:0xs${i}` }));
+      const base = f(vault({ total_assets_usd: 100e6 }), many);
+      const plus = f(vault({ total_assets_usd: 100e6 }), [...many, dirty(260e3)]);
+      assert.equal(base.compromisedAssetsUsd, 20e6);
+      assert.equal(plus.compromisedAssetsUsd, 20.26e6); assert.ok(plus.mqiPercent <= base.mqiPercent);
+      // нерозкритий капітал теж не стирає відомий брудний
+      const withUnresolved = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 260e3 }), many);
+      assert.equal(withUnresolved.compromisedAssetsUsd, 20e6); assert.ok(withUnresolved.mqiPercent < 80);
+    }],
+    ['перевірений залишок нижче порога поряд із непідтвердженим капіталом -> MQI null, не 100', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 100e6 }), [alloc({ bad_debt_usd: null, supply_assets_usd: 99999999.99 })]);
+      assert.equal(r.mqiPercent, null); assert.equal(r.isAllClean, false);
+    }],
+    ['відсоток ненульової суми не округлюється до 0: $250K у vault $1B -> 0.03', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 1e9 }), [dirty(250e3)]);
+      assert.equal(r.compromisedPercent, 0.03); assert.equal(r.compromisedMarkets[0].weightPercent, 0.03);
+      const tiny = f(vault({ total_assets_usd: 1e12 }), [dirty(250e3)]);
+      assert.equal(tiny.compromisedPercent, 0.01);
     }],
     ['негативне постачання вважається нулем і не робить ринок суттєвим', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 10e6 }), [dirty(-5e6)]);

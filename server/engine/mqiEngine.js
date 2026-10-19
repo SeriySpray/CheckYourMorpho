@@ -3,15 +3,18 @@
  * Evaluates the strict, objective, on-chain cleanliness of capital allocation.
  * 
  * Formula:
- * MQI = sum(w_i * IsClean_i) + w_cash
- * 
- * IsClean_i is strictly binary (1 or 0):
- * 1 (Clean) if:
- *   - Market is officially listed in Morpho (is_listed == 1)
- *   - No material active or realized bad debt (above a dust threshold scaled to market size)
- *   - Valid oracle contract address (not zero address)
- *   - No critical protocol security warnings (not_whitelisted, or a RED integrity warning)
- * 0 (Compromised) if ANY of the above conditions is violated.
+ * MQI = clean / (clean + compromised), measured on the capital that could be verified.
+ * Clean capital includes idle cash on the vault contract and idle (0-LLTV) reserve markets.
+ *
+ * A market is clean if:
+ *   - it is officially listed in Morpho (is_listed == 1)
+ *   - it has no material active or realized bad debt (above a dust threshold scaled to market size)
+ *   - it has a valid oracle contract address (borrowing markets only)
+ *   - it has no critical protocol security warnings (not_whitelisted, or a RED integrity warning)
+ * It is compromised if any of these is violated (a known defect), and unverified if the API did not
+ * report the data to decide. Unverified markets and unexpanded adapters leave the denominator and are
+ * reported separately. A defective position counts once it is material (see getMaterialityThresholdUsd);
+ * small ones count together once their sum reaches the threshold. MQI is null if nothing could be verified.
  */
 
 
@@ -49,10 +52,12 @@ export function isMarketClean(market) {
 
   // Check 2: Bad Debt & Realized Bad Debt. Dust threshold scales with market size (min $10, 0.01% of
   // market supply) so a historical sub-0.01% write-off does not taint a large market forever.
-  const badDebtUsd = Number(market.bad_debt_usd || 0);
-  const realizedBadDebtUsd = Number(market.realized_bad_debt_usd || 0);
-  // null = the API did not report it (an absent field on a plain object, as in fixtures, is not reported either way)
-  if (market.bad_debt_usd === null || market.realized_bad_debt_usd === null) {
+  const badDebtUsd = Math.max(0, Number(market.bad_debt_usd || 0));
+  const realizedBadDebtUsd = Math.max(0, Number(market.realized_bad_debt_usd || 0));
+  // null = the API did not report it (an absent field on a plain object, as in fixtures, is not reported either way);
+  // a value that is not a number is unreadable, which is the same thing
+  if (market.bad_debt_usd === null || market.realized_bad_debt_usd === null
+    || !Number.isFinite(badDebtUsd) || !Number.isFinite(realizedBadDebtUsd)) {
     unverifiedReasons.push('Bad debt data not reported');
   }
   const badDebtDustUsd = Math.max(10, (Number(market.total_supply_assets_usd) || 0) * 0.0001);
@@ -180,7 +185,9 @@ export function calculateMQI(vault, allocations = []) {
   const countedAboveFloor = floor => rawCompromisedItems.filter(i => i.supplyUsd < minMaterialThresholdUsd && i.supplyUsd >= floor).reduce((acc, i) => acc + i.supplyUsd, 0)
     + (unresolvedRawUsd < minMaterialThresholdUsd && unresolvedRawUsd >= floor ? unresolvedRawUsd : 0);
   let dustFloorUsd = Math.max(1, minMaterialThresholdUsd * 0.1);
-  if (individuallyMaterialUsd + countedAboveFloor(dustFloorUsd) < minMaterialThresholdUsd) dustFloorUsd = 1;
+  // Also when the positions dropped as dust add up to the threshold themselves: dust must not hide a material total.
+  const droppedAsDustUsd = countedAboveFloor(1) - countedAboveFloor(dustFloorUsd);
+  if (individuallyMaterialUsd + countedAboveFloor(dustFloorUsd) < minMaterialThresholdUsd || droppedAsDustUsd >= minMaterialThresholdUsd) dustFloorUsd = 1;
 
   for (const item of rawCompromisedItems) {
     const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= dustFloorUsd);
@@ -215,12 +222,14 @@ export function calculateMQI(vault, allocations = []) {
   const effectiveTotalUsd = verifiedTotalUsd + unverifiedUsd;
 
   // null = nothing could be verified, so there is nothing to score
-  const mqiPercent = verifiedTotalUsd > 0
+  // A verified remainder below the materiality threshold next to unverified capital is residue, not a basis for a score.
+  const mqiPercent = verifiedTotalUsd > 0 && Number.isFinite(verifiedTotalUsd) && (unverifiedUsd === 0 || verifiedTotalUsd >= minMaterialThresholdUsd)
     ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / verifiedTotalUsd) * 1000) / 10))
     : null;
 
   // One denominator for every share reported below: the capital the verdict is measured against
-  const pctOfTotal = (usd, digits = 10) => effectiveTotalUsd > 0 ? Math.round((usd / effectiveTotalUsd) * 100 * digits) / digits : 0;
+  // A positive amount never rounds to 0%: the smallest share reported is one unit of the last digit
+  const pctOfTotal = (usd, digits = 100) => effectiveTotalUsd > 0 ? Math.max(usd > 0 ? 1 / digits : 0, Math.round((usd / effectiveTotalUsd) * 100 * digits) / digits) : 0;
   for (const m of [...compromisedMarkets, ...unverifiedMarkets]) m.weightPercent = pctOfTotal(m.supplyAssetsUsd);
 
   return {
