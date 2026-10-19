@@ -205,10 +205,21 @@ export default {
       const r = f(vault(), equal(4, 9.96e6));
       assert.equal(r.tier, 'DIVERSIFIED'); assert.equal(r.tierLabel, 'High Diversification'); assert.equal(r.topCollateral.sharePercent, 10);
     }],
-    ['C1: нерозкрита експозиція не є кешем: 25M в одній заставі + 75M нерозкрито -> не "Low Exposure (High Cash)"', ({ calculateHHI: f }) => {
+    ['C1: нерозкрита експозиція не є кешем: 25M в одній заставі + 75M нерозкрито -> частка від перевіреного (100%), не "Low Exposure"', ({ calculateHHI: f }) => {
       const r = f(vault({ unresolved_exposure_usd: 75e6 }), [col(0, 25e6)]);
-      assert.notEqual(r.tierLabel, 'Low Exposure (High Cash)'); assert.equal(r.tier, 'CONCENTRATED');
-      assert.equal(r.activeCollateralExposure, 100);
+      assert.notEqual(r.tierLabel, 'Low Exposure (High Cash)'); assert.equal(r.tier, 'EXTREME');
+      assert.equal(r.activeCollateralExposure, 100); assert.equal(r.topCollateral.sharePercent, 100); assert.equal(r.unverifiedPercent, 75);
     }],
+    ['нерозкрите не розбавляє частки: 2 застави по 12.5M + 75M нерозкрито -> по 50% перевіреного, MODERATE/CONCENTRATED за HHI 0.5', ({ calculateHHI: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 75e6 }), [col(0, 12.5e6), col(1, 12.5e6)]);
+      assert.equal(r.topCollateral.sharePercent, 50); assert.equal(r.hhi, 0.5); assert.equal(r.tier, 'CONCENTRATED');
+      assert.deepEqual(r.breakdown.map(b => b.sharePercent), [50, 50]);
+    }],
+    ['усе нерозкрито, перевірити нічого -> tier UNKNOWN (не UNALLOCATED "100% кеш"), unverifiedPercent 100', ({ calculateHHI: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 100e6 }), []);
+      assert.equal(r.tier, 'UNKNOWN'); assert.equal(r.tierLabel, 'N/A'); assert.equal(r.unverifiedPercent, 100); assert.equal(r.hhi, 0);
+    }],
+    ['без нерозкритого unverifiedPercent 0', ({ calculateHHI: f }) =>
+      assert.equal(f(vault(), [col(0, 50e6)]).unverifiedPercent, 0)],
   ],
 };

@@ -167,6 +167,11 @@ export default {
       assert.equal(r.mqi.mqiPercent, 100);
       assert.match(r.summary, /MQI: 100% of verified capital is clean \(50% of capital unverified\)/);
     }],
+    ['частково нерозкрито: summary та Restricted Exit позначають "перевіреного капіталу"', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 40e6 }), [alloc({ supply_assets_usd: 60e6, total_supply_assets_usd: 100e6, total_borrow_assets_usd: 95e6, collateral_asset_address: '0xc0' })]);
+      assert.match(r.summary, /Exit Liquidity: [\d.]+% of verified capital/);
+      assert.match(flag(r, 'Restricted Exit Liquidity').message, /of the verified deposits/);
+    }],
     ['нічого перевірити (усе нерозкрите): MQI null, summary "not available", а не 0 і не 100', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ unresolved_exposure_usd: 100e6 }), []);
       assert.equal(r.mqi.mqiPercent, null); assert.match(r.summary, /MQI: not available \(no capital could be verified\)/);
@@ -176,7 +181,9 @@ export default {
       const x = flag(r, 'Unresolved Exposure');
       assert.equal(x.level, 'HIGH'); assert.match(x.message, /^100% of capital \(\$10\.00M\) /);
       assert.equal(r.mqi.mqiPercent, null); assert.equal(r.mqi.isAllClean, false);
-      assert.equal(r.liquidity.instantExitCapacityPercent, 0);
+      assert.equal(r.liquidity.instantExitCapacityPercent, null); assert.equal(r.liquidity.exitUnknownReason, 'unresolved');
+      assert.equal(flag(r, 'Unknown Exit Liquidity'), undefined); // the Unresolved Exposure flag already carries the reason
+      assert.equal(r.hhi.tier, 'UNKNOWN'); assert.match(r.summary, /Concentration: N\/A\. Exit Liquidity: unknown/);
     }],
     ['C1: нерозкрита експозиція нижче порогу суттєвості -> без прапорця', ({ generateVaultVerdict: f }) =>
       assert.equal(flag(f(vault({ unresolved_exposure_usd: 200e3 }), diversified()), 'Unresolved Exposure'), undefined)],

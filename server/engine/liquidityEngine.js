@@ -8,7 +8,9 @@ import { isUnpricedVault } from './mqiEngine.js';
  * 
  * Normal Exit:
  * Total Available Exit = Direct Idle Cash + sum(min(Vault Supply in Market_i, Free Liquidity in Market_i))
- * Instant Exit Capacity % = (Total Available Exit / Total Vault Assets) * 100%
+ * Instant Exit Capacity % = (Total Available Exit / Verified Vault Assets) * 100%
+ * Verified assets exclude capital behind adapters that could not be expanded: with no data about it, it neither
+ * lowers nor raises the figure, and is reported as unverifiedPercent instead.
  * 
  * Stressed Pro-Rata Exit:
  * In a simultaneous bank run, Free Liquidity in Market_i is contested by all competing vaults:
@@ -42,7 +44,30 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       crowdedMarkets: [],
       isIlliquid: unpriced ? null : false,
       isCrowded: false,
-      exitUnknown: unpriced
+      exitUnknown: unpriced,
+      exitUnknownReason: unpriced ? 'unpriced' : null,
+      unverifiedPercent: 0
+    };
+  }
+
+  // Capital behind adapters we could not look through: its exit is unknown, so it is not part of the base
+  const unresolvedUsd = Math.min(totalAssetsUsd, Math.max(0, Number(vault.unresolved_exposure_usd) || 0));
+  const knownAssetsUsd = totalAssetsUsd - unresolvedUsd;
+  const unverifiedPercent = Math.round((unresolvedUsd / totalAssetsUsd) * 10000) / 100;
+  if (knownAssetsUsd <= 0) {
+    return {
+      directLiquidityUsd: 0,
+      marketExitCapacityUsd: 0,
+      instantExitCapacityUsd: null,
+      instantExitCapacityPercent: null,
+      stressedExitCapacityUsd: null,
+      stressedExitCapacityPercent: null,
+      crowdedMarkets: [],
+      isIlliquid: null,
+      isCrowded: false,
+      exitUnknown: true,
+      exitUnknownReason: 'unresolved',
+      unverifiedPercent
     };
   }
 
@@ -120,20 +145,18 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   // True unallocated cash (not at risk in loan markets):
   // either in a 0-LLTV idle market or unallocated cash difference on the vault contract
   // (і без жодної алокації: результат той самий, що й для рядків із нульовим постачанням).
-  // Exposure behind V2 adapters we could not look through is not cash: its exit is unknown, counted as none.
-  const unresolvedUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
   const unallocatedCashUsd = Math.max(0, totalAssetsUsd - totalAllocatedUsd - unresolvedUsd);
   const trueIdleCashUsd = idleAllocationsUsd + unallocatedCashUsd;
 
   // Combined normal exit capacity = true idle cash + loan markets free cash (cannot exceed totalAssetsUsd),
   // capped by the API-reported withdrawable liquidity (V2: idle + liquidity adapter + force-deallocatable
   // liquidity net of its penalty), which can be lower than the market-based figure.
-  const totalEffectiveExitUsd = Math.min(totalAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsExitUsd);
-  const instantExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalEffectiveExitUsd / totalAssetsUsd) * 1000) / 10));
+  const totalEffectiveExitUsd = Math.min(knownAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsExitUsd);
+  const instantExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalEffectiveExitUsd / knownAssetsUsd) * 1000) / 10));
 
   // Combined stressed exit capacity = true idle cash + loan markets stressed pro-rata cash
-  const totalStressedExitUsd = Math.min(totalAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsStressedExitUsd);
-  const stressedExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalStressedExitUsd / totalAssetsUsd) * 1000) / 10));
+  const totalStressedExitUsd = Math.min(knownAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsStressedExitUsd);
+  const stressedExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalStressedExitUsd / knownAssetsUsd) * 1000) / 10));
 
   // Sort crowded markets descending by vault's exposed capital
   crowdedMarkets.sort((a, b) => b.vaultSupplyUsd - a.vaultSupplyUsd);
@@ -158,6 +181,8 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     crowdedMarkets,
     isIlliquid: known(instantExitCapacityPercent < 20),
     isCrowded,
-    exitUnknown
+    exitUnknown,
+    exitUnknownReason: exitUnknown ? 'not_reported' : null,
+    unverifiedPercent
   };
 }

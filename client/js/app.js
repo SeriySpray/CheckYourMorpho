@@ -1138,8 +1138,8 @@ function renderVaultExplorer() {
       return (b.hhi ?? 0) - (a.hhi ?? 0);
     }
     if (explorerFilters.sort === 'hhi_asc') {
-      const aVal = a.hhiTier === 'UNALLOCATED' ? 999 : (a.hhi ?? 0);
-      const bVal = b.hhiTier === 'UNALLOCATED' ? 999 : (b.hhi ?? 0);
+      const aVal = a.hhiTier === 'UNALLOCATED' || a.hhiTier === 'UNKNOWN' ? 999 : (a.hhi ?? 0);
+      const bVal = b.hhiTier === 'UNALLOCATED' || b.hhiTier === 'UNKNOWN' ? 999 : (b.hhi ?? 0);
       return aVal - bVal;
     }
     // Default: Total Deposits (TVL)
@@ -1850,11 +1850,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   // 2. HHI
   const hhiVal = verdict.hhi?.hhi ?? 0;
-  const isUnallocated = verdict.hhi?.tier === 'UNALLOCATED';
+  const isUnallocated = verdict.hhi?.tier === 'UNALLOCATED' || verdict.hhi?.tier === 'UNKNOWN';
 
   // Read English tier labels directly from backend calculation
   let tierLabel = verdict.hhi?.tierLabel || 'High Diversification';
-  if (isUnallocated || verdict.hhi?.tier === 'UNALLOCATED') {
+  if (isUnallocated) {
     tierLabel = 'N/A';
   }
 
@@ -1868,11 +1868,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
   if (DOM.riskHhiBar) DOM.riskHhiBar.style.width = isUnallocated ? '0%' : `${Math.min(100, Math.round(hhiVal * 100))}%`;
   if (DOM.riskHhiDesc) {
     if (isUnallocated) {
-      DOM.riskHhiDesc.textContent = 'No active collateral backing';
+      DOM.riskHhiDesc.textContent = verdict.hhi?.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
     } else {
       const top = verdict.hhi?.topCollateral;
       DOM.riskHhiDesc.textContent = top && top.symbol !== 'None'
-        ? `Top collateral: ${top.symbol} (${top.sharePercent}% of total capital)`
+        ? `Top collateral: ${top.symbol} (${top.sharePercent}% of ${verdict.hhi?.unverifiedPercent > 0 ? 'verified' : 'total'} capital)`
         : 'Herfindahl-Hirschman single-asset concentration index';
     }
   }

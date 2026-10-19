@@ -12,6 +12,9 @@
  * - 0.15 <= HHI < 0.25: MODERATE (Moderate concentration)
  * - 0.25 <= HHI <= 0.50: CONCENTRATED (High concentration)
  * - HHI > 0.50: EXTREME (Single Point of Failure / Tail risk)
+ *
+ * Shares are measured against the verified capital: what sits behind adapters that could not be expanded is
+ * unknown, so it is left out of the base and reported as unverifiedPercent instead of diluting every share.
  */
 
 /**
@@ -41,6 +44,9 @@ export function isIdleReserveMarket(alloc) {
  */
 export function calculateHHI(vault, allocations = []) {
   const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
+  const unresolvedUsd = Math.min(totalAssetsUsd, Math.max(0, Number(vault.unresolved_exposure_usd) || 0));
+  const knownAssetsUsd = totalAssetsUsd - unresolvedUsd;
+  const unverifiedPercent = totalAssetsUsd > 0 ? Math.round((unresolvedUsd / totalAssetsUsd) * 10000) / 100 : 0;
 
   // Group allocations by unique collateral asset contract address (with symbol label)
   // Exclude NONE collateral, 0-LLTV markets, and empty collateral addresses (these are idle/cash holding markets)
@@ -68,8 +74,22 @@ export function calculateHHI(vault, allocations = []) {
     }
   }
 
-  // Materiality threshold: at least 1.0% of total vault capital must be deployed into active collateral
-  const minMaterialThresholdUsd = totalAssetsUsd * 0.01;
+  // Nothing about the vault's capital is known: no collateral picture at all (not "no collateral")
+  if (totalAssetsUsd > 0 && knownAssetsUsd <= 0) {
+    return {
+      hhi: 0,
+      effectiveAssets: 0,
+      tier: 'UNKNOWN',
+      tierLabel: 'N/A',
+      isExtremeConcentration: false,
+      unverifiedPercent,
+      topCollateral: { symbol: 'None', sharePercent: 0, usd: 0 },
+      breakdown: []
+    };
+  }
+
+  // Materiality threshold: at least 1.0% of the verified vault capital must be deployed into active collateral
+  const minMaterialThresholdUsd = knownAssetsUsd * 0.01;
 
   // If there is no material active collateral backing (< 1.0% of TVL, 100% idle cash or empty vault)
   if (totalAssetsUsd <= 0 || totalActiveCollateralUsd < minMaterialThresholdUsd || collateralMap.size === 0) {
@@ -79,6 +99,7 @@ export function calculateHHI(vault, allocations = []) {
       tier: 'UNALLOCATED',
       tierLabel: 'N/A',
       isExtremeConcentration: false,
+      unverifiedPercent,
       topCollateral: {
         symbol: 'None',
         sharePercent: 0,
@@ -101,7 +122,7 @@ export function calculateHHI(vault, allocations = []) {
     hhiSum += collateralShare * collateralShare;
 
     // In breakdown, show the fraction of total vault capital (TVL)
-    const tvlShare = Math.max(0, Math.min(1.0, usd / totalAssetsUsd));
+    const tvlShare = Math.max(0, Math.min(1.0, usd / knownAssetsUsd));
     const sharePercent = Math.round(tvlShare * 1000) / 10;
     if (usd >= 0.01 || sharePercent > 0) {
       breakdown.push({
@@ -117,7 +138,7 @@ export function calculateHHI(vault, allocations = []) {
   const topCollatSymbol = sortedCollateral[0]?.symbol || 'Unknown';
   const topCollatUsd = sortedCollateral[0]?.usd || 0;
   // Пороги tier порівнюються з точними значеннями; округлені (hhi, sharePercent) лише для відповіді
-  const topCollatShareRaw = Math.max(0, Math.min(100, (topCollatUsd / totalAssetsUsd) * 100));
+  const topCollatShareRaw = Math.max(0, Math.min(100, (topCollatUsd / knownAssetsUsd) * 100));
   const topCollatShare = Math.round(topCollatShareRaw * 10) / 10;
 
   // Sort breakdown descending by share of vault capital
@@ -126,9 +147,7 @@ export function calculateHHI(vault, allocations = []) {
   const hhiRaw = Math.min(1.0, Math.max(0, hhiSum));
   const hhi = Math.round(hhiRaw * 1000) / 1000;
   const effectiveAssets = hhi > 0 ? Math.round((1 / hhi) * 10) / 10 : 0;
-  // Measured against known capital: exposure behind unresolved V2 adapters is not cash
-  const knownAssetsUsd = totalAssetsUsd - Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
-  const activeCollateralExposure = knownAssetsUsd > 0 ? totalActiveCollateralUsd / knownAssetsUsd : 1;
+  const activeCollateralExposure = totalActiveCollateralUsd / knownAssetsUsd;
 
   // Determine concentration tier taking into account both internal collateral distribution
   // and overall portfolio exposure (to prevent false critical alarms when vault is 70%+ cash)
@@ -162,6 +181,7 @@ export function calculateHHI(vault, allocations = []) {
     tier,
     tierLabel,
     activeCollateralExposure: Math.round(activeCollateralExposure * 1000) / 10,
+    unverifiedPercent,
     isExtremeConcentration: tier === 'EXTREME',
     topCollateral,
     breakdown

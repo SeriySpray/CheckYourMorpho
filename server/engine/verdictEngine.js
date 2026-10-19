@@ -82,8 +82,8 @@ export function generateVaultVerdict(vault, allocations = []) {
 
   // Flag 3: Severe Exit Liquidity Lockup (null < 20 is true in JS, so unknown exit is handled first)
   if (liquidity.exitUnknown) {
-    // an unpriced vault already carries its own flag with the real reason
-    if (!mqi.unpriced) {
+    // unpriced and unexpanded capital already carry their own flag with the real reason
+    if (liquidity.exitUnknownReason === 'not_reported') {
       redFlags.push({
         level: 'MEDIUM',
         title: 'Unknown Exit Liquidity',
@@ -94,7 +94,7 @@ export function generateVaultVerdict(vault, allocations = []) {
     redFlags.push({
       level: 'HIGH',
       title: 'Restricted Exit Liquidity',
-      message: `Only ${liquidity.instantExitCapacityPercent}% ($${(liquidity.instantExitCapacityUsd / 1e6).toFixed(2)}M) of deposits can be withdrawn immediately without waiting for borrower repayments.`
+      message: `Only ${liquidity.instantExitCapacityPercent}% ($${(liquidity.instantExitCapacityUsd / 1e6).toFixed(2)}M) of ${liquidity.unverifiedPercent > 0 ? 'the verified deposits' : 'deposits'} can be withdrawn immediately without waiting for borrower repayments.`
     });
   }
 
@@ -147,7 +147,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // 6. Plaintext Objective Summary
-  let exitSummary = liquidity.exitUnknown ? 'Exit Liquidity: unknown' : `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%`;
+  let exitSummary = liquidity.exitUnknown ? 'Exit Liquidity: unknown' : `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%${liquidity.unverifiedPercent > 0 ? ' of verified capital' : ''}`;
   if (liquidity.isCrowded) {
     exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
   }
@@ -156,7 +156,7 @@ export function generateVaultVerdict(vault, allocations = []) {
     : mqi.unverifiedPercent > 0
       ? `${mqi.mqiPercent}% of verified capital is clean (${mqi.unverifiedPercent}% of capital unverified)`
       : `${mqi.mqiPercent}% clean capital`;
-  let summary = hhi.tier === 'UNALLOCATED'
+  let summary = hhi.tier === 'UNALLOCATED' || hhi.tier === 'UNKNOWN'
     ? `MQI: ${mqiText}. Concentration: N/A. ${exitSummary}.`
     : `MQI: ${mqiText}. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;
 

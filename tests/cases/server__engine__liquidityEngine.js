@@ -196,13 +196,25 @@ export default {
       }
     }],
     // C1: нерозкрита експозиція V2-адаптерів не є кешем на контракті
-    ['C1: V2 10M без алокацій, уся сума в нерозв\'язаному адаптері -> 0% виходу, а не 100%', ({ calculateLiquidityMetrics: f }) => {
+    ['C1: V2 10M без алокацій, уся сума в нерозв\'язаному адаптері -> вихід невідомий (null), а не 100% і не 0%', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault({ version: 'v2', total_assets_usd: 10e6, liquidity_usd: 10e6, unresolved_exposure_usd: 10e6 }), []);
-      assert.equal(r.instantExitCapacityPercent, 0); assert.equal(r.directLiquidityUsd, 0);
+      assert.equal(r.instantExitCapacityPercent, null); assert.equal(r.exitUnknown, true);
+      assert.equal(r.exitUnknownReason, 'unresolved'); assert.equal(r.unverifiedPercent, 100); assert.equal(r.directLiquidityUsd, 0);
     }],
-    ['C1: 40M нерозкрито + 60M у ринку з 30M вільних -> 30% (кешу на контракті 0)', ({ calculateLiquidityMetrics: f }) => {
+    ['C1: 40M нерозкрито + 60M у ринку з 30M вільних -> 50% від перевіреної частини (кешу на контракті 0), 40% непідтверджено', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault({ unresolved_exposure_usd: 40e6 }), [mkt(0, 60e6, 30e6)]);
-      assert.equal(r.instantExitCapacityPercent, 30); assert.equal(r.directLiquidityUsd, 0);
+      assert.equal(r.instantExitCapacityPercent, 50); assert.equal(r.instantExitCapacityUsd, 30e6);
+      assert.equal(r.unverifiedPercent, 40); assert.equal(r.directLiquidityUsd, 0); assert.equal(r.exitUnknown, false);
     }],
+    ['нерозкрите не знижує stressed exit: ті самі 30 із 60 перевіреного -> stressed рахується від 60M', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 40e6 }), [mkt(0, 60e6, 30e6, 60e6)]);
+      assert.equal(r.instantExitCapacityPercent, 50); assert.equal(r.stressedExitCapacityPercent, 25);
+    }],
+    ['причина невідомого виходу: не повернуто ліквідність -> not_reported', ({ calculateLiquidityMetrics: f }) => {
+      const r = f(vault({ liquidity_usd: null }), [mkt(0, 50e6, 50e6)]);
+      assert.equal(r.exitUnknown, true); assert.equal(r.exitUnknownReason, 'not_reported'); assert.equal(r.unverifiedPercent, 0);
+    }],
+    ['причина невідомого виходу: vault без ціни -> unpriced', ({ calculateLiquidityMetrics: f }) =>
+      assert.equal(f(vault({ total_assets_usd: 0, total_assets: '5' }), []).exitUnknownReason, 'unpriced')],
   ],
 };
