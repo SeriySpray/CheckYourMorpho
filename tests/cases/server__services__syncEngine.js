@@ -313,6 +313,12 @@ export default {
       assert.equal(f({ adapters, caps: { items: [cap('9800')] } }, new Map()), 0n);
       assert.equal(f({ adapters, caps: { items: [cap('9799')] } }, new Map()), 201n);
     }],
+    ['MorphoMarketV1: caps більші за активи адаптера (від\'ємний розрив) і кілька адаптерів сумуються без нерозкритого', ({ unresolvedAdapterAssets: f }) => {
+      const cap = a => ({ allocation: a, data: { market: { marketId: '0xA' } } });
+      const two = { items: [{ type: 'MorphoMarketV1', assets: '600' }, { type: 'MorphoMarketV1', assets: '400' }] };
+      assert.equal(f({ adapters: two, caps: { items: [cap('700'), cap('500')] } }, new Map()), 0n);
+      assert.equal(f({ adapters: two, caps: { items: [cap('500')] } }, new Map()), 500n);
+    }],
     ['MorphoMarketV1: cap з data: null не покриває нічого, активи нерозкриті', ({ unresolvedAdapterAssets: f }) =>
       assert.equal(f({ adapters: { items: [{ type: 'MorphoMarketV1', assets: '1000' }] }, caps: { items: [{ allocation: '1000', data: null }] } }, new Map()), 1000n)],
     ['базовий V1 з allocation: null -> увесь актив адаптера нерозкритий', ({ unresolvedAdapterAssets: f }) => {

@@ -1196,8 +1196,8 @@ function renderVaultExplorer() {
 
     const flaggedLabel = mqi === null ? 'Unpriced'
       : v.compromisedCount > 0
-        ? ((mqi ?? 100) < 100 ? `${(100 - mqi).toFixed(1)}% Flagged` : `${v.compromisedCount} Flagged`)
-        : `${v.unresolvedPercent || (100 - (mqi ?? 100)).toFixed(1)}% Unverified`;
+        ? (v.compromisedPercent > 0 ? `${v.compromisedPercent}% Flagged` : `${v.compromisedCount} Flagged`)
+        : (v.unresolvedPercent > 0 ? `${v.unresolvedPercent}% Unverified` : 'Unverified');
     const flaggedBadgeHtml = !isClean
       ? ` • <span class="vault-mini-badge flagged">${flaggedLabel}</span>`
       : '';

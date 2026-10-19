@@ -71,12 +71,15 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 3: Severe Exit Liquidity Lockup (null < 20 is true in JS, so unknown exit is handled first)
-  if (liquidity.exitUnknown && !mqi.unpriced) {
-    redFlags.push({
-      level: 'MEDIUM',
-      title: 'Unknown Exit Liquidity',
-      message: 'Withdrawable liquidity was not reported for this vault, so how much of the deposits can be withdrawn immediately is unknown.'
-    });
+  if (liquidity.exitUnknown) {
+    // an unpriced vault already carries its own flag with the real reason
+    if (!mqi.unpriced) {
+      redFlags.push({
+        level: 'MEDIUM',
+        title: 'Unknown Exit Liquidity',
+        message: 'Withdrawable liquidity was not reported for this vault, so how much of the deposits can be withdrawn immediately is unknown.'
+      });
+    }
   } else if (liquidity.instantExitCapacityPercent < 20) {
     redFlags.push({
       level: 'HIGH',

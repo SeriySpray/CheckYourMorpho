@@ -16,6 +16,13 @@ const crowd = (S, F, P) => (S < 100e6 ? [mkt(0, S, F, P), mkt(1, 100e6 - S, 0)] 
 
 export default {
   generateVaultVerdict: [
+    ['актив без USD-ціни: немає й Restricted Exit Liquidity з "Only null%" (null < 20 у JS true)', ({ generateVaultVerdict: f }) => {
+      for (const liquidity_usd of [null, 0, 5]) {
+        const r = f(vault({ total_assets_usd: 0, total_assets: '1000000', liquidity_usd }), []);
+        assert.equal(flag(r, 'Restricted Exit Liquidity'), undefined);
+        assert.ok(!r.redFlags.some(x => x.message.includes('null%')));
+      }
+    }],
     ['актив без USD-ціни: немає окремого Unknown Exit Liquidity з хибною причиною "not reported"', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ total_assets_usd: 0, total_assets: '1000000' }), []);
       assert.equal(flag(r, 'Unknown Exit Liquidity'), undefined);

@@ -154,8 +154,15 @@ export function calculateMQI(vault, allocations = []) {
   // Materiality evaluation: a defective or unresolved position counts on its own above 1% TVL (capped), and
   // all of them count once their combined size passes that threshold. Isolated sub-threshold dust stays clean.
   const isCumulativeMaterial = totalCompromisedRawUsd + unresolvedRawUsd >= minMaterialThresholdUsd;
-  // Even then, a position under a tenth of the threshold (at least $1) is dust: it adds a flag, not information
-  const dustFloorUsd = Math.max(1, minMaterialThresholdUsd * 0.1);
+  // Even then, a position under a tenth of the threshold (at least $1) is dust: it adds a flag, not information.
+  // Unless that would leave the flagged positions below the threshold they were flagged for (many small ones):
+  // then every position from $1 counts.
+  const individuallyMaterialUsd = rawCompromisedItems.filter(i => i.supplyUsd >= minMaterialThresholdUsd).reduce((acc, i) => acc + i.supplyUsd, 0)
+    + (unresolvedRawUsd >= minMaterialThresholdUsd ? unresolvedRawUsd : 0);
+  const countedAboveFloor = floor => rawCompromisedItems.filter(i => i.supplyUsd < minMaterialThresholdUsd && i.supplyUsd >= floor).reduce((acc, i) => acc + i.supplyUsd, 0)
+    + (unresolvedRawUsd < minMaterialThresholdUsd && unresolvedRawUsd >= floor ? unresolvedRawUsd : 0);
+  let dustFloorUsd = Math.max(1, minMaterialThresholdUsd * 0.1);
+  if (individuallyMaterialUsd + countedAboveFloor(dustFloorUsd) < minMaterialThresholdUsd) dustFloorUsd = 1;
 
   for (const item of rawCompromisedItems) {
     const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= dustFloorUsd);
