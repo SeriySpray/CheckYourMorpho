@@ -144,6 +144,13 @@ export default {
     }],
   ],
   normalizeMarket: [
+    ['застава з адресою, але без символу -> UNKNOWN, не NONE (інакше стала б резервом)', ({ normalizeMarket: f }) =>
+      assert.equal(f({ marketId: '0xM', collateralAsset: { address: '0xABC' } }).collateral_asset_symbol, 'UNKNOWN')],
+    ['ринок без застави -> NONE', ({ normalizeMarket: f }) =>
+      assert.equal(f({ marketId: '0xM' }).collateral_asset_symbol, 'NONE')],
+    ['LLTV, якого API не повернуло, лишається порожнім (невідомим), справжній 0 лишається "0"', ({ normalizeMarket: f }) => {
+      assert.equal(f({ marketId: '0xM' }).lltv, ''); assert.equal(f({ marketId: '0xM', lltv: '0' }).lltv, '0');
+    }],
     ['утилізація = borrow / supply', ({ normalizeMarket: f }) => {
       const r = f({ marketId: '0xM', lltv: '860000000000000000', loanAsset: { decimals: 6 }, state: { supplyAssets: '1000000', borrowAssets: '250000' } });
       assert.equal(r.utilization, 0.25); assert.equal(r.lltv_percent, 86); assert.equal(r.free_liquidity_assets, 0.75);

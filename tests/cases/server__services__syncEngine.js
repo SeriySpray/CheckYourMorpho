@@ -307,11 +307,11 @@ export default {
       assert.equal(f({ adapters, caps: { items: [cap('1000')] } }, new Map()), 0n);
       assert.equal(f({ adapters, caps: { items: [cap('600')] } }, new Map()), 400n);
     }],
-    ['MorphoMarketV1: розрив до 2% (нараховані відсотки) не є нерозкритим капіталом, понад 2% є', ({ unresolvedAdapterAssets: f }) => {
+    ['MorphoMarketV1: розрив до 0.5% (нараховані відсотки) не є нерозкритим капіталом, понад 0.5% є', ({ unresolvedAdapterAssets: f }) => {
       const cap = a => ({ allocation: a, data: { market: { marketId: '0xA' } } });
       const adapters = { items: [{ type: 'MorphoMarketV1', assets: '10000' }] };
-      assert.equal(f({ adapters, caps: { items: [cap('9800')] } }, new Map()), 0n);
-      assert.equal(f({ adapters, caps: { items: [cap('9799')] } }, new Map()), 201n);
+      assert.equal(f({ adapters, caps: { items: [cap('9950')] } }, new Map()), 0n);
+      assert.equal(f({ adapters, caps: { items: [cap('9949')] } }, new Map()), 51n);
     }],
     ['MorphoMarketV1: caps більші за активи адаптера (від\'ємний розрив) і кілька адаптерів сумуються без нерозкритого', ({ unresolvedAdapterAssets: f }) => {
       const cap = a => ({ allocation: a, data: { market: { marketId: '0xA' } } });

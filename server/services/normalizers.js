@@ -193,12 +193,14 @@ export function normalizeMarket(raw, chainId = 1) {
     loan_asset_decimals: loanDecimals,
     loan_asset_price_usd: loanPrice,
     collateral_asset_address: (collateralAsset.address || '').toLowerCase(),
-    collateral_asset_symbol: collateralAsset.symbol || 'NONE',
+    // NONE only for a market without a collateral asset; a collateral with an unreported symbol is not a reserve
+    collateral_asset_symbol: collateralAsset.symbol || (collateralAsset.address ? 'UNKNOWN' : 'NONE'),
     collateral_asset_decimals: collateralAsset.decimals ?? 18,
     collateral_asset_price_usd: collateralAsset.priceUsd ?? 0,
     oracle_address: (oracle.address || '').toLowerCase(),
     irm_address: (raw.irmAddress || '').toLowerCase(),
-    lltv: String(raw.lltv || '0'),
+    // an LLTV the API did not report stays empty (unknown); the engines do not read it as 0
+    lltv: raw.lltv == null ? '' : String(raw.lltv),
     lltv_percent: lltvPercent,
     total_supply_assets: String(state.supplyAssets || '0'),
     total_supply_assets_usd: state.supplyAssetsUsd ?? 0,

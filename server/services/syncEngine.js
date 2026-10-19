@@ -75,14 +75,15 @@ export function unresolvedAdapterAssets(rawV2, v1ByAddress) {
     if (noMarket > 0n) sum += (noMarket * assets) / denominator;
   }
   // MorphoMarketV1 positions arrive as market caps; whatever they do not cover is unknown. A cap's allocation
-  // is only refreshed on allocate/deallocate while the adapter's assets accrue interest, so a gap of up to 2%
-  // is interest, not hidden capital.
-  // shortcut: fixed 2% tolerance, make it configurable if a real vault shows a larger accrual gap.
+  // is only refreshed on allocate/deallocate while the adapter's assets accrue interest, so a gap of up to 0.5%
+  // is interest, not hidden capital. The Morpho API currently reports no gap at all (checked on all 207 live
+  // MorphoMarketV1 vaults), so the tolerance only guards against a source that lags.
+  // shortcut: fixed 0.5% tolerance, widen it if a real vault shows a larger accrual gap.
   const capsAllocated = (rawV2.caps?.items || [])
     .filter(cap => cap.data?.market)
     .reduce((acc, cap) => acc + toBigInt(cap.allocation), 0n);
   const gap = marketV1Assets - capsAllocated;
-  if (gap * 50n > marketV1Assets) sum += gap;
+  if (gap * 200n > marketV1Assets) sum += gap;
   return sum;
 }
 
