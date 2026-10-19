@@ -500,6 +500,8 @@ export function getVaultCatalog() {
       compromisedCount: mqi.compromisedMarkets?.length || 0,
       compromisedPercent: mqi.compromisedPercent,
       unresolvedPercent: mqi.unresolvedPercent,
+      unverifiedPercent: mqi.unverifiedPercent,
+      isUnpriced: mqi.unpriced,
       hhi: hhi.hhi,
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
@@ -605,6 +607,7 @@ export function handleGetVaultByAddress(req, res, address) {
     // Compute comprehensive institutional audit verdict (MQI + HHI + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
     const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
+    const unverifiedKeys = new Set(verdict.mqi.unverifiedMarkets.map(m => m.marketUniqueKey));
 
     const responsePayload = {
       vault: {
@@ -636,7 +639,8 @@ export function handleGetVaultByAddress(req, res, address) {
       allocations: allocations.map(a => {
         const test = isMarketClean(a);
         // Same decision as the MQI engine (materiality incl. cumulative rule), so table and score agree
-        const isFlagged = !test.isClean && compromisedKeys.has(a.market_unique_key);
+        const isFlagged = test.reasons.length > 0 && compromisedKeys.has(a.market_unique_key);
+        const isUnverified = !isFlagged && unverifiedKeys.has(a.market_unique_key);
 
         return {
           marketUniqueKey: a.market_unique_key,
@@ -653,11 +657,12 @@ export function handleGetVaultByAddress(req, res, address) {
           supplyApy: a.supply_apy,
           borrowApy: a.borrow_apy,
           isListed: a.is_listed !== 0,
-          isClean: !isFlagged,
+          isClean: !isFlagged && !isUnverified,
           isFlagged,
+          isUnverified,
           oracleType: a.oracle_type || 'Unknown',
           badDebtUsd: a.bad_debt_usd || 0,
-          warnings: test.reasons
+          warnings: [...test.reasons, ...test.unverifiedReasons]
         };
       })
     };

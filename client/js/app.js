@@ -821,7 +821,7 @@ function applyVaultAuditData(vaultAddress, auditData) {
       const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
 
       const mqiPercent = firstDefined(verdict?.mqi?.mqiPercent, matchingVault?.mqiPercent, 100);
-      const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true);
+      const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true, (verdict?.mqi?.compromisedMarkets?.length ?? matchingVault?.compromisedCount ?? 0) > 0);
       const mqiClass = isClean ? 'clean' : 'flagged';
       const exitCapText = formatExitCap(pickExitMetric(
         verdict?.liquidity?.instantExitCapacityPercent,
@@ -923,7 +923,7 @@ function renderPinnedRichPills(animate = false) {
     }
     const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
     const mqiPercent = firstDefined(cachedAudit?.verdict?.mqi?.mqiPercent, v.mqiPercent, 100);
-    const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true);
+    const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true, (cachedAudit?.verdict?.mqi?.compromisedMarkets?.length ?? v.compromisedCount ?? 0) > 0);
     const mqiClass = isClean ? 'clean' : 'flagged';
     const exitCapText = formatExitCap(pickExitMetric(
       cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent,
@@ -1194,10 +1194,10 @@ function renderVaultExplorer() {
     const isPinned = isVaultPinned(v.address, pinnedSet);
     const apyClass = apy < 0 ? 'negative' : '';
 
-    const flaggedLabel = mqi === null ? 'Unpriced'
+    const flaggedLabel = mqi === null ? (v.isUnpriced ? 'Unpriced' : 'Unverified')
       : v.compromisedCount > 0
         ? (v.compromisedPercent > 0 ? `${v.compromisedPercent}% Flagged` : `${v.compromisedCount} Flagged`)
-        : (v.unresolvedPercent > 0 ? `${v.unresolvedPercent}% Unverified` : 'Unverified');
+        : (v.unverifiedPercent > 0 ? `${v.unverifiedPercent}% Unverified` : 'Unverified');
     const flaggedBadgeHtml = !isClean
       ? ` • <span class="vault-mini-badge flagged">${flaggedLabel}</span>`
       : '';
@@ -1799,10 +1799,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // mqiPercent is rounded to 0.1, so 100 can still come with flagged (small but material) markets
   const flaggedMarketCount = verdict.mqi?.compromisedMarkets?.length || 0;
   const isFullyClean = Boolean(verdict.mqi?.isAllClean);
-  const unresolvedPct = verdict.mqi?.unresolvedPercent ?? 0;
+  const unresolvedPct = verdict.mqi?.unverifiedPercent ?? 0;
   const compromisedPct = verdict.mqi?.compromisedPercent ?? 0;
   DOM.modalScore.textContent = mqiUnknown
-    ? 'Unpriced Vault'
+    ? (verdict.mqi?.unpriced ? 'Unpriced Vault' : 'Unverified')
     : isFullyClean
       ? 'Clean Capital'
       : flaggedMarketCount > 0
@@ -1836,13 +1836,15 @@ function populateAuditModal(data, isQuietRefresh = false) {
   if (DOM.riskMqiPct) DOM.riskMqiPct.textContent = mqiUnknown ? 'N/A' : `${mqiVal}%`;
   if (DOM.riskMqiBar) DOM.riskMqiBar.style.width = mqiUnknown ? '0%' : `${mqiVal}%`;
   if (DOM.riskMqiDesc) {
-    const unresolvedUsd = verdict.mqi?.unresolvedAssetsUsd || 0;
+    const unresolvedUsd = verdict.mqi?.unverifiedAssetsUsd || 0;
     DOM.riskMqiDesc.textContent = mqiUnknown
-      ? 'The vault has no USD price, so the quality of its capital cannot be measured'
+      ? (verdict.mqi?.unpriced
+        ? 'The vault has no USD price, so the quality of its capital cannot be measured'
+        : 'None of the capital could be verified yet, so there is no score')
       : verdict.mqi?.isAllClean
       ? '100% of capital is deployed in verified, non-defaulted markets'
       : unresolvedUsd > 0 && !(verdict.mqi?.compromisedMarkets?.length)
-        ? `${formatCurrency(unresolvedUsd)} sits in adapters that could not be expanded (unknown, not verified)`
+        ? `${formatCurrency(unresolvedUsd)} is unverified (data missing or not expanded) and left out of the score`
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
@@ -1979,7 +1981,9 @@ function populateAuditModal(data, isQuietRefresh = false) {
       const isMarketFlagged = a.isFlagged === true || (a.isFlagged === undefined && !a.isClean && ((a.supplyAssetsUsd || 0) > ((v.totalAssetsUsd || 0) * 0.01)));
       const statusBadge = isMarketFlagged
         ? '<span class="badge badge-status badge-flagged">FLAGGED</span>'
-        : '<span class="badge badge-listed badge-status badge-clean">CLEAN</span>';
+        : a.isUnverified
+          ? '<span class="badge badge-status badge-unverified">UNVERIFIED</span>'
+          : '<span class="badge badge-listed badge-status badge-clean">CLEAN</span>';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -2179,10 +2183,10 @@ function firstDefined(...values) {
  * One reading of a vault's MQI for every surface: null = unpriced vault (unknown), isAllClean decides "clean"
  * (the rounded percent can read 100 while a small but material market is flagged).
  */
-function mqiBadgeInfo(mqiPercent, isAllClean) {
+function mqiBadgeInfo(mqiPercent, isAllClean, hasCompromised = true) {
   if (mqiPercent == null) return { text: 'MQI unknown', clean: false };
   if (isAllClean !== false && mqiPercent === 100) return { text: '100% Clean', clean: true };
-  return { text: mqiPercent === 100 ? 'Flagged' : `${mqiPercent}% MQI`, clean: false };
+  return { text: mqiPercent === 100 ? (hasCompromised ? 'Flagged' : 'Unverified') : `${mqiPercent}% MQI`, clean: false };
 }
 
 /** First source that carries the field; an explicit unknown stops the chain instead of falling through. */

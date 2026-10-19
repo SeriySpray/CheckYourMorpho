@@ -160,11 +160,22 @@ export default {
       assert.equal(apyFlag(f(vault({ net_apy: 0 }), diversified())), undefined);
       assert.equal(apyFlag(f(vault({ net_apy: 'abc' }), diversified())), undefined);
     }],
-    ['C1: V2 $10M без алокацій із нерозкритою експозицією -> HIGH Unresolved Exposure, MQI 0, вихід 0', ({ generateVaultVerdict: f }) => {
+    ['ринок без даних: MEDIUM Unverified Markets, MQI за перевіреною частиною, summary показує частку непідтвердженого', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 50e6 }), alloc({ supply_assets_usd: 50e6, bad_debt_usd: null, market_unique_key: '1:0xnodata', collateral_asset_symbol: 'ABC' })]);
+      assert.equal(flag(r, 'Unverified Markets').level, 'MEDIUM');
+      assert.equal(flag(r, 'Compromised Market Exposure'), undefined);
+      assert.equal(r.mqi.mqiPercent, 100);
+      assert.match(r.summary, /MQI: 100% of verified capital is clean \(50% of capital unverified\)/);
+    }],
+    ['нічого перевірити (усе нерозкрите): MQI null, summary "not available", а не 0 і не 100', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 100e6 }), []);
+      assert.equal(r.mqi.mqiPercent, null); assert.match(r.summary, /MQI: not available \(no capital could be verified\)/);
+    }],
+    ['C1: V2 $10M без алокацій із нерозкритою експозицією -> HIGH Unresolved Exposure, MQI null, вихід 0', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ version: 'v2', total_assets_usd: 10e6, liquidity_usd: 10e6, unresolved_exposure_usd: 10e6 }), []);
       const x = flag(r, 'Unresolved Exposure');
       assert.equal(x.level, 'HIGH'); assert.match(x.message, /^100% of capital \(\$10\.00M\) /);
-      assert.equal(r.mqi.mqiPercent, 0); assert.equal(r.mqi.isAllClean, false);
+      assert.equal(r.mqi.mqiPercent, null); assert.equal(r.mqi.isAllClean, false);
       assert.equal(r.liquidity.instantExitCapacityPercent, 0);
     }],
     ['C1: нерозкрита експозиція нижче порогу суттєвості -> без прапорця', ({ generateVaultVerdict: f }) =>

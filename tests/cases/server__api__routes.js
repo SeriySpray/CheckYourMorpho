@@ -625,12 +625,26 @@ export default {
     }))],
   ],
   handleGetVaults: [
-    ['нерозкрита експозиція: список і детальний ендпоінт дають однаковий MQI 0', async mod => sandbox(async db => {
+    ['нерозкрита експозиція: список і детальний ендпоінт дають однаковий MQI (null: нічого перевірити)', async mod => sandbox(async db => {
       ins(db, 'vaults', V(0x30, { version: 'v2', total_assets_usd: 1e6, liquidity_usd: 1e6, unresolved_exposure_usd: 1e6 }));
       const inList = list(mod).vaults.find(v => v.address === addr(0x30));
       const detail = getJson(mod, '/api/vaults/' + addr(0x30)).body;
-      assert.equal(inList.mqiPercent, 0);
+      assert.equal(inList.mqiPercent, null); assert.equal(inList.unverifiedPercent, 100); assert.equal(inList.isUnpriced, false);
       assert.equal(detail.verdict.mqi.mqiPercent, inList.mqiPercent);
+    })],
+    ['ринок без даних bad debt: у деталях isUnverified, не isFlagged, MQI 100, у списку unverifiedPercent', async mod => sandbox(async db => {
+      ins(db, 'markets', M('ok', { total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0 }));
+      ins(db, 'markets', M('nodata', { total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0, bad_debt_usd: null }));
+      ins(db, 'vaults', V(0x33, { total_assets_usd: 1e6 }));
+      ins(db, 'vault_allocations', A(0x33, 'ok', 5e5));
+      ins(db, 'vault_allocations', A(0x33, 'nodata', 5e5));
+      const body = getJson(mod, '/api/vaults/' + addr(0x33)).body;
+      const row = body.allocations.find(a => a.marketUniqueKey === 'nodata');
+      assert.equal(row.isUnverified, true); assert.equal(row.isFlagged, false); assert.equal(row.isClean, false);
+      assert.deepEqual(row.warnings, ['Bad debt data not reported']);
+      assert.equal(body.verdict.mqi.mqiPercent, 100);
+      const inList = list(mod).vaults.find(v => v.address === addr(0x33));
+      assert.equal(inList.mqiPercent, 100); assert.equal(inList.unverifiedPercent, 50); assert.equal(inList.isAllClean, false);
     })],
     ['vault без USD-ціни: у списку mqiPercent і exitCapPercent null, isAllClean false, у JSON null (не 100)', async mod => sandbox(async db => {
       ins(db, 'vaults', V(0x31, { version: 'v1', total_assets: '5000000', total_assets_usd: 0, liquidity_usd: null }));

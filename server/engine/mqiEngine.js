@@ -38,6 +38,8 @@ export function isUnpricedVault(vault) {
  */
 export function isMarketClean(market) {
   const reasons = [];
+  // Data the API did not return: the market is unverified (not clean, not known to be defective)
+  const unverifiedReasons = [];
 
   // Check 1: Listed status
   const isListed = Number(market.is_listed ?? 1) === 1;
@@ -51,7 +53,7 @@ export function isMarketClean(market) {
   const realizedBadDebtUsd = Number(market.realized_bad_debt_usd || 0);
   // null = the API did not report it (an absent field on a plain object, as in fixtures, is not reported either way)
   if (market.bad_debt_usd === null || market.realized_bad_debt_usd === null) {
-    reasons.push('Bad debt data not reported');
+    unverifiedReasons.push('Bad debt data not reported');
   }
   const badDebtDustUsd = Math.max(10, (Number(market.total_supply_assets_usd) || 0) * 0.0001);
   const totalBadDebt = badDebtUsd + realizedBadDebtUsd;
@@ -85,7 +87,7 @@ export function isMarketClean(market) {
   } catch {
     warningsUnreadable = true;
   }
-  if (warningsUnreadable) reasons.push('Protocol warnings not available');
+  if (warningsUnreadable) unverifiedReasons.push('Protocol warnings not available');
 
   // Liquidity warnings (low_liquidity, sustained_low_liquidity) describe exit risk, not market integrity,
   // and are covered by the liquidity engine. Only RED integrity warnings or non-whitelisted markets compromise.
@@ -99,11 +101,13 @@ export function isMarketClean(market) {
     reasons.push('Critical protocol security warning flagged by Morpho');
   }
 
-  const isClean = reasons.length === 0;
+  // Known defects (reasons) make a market compromised; only missing data makes it unverified
+  const isClean = reasons.length === 0 && unverifiedReasons.length === 0;
 
   return {
     isClean,
-    reasons
+    reasons,
+    unverifiedReasons
   };
 }
 
@@ -128,18 +132,23 @@ export function calculateMQI(vault, allocations = []) {
       unresolvedAssetsUsd: 0,
       compromisedPercent: 0,
       unresolvedPercent: 0,
+      unverifiedAssetsUsd: 0,
+      unverifiedPercent: 0,
       effectiveTotalUsd: 0,
       isAllClean: !unpriced,
       cleanMarketsCount: 0,
       totalMarketsCount: 0,
-      compromisedMarkets: []
+      compromisedMarkets: [],
+      unverifiedMarkets: []
     };
   }
 
   let cleanSupplyUsd = 0;
   let compromisedSupplyUsd = 0;
+  let unverifiedMarketsUsd = 0;
   let cleanMarketsCount = 0;
   const compromisedMarkets = [];
+  const unverifiedMarkets = [];
   const minMaterialThresholdUsd = getMaterialityThresholdUsd(totalAssetsUsd);
   const rawCompromisedItems = [];
   let totalCompromisedRawUsd = 0;
@@ -176,13 +185,14 @@ export function calculateMQI(vault, allocations = []) {
   for (const item of rawCompromisedItems) {
     const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= dustFloorUsd);
     if (isMaterial) {
-      compromisedSupplyUsd += item.supplyUsd;
-      compromisedMarkets.push({
+      const isCompromised = item.test.reasons.length > 0;
+      if (isCompromised) compromisedSupplyUsd += item.supplyUsd; else unverifiedMarketsUsd += item.supplyUsd;
+      (isCompromised ? compromisedMarkets : unverifiedMarkets).push({
         marketUniqueKey: item.alloc.market_unique_key,
         collateralSymbol: item.alloc.collateral_asset_symbol || 'None',
         loanSymbol: item.alloc.loan_asset_symbol || '',
         supplyAssetsUsd: Math.round(item.supplyUsd * 100) / 100,
-        reasons: item.test.reasons
+        reasons: isCompromised ? [...item.test.reasons, ...item.test.unverifiedReasons] : item.test.unverifiedReasons
       });
     } else {
       cleanSupplyUsd += item.supplyUsd;
@@ -194,18 +204,24 @@ export function calculateMQI(vault, allocations = []) {
     ? unresolvedRawUsd : 0;
 
   // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)
-  const totalAllocated = cleanSupplyUsd + compromisedSupplyUsd;
+  const totalAllocated = cleanSupplyUsd + compromisedSupplyUsd + unverifiedMarketsUsd;
   const idleCashUsd = Math.max(0, totalAssetsUsd - totalAllocated - unresolvedUsd);
   const totalCleanAssetsUsd = cleanSupplyUsd + idleCashUsd;
-  const effectiveTotalUsd = totalCleanAssetsUsd + compromisedSupplyUsd + unresolvedUsd;
 
-  const mqiPercent = effectiveTotalUsd > 0 
-    ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / effectiveTotalUsd) * 1000) / 10))
-    : 100;
+  // MQI is the clean share of the capital we could verify. Capital whose data is missing (unverified markets,
+  // unexpanded adapters) is reported separately and does not move the score: no data is not bad data.
+  const verifiedTotalUsd = totalCleanAssetsUsd + compromisedSupplyUsd;
+  const unverifiedUsd = unverifiedMarketsUsd + unresolvedUsd;
+  const effectiveTotalUsd = verifiedTotalUsd + unverifiedUsd;
+
+  // null = nothing could be verified, so there is nothing to score
+  const mqiPercent = verifiedTotalUsd > 0
+    ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / verifiedTotalUsd) * 1000) / 10))
+    : null;
 
   // One denominator for every share reported below: the capital the verdict is measured against
   const pctOfTotal = (usd, digits = 10) => effectiveTotalUsd > 0 ? Math.round((usd / effectiveTotalUsd) * 100 * digits) / digits : 0;
-  for (const m of compromisedMarkets) m.weightPercent = pctOfTotal(m.supplyAssetsUsd);
+  for (const m of [...compromisedMarkets, ...unverifiedMarkets]) m.weightPercent = pctOfTotal(m.supplyAssetsUsd);
 
   return {
     mqiPercent,
@@ -213,13 +229,16 @@ export function calculateMQI(vault, allocations = []) {
     effectiveTotalUsd: Math.round(effectiveTotalUsd * 100) / 100,
     compromisedPercent: pctOfTotal(compromisedSupplyUsd, 100),
     unresolvedPercent: pctOfTotal(unresolvedUsd, 100),
+    unverifiedAssetsUsd: Math.round(unverifiedUsd * 100) / 100,
+    unverifiedPercent: pctOfTotal(unverifiedUsd, 100),
     cleanAssetsUsd: Math.round(totalCleanAssetsUsd * 100) / 100,
     compromisedAssetsUsd: Math.round(compromisedSupplyUsd * 100) / 100,
     unresolvedAssetsUsd: Math.round(unresolvedUsd * 100) / 100,
-    isAllClean: compromisedMarkets.length === 0 && unresolvedUsd === 0 && mqiPercent === 100,
+    isAllClean: compromisedMarkets.length === 0 && unverifiedUsd === 0 && mqiPercent === 100,
     cleanMarketsCount,
     totalMarketsCount: allocations.length,
-    compromisedMarkets
+    compromisedMarkets,
+    unverifiedMarkets
   };
 }
 

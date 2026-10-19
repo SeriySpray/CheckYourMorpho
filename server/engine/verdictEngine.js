@@ -51,7 +51,17 @@ export function generateVaultVerdict(vault, allocations = []) {
     redFlags.push({
       level: 'HIGH',
       title: 'Unresolved Exposure',
-      message: `${unresolvedPct}% of capital ($${(mqi.unresolvedAssetsUsd / 1e6).toFixed(2)}M) sits in positions whose underlying markets could not be resolved; its quality, concentration and exit liquidity are unknown.`
+      message: `${unresolvedPct}% of capital ($${(mqi.unresolvedAssetsUsd / 1e6).toFixed(2)}M) sits in positions whose underlying markets could not be resolved; its quality, concentration and exit liquidity are unknown. It is left out of the MQI score until the data is available.`
+    });
+  }
+
+  // Flag 1c: Markets whose bad debt or warnings data did not come back from the API
+  if (mqi.unverifiedMarkets.length > 0) {
+    const marketsSummary = mqi.unverifiedMarkets.map(m => `${m.collateralSymbol}/${m.loanSymbol} (${m.weightPercent}%): ${m.reasons.join(', ')}`).join('; ');
+    redFlags.push({
+      level: 'MEDIUM',
+      title: 'Unverified Markets',
+      message: `Markets holding capital the API returned incomplete data for (${marketsSummary}) are not confirmed clean or compromised and are left out of the MQI score until the data is available.`
     });
   }
 
@@ -141,7 +151,11 @@ export function generateVaultVerdict(vault, allocations = []) {
   if (liquidity.isCrowded) {
     exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
   }
-  const mqiText = mqi.mqiPercent == null ? 'unknown (no USD price)' : `${mqi.mqiPercent}% clean capital`;
+  const mqiText = mqi.mqiPercent == null
+    ? (mqi.unpriced ? 'unknown (no USD price)' : 'not available (no capital could be verified)')
+    : mqi.unverifiedPercent > 0
+      ? `${mqi.mqiPercent}% of verified capital is clean (${mqi.unverifiedPercent}% of capital unverified)`
+      : `${mqi.mqiPercent}% clean capital`;
   let summary = hhi.tier === 'UNALLOCATED'
     ? `MQI: ${mqiText}. Concentration: N/A. ${exitSummary}.`
     : `MQI: ${mqiText}. Concentration HHI: ${hhi.hhi} (${hhi.tierLabel}, top: ${hhi.topCollateral.symbol} ${hhi.topCollateral.sharePercent}%). ${exitSummary}.`;

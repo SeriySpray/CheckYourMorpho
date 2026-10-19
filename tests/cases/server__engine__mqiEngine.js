@@ -16,21 +16,22 @@ export default {
   ],
   isMarketClean: [
     ['bad debt, якого API не повернуло (null), -> ринок не підтверджений, не "без боргу"', ({ isMarketClean: f }) => {
-      assert.deepEqual(f(alloc({ bad_debt_usd: null })).reasons, ['Bad debt data not reported']);
+      const r = f(alloc({ bad_debt_usd: null }));
+      assert.deepEqual(r.unverifiedReasons, ['Bad debt data not reported']); assert.deepEqual(r.reasons, []);
       assert.equal(f(alloc({ realized_bad_debt_usd: null })).isClean, false);
     }],
     ['відсутнє поле bad debt у фікстурі (undefined) лишається чистим, 0 теж', ({ isMarketClean: f }) => {
       assert.equal(f(alloc()).isClean, true); assert.equal(f(alloc({ bad_debt_usd: 0, realized_bad_debt_usd: 0 })).isClean, true);
     }],
     ['попередження: null, зіпсований JSON і не масив -> не підтверджено; "[]" -> чисто', ({ isMarketClean: f }) => {
-      for (const bad of [null, '{oops', '{"a":1}']) assert.deepEqual(f(alloc({ warnings_json: bad })).reasons, ['Protocol warnings not available']);
+      for (const bad of [null, '{oops', '{"a":1}']) assert.deepEqual(f(alloc({ warnings_json: bad })).unverifiedReasons, ['Protocol warnings not available']);
       assert.equal(f(alloc({ warnings_json: '[]' })).isClean, true);
     }],
     ['unrealized і realized bad debt сумуються: 6 + 6 при пилі 10 -> брудний, 5 + 4 -> чистий', ({ isMarketClean: f }) => {
       assert.equal(f(alloc({ total_supply_assets_usd: 0, bad_debt_usd: 6, realized_bad_debt_usd: 6 })).isClean, false);
       assert.equal(f(alloc({ total_supply_assets_usd: 0, bad_debt_usd: 5, realized_bad_debt_usd: 4 })).isClean, true);
     }],
-    ['базовий ринок чистий', ({ isMarketClean: f }) => assert.deepEqual(f(alloc()), { isClean: true, reasons: [] })],
+    ['базовий ринок чистий', ({ isMarketClean: f }) => assert.deepEqual(f(alloc()), { isClean: true, reasons: [], unverifiedReasons: [] })],
     ['нелістингований ринок брудний з однією причиною', ({ isMarketClean: f }) => {
       const r = f(alloc({ is_listed: 0 }));
       assert.equal(r.isClean, false); assert.deepEqual(r.reasons, ['Unlisted market (not verified by Morpho)']);
@@ -161,20 +162,20 @@ export default {
       // кумулятивно 20.2M >= 1M, тож і 0.2M-пил стає суттєвим: 79.8%
       assert.equal(r.mqiPercent, 79.8); assert.equal(r.compromisedMarkets.length, 2);
     }],
-    ['C1: V2 $10M без алокацій, уся сума нерозкрита -> MQI 0, а не 100 (не чистий кеш)', ({ calculateMQI: f }) => {
+    ['C1: V2 $10M без алокацій, уся сума нерозкрита -> нічого перевірити, MQI null, а не 100 і не 0', ({ calculateMQI: f }) => {
       const r = f(vault({ version: 'v2', total_assets_usd: 10e6, unresolved_exposure_usd: 10e6 }), []);
-      assert.equal(r.mqiPercent, 0); assert.equal(r.isAllClean, false);
+      assert.equal(r.mqiPercent, null); assert.equal(r.isAllClean, false); assert.equal(r.unpriced, false); assert.equal(r.unverifiedPercent, 100);
       assert.equal(r.cleanAssetsUsd, 0); assert.equal(r.unresolvedAssetsUsd, 10e6); assert.deepEqual(r.compromisedMarkets, []);
     }],
-    ['C1: 50M у чистому ринку + 50M нерозкрито -> MQI 50; clean + compromised + unresolved = TVL', ({ calculateMQI: f }) => {
+    ['C1: 50M у чистому ринку + 50M нерозкрито -> MQI 100 від перевіреної частини, 50% непідтверджено; clean + compromised + unresolved = TVL', ({ calculateMQI: f }) => {
       const r = f(vault({ unresolved_exposure_usd: 50e6 }), [alloc({ supply_assets_usd: 50e6 })]);
-      assert.equal(r.mqiPercent, 50); assert.equal(r.cleanAssetsUsd + r.compromisedAssetsUsd + r.unresolvedAssetsUsd, 100e6);
+      assert.equal(r.mqiPercent, 100); assert.equal(r.unverifiedPercent, 50); assert.equal(r.isAllClean, false); assert.equal(r.cleanAssetsUsd + r.compromisedAssetsUsd + r.unresolvedAssetsUsd, 100e6);
     }],
     ['C1: нерозкрита сума нижче порогу суттєвості (200K із 100M, поріг 250K) рахується чистою, рівно на порозі - ні', ({ calculateMQI: f }) => {
       const below = f(vault({ unresolved_exposure_usd: 200e3 }), []);
       assert.equal(below.mqiPercent, 100); assert.equal(below.unresolvedAssetsUsd, 0); assert.equal(below.isAllClean, true);
       const at = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 100e3 }), []);
-      assert.equal(at.mqiPercent, 99); assert.equal(at.isAllClean, false);
+      assert.equal(at.mqiPercent, 100); assert.equal(at.unverifiedPercent, 1); assert.equal(at.isAllClean, false);
     }],
     ['актив без USD-ціни (total_assets > 0, USD 0) -> MQI невідомий (null), не 100%', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 0, total_assets: '1000000' }), []);
@@ -225,8 +226,31 @@ export default {
     }],
     ['частки брудного і нерозкритого рахуються від одного знаменника: 100M = 50 чисто + 20 брудно + 30 нерозкрито', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 30e6 }), [alloc({ supply_assets_usd: 50e6 }), dirty(20e6)]);
-      assert.equal(r.mqiPercent, 50); assert.equal(r.compromisedPercent, 20); assert.equal(r.unresolvedPercent, 30);
+      // MQI is the clean share of what could be verified: 50 / (50 + 20)
+      assert.equal(r.mqiPercent, 71.4); assert.equal(r.compromisedPercent, 20); assert.equal(r.unresolvedPercent, 30);
+      assert.equal(r.unverifiedPercent, 30);
       assert.equal(r.effectiveTotalUsd, 100e6); assert.equal(r.compromisedMarkets[0].weightPercent, 20);
+    }],
+    ['ринок без даних про bad debt (50M зі 100M) не знижує MQI: 100%, 50% непідтверджено, у списку unverifiedMarkets', ({ calculateMQI: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 50e6 }), alloc({ supply_assets_usd: 50e6, bad_debt_usd: null, market_unique_key: '1:0xnodata' })]);
+      assert.equal(r.mqiPercent, 100); assert.equal(r.unverifiedPercent, 50); assert.equal(r.isAllClean, false);
+      assert.deepEqual(r.compromisedMarkets, []);
+      assert.deepEqual(r.unverifiedMarkets.map(m => m.marketUniqueKey), ['1:0xnodata']);
+      assert.deepEqual(r.unverifiedMarkets[0].reasons, ['Bad debt data not reported']);
+    }],
+    ['відомий дефект + відсутні дані в одному ринку = брудний (дефект відомий), причини з обох списків', ({ calculateMQI: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 50e6 }), alloc({ supply_assets_usd: 50e6, is_listed: 0, bad_debt_usd: null, market_unique_key: '1:0xboth' })]);
+      assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.unverifiedMarkets.length, 0); assert.equal(r.mqiPercent, 50);
+      assert.deepEqual(r.compromisedMarkets[0].reasons, ['Unlisted market (not verified by Morpho)', 'Bad debt data not reported']);
+    }],
+    ['брудний + непідтверджений + нерозкритий: MQI лише від перевіреної частини, частки сумуються до 100', ({ calculateMQI: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 20e6 }), [alloc({ supply_assets_usd: 40e6 }), dirty(20e6), alloc({ supply_assets_usd: 20e6, warnings_json: null, market_unique_key: '1:0xnw' })]);
+      assert.equal(r.mqiPercent, 66.7); assert.equal(r.compromisedPercent, 20); assert.equal(r.unverifiedPercent, 40);
+      assert.equal(r.cleanAssetsUsd + r.compromisedAssetsUsd + r.unverifiedAssetsUsd, 100e6);
+    }],
+    ['непідтверджений ринок нижче порогу суттєвості лишається пилом і нічого не змінює', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 10e6 }), [alloc({ supply_assets_usd: 50e3, bad_debt_usd: null })]);
+      assert.equal(r.unverifiedMarkets.length, 0); assert.equal(r.isAllClean, true);
     }],
   ],
   isUnpricedVault: [
