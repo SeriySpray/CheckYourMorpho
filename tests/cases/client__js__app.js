@@ -121,9 +121,8 @@ const verdictOf = (over = {}) => ({
   mqi: { mqiPercent: 100, isAllClean: true, compromisedMarkets: [], compromisedPercent: 0, unverifiedPercent: 0, unpriced: false, ...over.mqi },
   liquidity: { instantExitCapacityPercent: 40, instantExitCapacityUsd: 4e6, stressedExitCapacityPercent: 40, stressedExitCapacityUsd: 4e6, ...over.liquidity },
   collateral: {
-    tier: 'CLASSIFIED', level: null, highPercent: 12.5, mediumPlusPercent: 20, topClass: 'ETH', unverifiedPercent: 0,
-    classes: [{ class: 'ETH', label: 'ETH and ETH staking derivatives', weight: 'low', usd: 5e6, percent: 50 },
-      { class: 'BTC', label: 'BTC and BTC wrappers', weight: 'low', usd: 2.5e6, percent: 25 }], ...over.collateral
+    tier: 'CLASSIFIED', ordinaryPercent: 87.5, elevatedPercent: 12.5, unclassifiedPercent: 0, unverifiedPercent: 0,
+    tags: [{ tag: 'eth', risk: 'ordinary', usd: 5e6, percent: 50 }, { tag: 'btc', risk: 'ordinary', usd: 2.5e6, percent: 25 }], ...over.collateral
   },
   redFlags: over.redFlags ?? []
 });
@@ -849,7 +848,7 @@ const base = {
       s.allVaults = [item];
       const data = audit({ totalAssetsUsd: 2e6, netApy: 0.07, asset: { symbol: 'USDC', decimals: 6 } }, {
         mqi: { mqiPercent: 87.5, isAllClean: false, compromisedMarkets: [{}, {}], compromisedPercent: 12.5, unverifiedPercent: 1, unpriced: false },
-        liquidity: { instantExitCapacityPercent: 33, instantExitCapacityUsd: 660000 }, collateral: { highPercent: 40, tier: 'CLASSIFIED', level: 'RED', topClass: 'CREDIT_FUND' }
+        liquidity: { instantExitCapacityPercent: 33, instantExitCapacityUsd: 660000 }, collateral: { ordinaryPercent: 60, elevatedPercent: 30, unclassifiedPercent: 10, tier: 'CLASSIFIED' }
       });
       f('0xaaa1', data);
       assert.equal(s.clientAuditCache.get('0xaaa1'), data);
@@ -858,7 +857,7 @@ const base = {
       assert.equal(item.mqiPercent, 87.5); assert.equal(item.isAllClean, false);
       assert.equal(item.compromisedCount, 2); assert.equal(item.compromisedPercent, 12.5); assert.equal(item.unverifiedPercent, 1);
       assert.equal(item.isUnpriced, false); assert.equal(item.exitCapPercent, 33); assert.equal(item.exitCapUsd, 660000);
-      assert.equal(item.highRiskPercent, 40); assert.equal(item.collateralTier, 'CLASSIFIED'); assert.equal(item.collateralLevel, 'RED'); assert.equal(item.topCollateralClass, 'CREDIT_FUND');
+      assert.deepEqual([item.ordinaryCollateralPercent, item.elevatedCollateralPercent, item.unclassifiedCollateralPercent, item.collateralTier], [60, 30, 10, 'CLASSIFIED']);
       assert.deepEqual(item.asset, { symbol: 'USDC', logo: 'keep', decimals: 6 });
     }),
     T('відкрита модалка цього vault оновлюється, закрита - ні', ({ applyVaultAuditData: f, __state: s }) => {
@@ -1048,18 +1047,18 @@ const base = {
     }),
     T('сортування за APY, ліквідністю, MQI і ризиком застав', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
-        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true, highRiskPercent: 20, collateralTier: 'CLASSIFIED' }),
-        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null, highRiskPercent: null, collateralTier: 'UNKNOWN' }),
-        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false, highRiskPercent: 90, collateralTier: 'CLASSIFIED' }),
-        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false, highRiskPercent: 50, collateralTier: 'CLASSIFIED' })
+        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true, ordinaryCollateralPercent: 80, collateralTier: 'CLASSIFIED' }),
+        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null, ordinaryCollateralPercent: null, collateralTier: 'UNKNOWN' }),
+        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false, ordinaryCollateralPercent: 10, collateralTier: 'CLASSIFIED' }),
+        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false, ordinaryCollateralPercent: 50, collateralTier: 'CLASSIFIED' })
       ];
       const order = sort => { s.explorerFilters.sort = sort; const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')).join(''); };
       assert.equal(order('apy_desc'), 'bcad');
       assert.equal(order('liq_desc'), 'acbd');
       assert.equal(order('mqi_asc'), 'bdca'); // невідомий першим, позначений 100 - перед чистим
       assert.equal(order('mqi_desc'), 'acdb');
-      assert.equal(order('risk_desc'), 'cdab');
-      assert.equal(order('risk_asc'), 'adcb'); // vault без картини застав у кінці
+      assert.equal(order('risk_desc'), 'cdab'); // менше ordinary - ризикованіше, без картини застав у кінці
+      assert.equal(order('risk_asc'), 'adcb');
     }),
     T('бейджі рядка: Unpriced, Unverified, % Flagged, кількість Flagged, % Unverified, чистий без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
@@ -1520,10 +1519,11 @@ const base = {
       assert.equal(D.riskMqiPct.textContent, '100%'); assert.equal(D.riskMqiBar.style.width, '100%');
       assert.equal(D.riskMqiDesc.textContent, '100% of capital is deployed in verified, non-defaulted markets');
       assert.equal(D.riskMixVal.textContent, '87.5%'); assert.equal(D.riskMixBar.style.width, '88%');
-      assert.equal(D.riskMixDesc.textContent, 'ETH and ETH staking derivatives 50%, BTC and BTC wrappers 25% of total capital');
-      assert.equal(D.riskEffectiveAssets.textContent, '2 collateral classes');
-      assert.equal(collateral.length, 2);
-      assert.match(collateral[0].innerHTML, /ETH and ETH staking derivatives[\s\S]*\$5\.00M[\s\S]*50%/);
+      assert.equal(D.riskMixDesc.textContent, 'elevated 12.5%, unclassified 0% of total capital');
+      assert.equal(D.riskEffectiveAssets.textContent, '2 tags');
+      assert.equal(collateral.length, 3); // two tags and the overlap note
+      assert.match(collateral[0].innerHTML, /eth[\s\S]*\$5\.00M[\s\S]*50%/);
+      assert.match(collateral[2].textContent, /each of its tags/);
       assert.equal(D.riskFlagsList.innerHTML, '<div class="flag-item clear">No critical risk flags detected for this vault.</div>');
       assert.match(D.allocationsTbody.innerHTML, /No active market allocations recorded/);
       assert.match(D.riskExitPopoverBody.innerHTML, /fully preserved at <strong>40%<\/strong> \(\$4\.00M\)/);
@@ -1556,21 +1556,20 @@ const base = {
       assert.equal(s.DOM.modalScore.textContent, '3% Unverified');
       assert.equal(s.DOM.riskMqiDesc.textContent, '$300.0K is unverified (data missing or not expanded) and left out of the score');
     }),
-    T('класи застав: UNKNOWN і UNALLOCATED -> N/A; при неперевіреній частці - "verified capital"', ({ populateAuditModal: f, __state: s }) => {
+    T('теги застав: UNKNOWN і UNALLOCATED -> N/A; при неперевіреній частці - "verified capital"', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
-      f(audit({}, { collateral: { tier: 'UNKNOWN', classes: [] } }));
+      f(audit({}, { collateral: { tier: 'UNKNOWN', tags: [] } }));
       assert.equal(D.riskMixVal.textContent, 'N/A'); assert.equal(D.riskMixBar.style.width, '0%');
       assert.equal(D.riskMixDesc.textContent, 'No capital could be verified yet');
-      assert.equal(D.riskEffectiveAssets.textContent, '0 collateral classes');
+      assert.equal(D.riskEffectiveAssets.textContent, '0 tags');
       assert.match(D.riskCollateralList.innerHTML, /No active collateral backing recorded/);
-      f(audit({}, { collateral: { tier: 'UNALLOCATED', classes: [] } }));
+      f(audit({}, { collateral: { tier: 'UNALLOCATED', tags: [] } }));
       assert.equal(D.riskMixDesc.textContent, 'No active collateral backing');
-      f(audit({}, { collateral: { unverifiedPercent: 10, highPercent: 150 } }));
-      assert.equal(D.riskMixDesc.textContent, 'ETH and ETH staking derivatives 50%, BTC and BTC wrappers 25% of verified capital');
+      f(audit({}, { collateral: { unverifiedPercent: 10, ordinaryPercent: 0, elevatedPercent: 90, unclassifiedPercent: 10 } }));
+      assert.equal(D.riskMixDesc.textContent, 'elevated 90%, unclassified 10% of verified capital');
       assert.equal(D.riskMixBar.style.width, '0%'); assert.equal(D.riskMixVal.textContent, '0%');
-      f(audit({}, { collateral: { classes: [] } }));
-      assert.equal(D.riskMixDesc.textContent, 'Share of capital outside high-risk collateral classes');
-      assert.equal(D.riskEffectiveAssets.textContent, '0 collateral classes');
+      f(audit({}, { collateral: { tags: [] } }));
+      assert.equal(D.riskEffectiveAssets.textContent, '0 tags');
     }),
     T('невідомий вихід: Exit Cap N/A, поповер без оцінки, стан виходу null', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
@@ -1600,7 +1599,7 @@ const base = {
       const origCreate = document.createElement;
       document.createElement = tag => { const e = origCreate(tag); created.push(e); return e; };
       f(audit({ totalAssetsUsd: 1e6 }, {}, [
-        { collateralSymbol: 'WETH', lltvPercent: 86, weight: 0.5, supplyAssetsUsd: 5e5, marketFreeLiquidityUsd: 1e5, isFlagged: true, supplyApy: 0.0412 },
+        { collateralSymbol: 'WETH', collateralTags: ['eth', 'lst'], lltvPercent: 86, weight: 0.5, supplyAssetsUsd: 5e5, marketFreeLiquidityUsd: 1e5, isFlagged: true, supplyApy: 0.0412 },
         { collateralSymbol: 'cbBTC', lltvPercent: null, weight: 0.2, supplyAssetsUsd: 2e5, isFlagged: false, isUnverified: true },
         { collateralSymbol: '<img src=x>', lltvPercent: 77, weight: 0.1, supplyAssetsUsd: 1e5, isClean: true },
         { collateralSymbol: 'PT', weight: 0.2, supplyAssetsUsd: 2e5, isClean: false },
@@ -1611,6 +1610,7 @@ const base = {
       const status = r => r.innerHTML.match(/badge-status[^>]*>(\w+)</)[1];
       assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'CLEAN', 'FLAGGED', 'CLEAN']);
       assert.match(rows[0].innerHTML, /<td>86%<\/td>[\s\S]*<td>50\.0%<\/td>[\s\S]*\$500\.0K[\s\S]*\$100\.0K[\s\S]*4\.12%/);
+      assert.match(rows[0].innerHTML, /eth, lst/); assert.match(rows[1].innerHTML, /no tags/);
       assert.match(rows[1].innerHTML, /<td>n\/a<\/td>/);
       assert.match(rows[1].innerHTML, /<td>—<\/td>/); // невідома вільна ліквідність
       assert.ok(rows[2].innerHTML.includes('&lt;img src=x&gt;'));

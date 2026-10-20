@@ -1,6 +1,6 @@
 import { getDatabase, checkpointDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
-import { findUnknownCollateral } from '../engine/collateralEngine.js';
+import { TAG_RISK, parseTagsJson } from '../engine/collateralEngine.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
 import { syncVaultEvents } from './eventsService.js';
 import { refreshTokenTags } from './tokenTags.js';
@@ -107,21 +107,17 @@ export function unresolvedV1Assets(rawV) {
   return allocation.filter(a => !a.market).reduce((acc, a) => acc + toBigInt(a.supplyAssets), 0n);
 }
 
-/** Large collateral assets missing from server/data/collateralClasses.json: counted as unclassified until someone adds them. */
-export function reportUnknownCollateral(db, minUsd = 1e6) {
+/** Morpho tags on collateral that are missing from the TAG_RISK table: logged so the table can be reviewed. */
+export function reportUnknownCollateral(db) {
   try {
-    const rows = db.prepare(`
-      SELECT m.chain_id, m.collateral_asset_address, m.collateral_asset_symbol, m.lltv, m.lltv_percent, va.supply_assets_usd
-      FROM vault_allocations va JOIN markets m ON m.unique_key = va.market_unique_key
-      WHERE va.via_vault IS NULL
-    `).all();
-    const unknown = findUnknownCollateral(rows, minUsd);
-    for (const t of unknown) {
-      console.warn(`[SyncEngine] Unclassified collateral ${t.symbol} (chain ${t.chainId}, ${t.address}) holds $${(t.usd / 1e6).toFixed(1)}M: add it to server/data/collateralClasses.json`);
+    const unlisted = new Set();
+    for (const r of db.prepare('SELECT tags_json FROM token_tags WHERE tags_json IS NOT NULL').all()) {
+      for (const tag of parseTagsJson(r.tags_json) || []) if (!TAG_RISK[tag]) unlisted.add(tag);
     }
-    return unknown;
+    for (const tag of unlisted) console.warn(`[SyncEngine] Morpho tag '${tag}' is not in TAG_RISK: tokens carrying it stay unclassified`);
+    return [...unlisted];
   } catch (err) {
-    console.warn('[SyncEngine] Could not check for unclassified collateral:', err.message);
+    console.warn('[SyncEngine] Could not check for unlisted tags:', err.message);
     return [];
   }
 }

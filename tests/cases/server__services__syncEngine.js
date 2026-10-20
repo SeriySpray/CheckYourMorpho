@@ -62,20 +62,14 @@ const sync = (mod, api, options) => withFetch(mockApi(api), () => mod.syncAllVau
 
 export default {
   reportUnknownCollateral: [
-    ['невідомі застави від порога потрапляють у лог і в результат, відомі - ні', ({ reportUnknownCollateral: f }) => {
-      const rows = [
-        { chain_id: 1, collateral_asset_address: '0xnew', collateral_asset_symbol: 'NEWCOIN', supply_assets_usd: 5e6 },
-        { chain_id: 1, collateral_asset_address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', collateral_asset_symbol: 'WETH', supply_assets_usd: 9e6 },
-        { chain_id: 1, collateral_asset_address: '0xsmall', collateral_asset_symbol: 'SMALL', supply_assets_usd: 1e5 }
-      ];
+    ['теги поза TAG_RISK потрапляють у лог і в результат, відомі - ні', ({ reportUnknownCollateral: f }) => {
+      const rows = [{ tags_json: '["eth","foo"]' }, { tags_json: '["rwa","foo","bar"]' }, { tags_json: 'null' }, { tags_json: '{' }];
       const warn = console.warn;
       const logged = [];
       console.warn = (...args) => logged.push(args.join(' '));
       try {
-        const r = f({ prepare: () => ({ all: () => rows }) }, 1e6);
-        assert.deepEqual(r.map(x => x.symbol), ['NEWCOIN']);
-        assert.equal(logged.length, 1);
-        assert.match(logged[0], /NEWCOIN.*collateralClasses\.json/);
+        assert.deepEqual(f({ prepare: () => ({ all: () => rows }) }), ['foo', 'bar']);
+        assert.equal(logged.length, 2); assert.match(logged[0], /'foo'.*TAG_RISK/);
       } finally { console.warn = warn; }
     }],
     ['помилка БД не кидає виняток: повертає порожній список', ({ reportUnknownCollateral: f }) => {

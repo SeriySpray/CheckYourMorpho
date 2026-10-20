@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 const VAULT_ADDR = '0x1111111111111111111111111111111111111111';
 const NOW = 1_750_000_000;
 const DAY = 86400;
+const M = { collateral_model: 'morpho-tags-1' };
 
 const baseCtx = (overrides = {}) => ({
   address: VAULT_ADDR,
@@ -281,9 +282,9 @@ export default {
         redFlags: [{ level: 'CRITICAL', title: 'Compromised Market Exposure' }],
         mqi: { mqiPercent: 50, unpriced: false, verifiedAssetsUsd: 1_000_000 },
         liquidity: { exitUnknown: false, instantExitCapacityPercent: 40 },
-        collateral: { tier: 'CLASSIFIED', level: null, highPercent: 0, mediumPlusPercent: 0 }
+        collateral: { tier: 'CLASSIFIED' }
       };
-      const st = buildWatchState(vault, allocs, verdict, { timelock: 86400, lastAdminEventTs: NOW });
+      const st = buildWatchState(vault, allocs, verdict, { timelock: 86400, lastAdminEventTs: NOW, collateralModel: 'morpho-tags-1' });
       assert.equal(st.chain_id, 8453);
       assert.equal(st.name, 'Base USDC Vault');
       assert.equal(st.verdict_level, 'red');
@@ -292,6 +293,17 @@ export default {
       assert.equal(st.is_listed, 1);
       assert.ok(st.bad_debt_markets['0xm1']);
       assert.equal(st.last_admin_event_ts, NOW);
+      assert.equal(st.collateral_model, 'morpho-tags-1'); assert.equal('collateral_level' in st, false);
+      assert.equal(buildWatchState(vault, allocs, verdict).collateral_model, 'none');
+    }],
+    ['flagged_markets: elevated-тег позначається, unclassified і ordinary ні', ({ buildWatchState }) => {
+      const vault = { address: VAULT_ADDR, chain_id: 1, total_assets_usd: 1_000_000, liquidity_usd: 1e9 };
+      const mk = (key, tags) => ({ market_unique_key: key, supply_assets_usd: 500_000, bad_debt_usd: 0, realized_bad_debt_usd: 0, is_listed: 1,
+        oracle_address: '0x1', lltv_percent: 86, collateral_asset_symbol: key, loan_asset_symbol: 'USDC', warnings_json: '[]',
+        collateral_asset_address: `0x${key}`, collateral_tags_json: tags });
+      const st = buildWatchState(vault, [mk('rwa', '["stablecoin","rwa"]'), mk('none', null), mk('eth', '["eth"]')], null);
+      assert.deepEqual(Object.keys(st.flagged_markets), ['rwa']);
+      assert.equal(st.flagged_markets.rwa.collateralState, 'elevated'); assert.deepEqual(st.flagged_markets.rwa.collateralTags, ['stablecoin', 'rwa']);
     }],
   ],
   diffDerivedState: [
@@ -300,22 +312,25 @@ export default {
       assert.deepEqual(diffDerivedState(null, next, baseCtx(), NOW), []);
     }],
     ['виявляє verdict_worsened (warning для yellow, critical для red) і verdict_improved (info), ігноруючи unknown/null', ({ diffDerivedState }) => {
-      const e1 = diffDerivedState({ verdict_level: 'green' }, { verdict_level: 'yellow' }, baseCtx(), NOW);
+      const e1 = diffDerivedState({ ...M, verdict_level: 'green' }, { ...M, verdict_level: 'yellow' }, baseCtx(), NOW);
       assert.equal(e1.length, 1);
       assert.equal(e1[0].kind, 'verdict_worsened');
       assert.equal(e1[0].severity, 'warning');
 
-      const e2 = diffDerivedState({ verdict_level: 'yellow' }, { verdict_level: 'red' }, baseCtx(), NOW);
+      const e2 = diffDerivedState({ ...M, verdict_level: 'yellow' }, { ...M, verdict_level: 'red' }, baseCtx(), NOW);
       assert.equal(e2.length, 1);
       assert.equal(e2[0].kind, 'verdict_worsened');
       assert.equal(e2[0].severity, 'critical');
 
-      const e3 = diffDerivedState({ verdict_level: 'red' }, { verdict_level: 'green' }, baseCtx(), NOW);
+      const e3 = diffDerivedState({ ...M, verdict_level: 'red' }, { ...M, verdict_level: 'green' }, baseCtx(), NOW);
       assert.equal(e3.length, 1);
       assert.equal(e3[0].kind, 'verdict_improved');
       assert.equal(e3[0].severity, 'info');
 
-      assert.deepEqual(diffDerivedState({ verdict_level: null }, { verdict_level: 'red' }, baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState({ ...M, verdict_level: null }, { ...M, verdict_level: 'red' }, baseCtx(), NOW), []);
+      // a changed or missing previous model keeps verdict events quiet
+      assert.deepEqual(diffDerivedState({ collateral_model: 'none', verdict_level: 'green' }, { ...M, verdict_level: 'red' }, baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState({ verdict_level: 'green' }, { ...M, verdict_level: 'red' }, baseCtx(), NOW), []);
     }],
     ['виявляє mqi_dropped при падінні >= 10 п., tvl_drop (-15% warning, -30% critical) та exit_liquidity_low (<20%)', ({ diffDerivedState }) => {
       const prev = {
@@ -342,35 +357,24 @@ export default {
         ]
       );
     }],
-    ['виявляє bad_debt_appeared, flagged_collateral_added, vault_delisted і collateral_class_share_crossed', ({ diffDerivedState }) => {
-      const prev = {
-        bad_debt_markets: {},
-        unverified_bad_debt_markets: [],
-        flagged_markets: {},
-        is_listed: 1,
-        collateral_tier: 'CLASSIFIED',
-        collateral_level: 'GREEN',
-        high_collateral_percent: 5
-      };
+    ['виявляє bad_debt_appeared, flagged_collateral_added і vault_delisted; collateral_class_share_crossed більше не створюється', ({ diffDerivedState }) => {
+      const prev = { ...M, bad_debt_markets: {}, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1, collateral_tier: 'CLASSIFIED' };
       const next = {
+        ...M,
         bad_debt_markets: { '0xm1': { label: 'wstETH/USDC', badDebtUsd: 12000, supplyUsd: 200000 } },
         unverified_bad_debt_markets: [],
-        flagged_markets: { '0xm2': { label: 'sUSDe/USDC', collateralSymbol: 'sUSDe', collateralClass: 'SYNTH', reasons: [], supplyUsd: 300000 } },
+        flagged_markets: { '0xm2': { label: 'sUSDe/USDC', collateralSymbol: 'sUSDe', collateralState: 'elevated', collateralTags: ['rwa'], reasons: [], supplyUsd: 300000 } },
         is_listed: 0,
-        collateral_tier: 'CLASSIFIED',
-        collateral_level: 'RED',
-        high_collateral_percent: 30
+        collateral_tier: 'CLASSIFIED'
       };
       const evs = diffDerivedState(prev, next, baseCtx(), NOW);
-      assert.deepEqual(
-        evs.map(e => [e.kind, e.severity]),
-        [
-          ['bad_debt_appeared', 'critical'],
-          ['flagged_collateral_added', 'warning'],
-          ['vault_delisted', 'warning'],
-          ['collateral_class_share_crossed', 'warning']
-        ]
-      );
+      assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical'], ['flagged_collateral_added', 'warning'], ['vault_delisted', 'warning']]);
+      assert.deepEqual(JSON.parse(evs[1].details_json).collateralTags, ['rwa']);
+    }],
+    ['під час зміни моделі застави flagged_collateral_added мовчить, bad_debt_appeared ні', ({ diffDerivedState }) => {
+      const flagged = { '0xm2': { label: 'x', collateralState: 'elevated', collateralTags: ['rwa'], reasons: [], supplyUsd: 1 } };
+      const evs = diffDerivedState({ bad_debt_markets: {}, flagged_markets: {} }, { ...M, bad_debt_markets: { '0xm1': { label: 'a', badDebtUsd: 1, supplyUsd: 1 } }, flagged_markets: flagged }, baseCtx(), NOW);
+      assert.deepEqual(evs.map(e => e.kind), ['bad_debt_appeared']);
     }],
   ],
 };

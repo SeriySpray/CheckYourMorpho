@@ -8,7 +8,7 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
-import { calculateCollateralMix } from '../engine/collateralEngine.js';
+import { calculateTagMix, parseTagsJson, tokenState } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
@@ -444,9 +444,10 @@ export function getVaultCatalog() {
   const rows = db.prepare('SELECT * FROM vaults ORDER BY address').all();
 
   const allocRows = db.prepare(`
-    SELECT va.*, m.*
+    SELECT va.*, m.*, t.tags_json AS collateral_tags_json
     FROM vault_allocations va
     JOIN markets m ON va.market_unique_key = m.unique_key
+    LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
   `).all();
 
   // Peer supplies per market come from the same rows: every allocation of every vault is loaded anyway
@@ -468,7 +469,7 @@ export function getVaultCatalog() {
     const scored = withEffectiveTotal(row, allocs);
     const mqi = calculateMQI(scored, allocs);
     const hhi = calculateHHI(withMaterialUnresolved(scored, mqi), allocs);
-    const collateral = calculateCollateralMix(withMaterialUnresolved(scored, mqi), allocs);
+    const collateral = calculateTagMix(withMaterialUnresolved(scored, mqi), allocs);
     const liq = calculateLiquidityMetrics(withMaterialUnresolved(scored, mqi), allocs);
 
     return {
@@ -509,9 +510,9 @@ export function getVaultCatalog() {
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
       collateralTier: collateral.tier,
-      collateralLevel: collateral.level,
-      highRiskPercent: collateral.highPercent,
-      topCollateralClass: collateral.topClass,
+      ordinaryCollateralPercent: collateral.ordinaryPercent,
+      elevatedCollateralPercent: collateral.elevatedPercent,
+      unclassifiedCollateralPercent: collateral.unclassifiedPercent,
       updatedAt: row.metadata_updated_at
     };
   });
@@ -582,9 +583,11 @@ export function handleGetVaultByAddress(req, res, address) {
         m.bad_debt_usd,
         m.realized_bad_debt_usd,
         m.warnings_count,
-        m.warnings_json
+        m.warnings_json,
+        t.tags_json AS collateral_tags_json
       FROM vault_allocations va
       JOIN markets m ON va.market_unique_key = m.unique_key
+      LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
       WHERE va.vault_address = ?
       ORDER BY va.supply_assets_usd DESC
     `).all(cleanAddress);
@@ -611,7 +614,7 @@ export function handleGetVaultByAddress(req, res, address) {
       alloc.peer_vaults = peerData.peers;
     }
 
-    // Compute comprehensive institutional audit verdict (MQI + collateral classes + Exit Liquidity)
+    // Compute comprehensive institutional audit verdict (MQI + collateral tags + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
     const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
     const unverifiedKeys = new Set(verdict.mqi.unverifiedMarkets.map(m => m.marketUniqueKey));
@@ -653,6 +656,8 @@ export function handleGetVaultByAddress(req, res, address) {
           marketUniqueKey: a.market_unique_key,
           loanSymbol: a.loan_asset_symbol,
           collateralSymbol: a.collateral_asset_symbol,
+          collateralTags: parseTagsJson(a.collateral_tags_json) ?? [],
+          collateralState: tokenState(parseTagsJson(a.collateral_tags_json)).state,
           // an LLTV the API did not report is unknown (null), not 0%
           lltvPercent: a.lltv == null || a.lltv === '' ? null : a.lltv_percent,
           supplyAssetsHuman: a.supply_assets_human,

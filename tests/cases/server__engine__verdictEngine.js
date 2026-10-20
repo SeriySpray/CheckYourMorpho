@@ -55,7 +55,7 @@ export default {
     ['повертає метадані vault і точний summary', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), diversified());
       assert.equal(r.vaultAddress, '0xvault'); assert.equal(r.vaultName, 'Test Vault'); assert.equal(r.version, 'v1'); assert.equal(r.chainId, 1);
-      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral: .+ \d+(\.\d+)?%, high-risk 0%\. Exit Liquidity: 100%\.$/);
+      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral \(Morpho tags\): ordinary 100%, elevated 0%, unclassified 0%\. Exit Liquidity: 100%\.$/);
     }],
     ['vault без активної застави -> summary "Collateral: N/A"', ({ generateVaultVerdict: f }) =>
       assert.match(f(vault({ liquidity_usd: 100e6 }), []).summary, /Collateral: N\/A\. Exit Liquidity: 100%\.$/)],
@@ -72,20 +72,19 @@ export default {
       assert.equal(r.mqi.mqiPercent, 100);
       assert.equal(flag(r, 'Compromised Market Exposure').level, 'CRITICAL');
     }],
-    ['100% у WETH (клас ETH) -> без прапорця застав, клас ETH 100%', ({ generateVaultVerdict: f }) => {
+    ['100% у WETH з тегом eth -> жодного прапорця застав, ordinary 100%', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6 })]);
-      assert.equal(flag(r, 'High-Risk Collateral'), undefined); assert.equal(flag(r, 'Elevated-Risk Collateral'), undefined);
-      assert.equal(r.collateral.classes[0].class, 'ETH'); assert.equal(r.collateral.classes[0].percent, 100);
+      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.ordinaryPercent, 100);
     }],
-    ['невідома застава 100% -> HIGH High-Risk Collateral (невідоме не вважається безпечним)', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, collateral_asset_address: '0xunknowntoken', collateral_asset_symbol: 'NEWCOIN' })]);
-      const x = flag(r, 'High-Risk Collateral');
-      assert.equal(x.level, 'HIGH'); assert.match(x.message, /^100% of vault capital/);
-      assert.equal(r.collateral.level, 'RED'); assert.equal(r.collateral.unknownPercent, 100);
+    ['застава без тегів 100% -> прапорця немає, unclassified 100%', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, collateral_tags_json: null })]);
+      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.unclassifiedPercent, 100);
+      assert.match(r.summary, /ordinary 0%, elevated 0%, unclassified 100%/);
     }],
-    ['60% синтетичного долара (USDe) + 40% WETH -> MEDIUM Elevated-Risk Collateral', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 60e6, collateral_asset_address: '0x4c9edd5852cd905f086c759e8383e09bff1e68b3', collateral_asset_symbol: 'USDe' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 40e6 })]);
-      assert.equal(flag(r, 'Elevated-Risk Collateral').level, 'MEDIUM'); assert.equal(flag(r, 'High-Risk Collateral'), undefined);
+    ['60% rwa + 40% WETH -> прапорця немає, elevated 60% у summary', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 60e6, collateral_tags_json: '["stablecoin","rwa"]' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 40e6 })]);
+      assert.deepEqual(r.redFlags, []);
+      assert.match(r.summary, /Collateral \(Morpho tags\): ordinary 40%, elevated 60%, unclassified 0%\./);
     }],
     ["п'ять рівних застав низького ризику -> жодного прапорця застав", ({ generateVaultVerdict: f }) =>
       assert.deepEqual(f(vault(), diversified().slice(0, 5).map(a => ({ ...a, supply_assets_usd: 20e6 }))).redFlags, [])],

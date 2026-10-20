@@ -830,10 +830,10 @@ function applyVaultAuditData(vaultAddress, auditData) {
       if (verdict.liquidity?.instantExitCapacityUsd !== undefined) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
       }
-      if (verdict.collateral?.highPercent !== undefined) matchingVault.highRiskPercent = verdict.collateral.highPercent;
       if (verdict.collateral?.tier !== undefined) matchingVault.collateralTier = verdict.collateral.tier;
-      if (verdict.collateral?.level !== undefined) matchingVault.collateralLevel = verdict.collateral.level;
-      if (verdict.collateral?.topClass !== undefined) matchingVault.topCollateralClass = verdict.collateral.topClass;
+      if (verdict.collateral?.ordinaryPercent !== undefined) matchingVault.ordinaryCollateralPercent = verdict.collateral.ordinaryPercent;
+      if (verdict.collateral?.elevatedPercent !== undefined) matchingVault.elevatedCollateralPercent = verdict.collateral.elevatedPercent;
+      if (verdict.collateral?.unclassifiedPercent !== undefined) matchingVault.unclassifiedCollateralPercent = verdict.collateral.unclassifiedPercent;
     }
   }
 
@@ -1177,14 +1177,12 @@ function renderVaultExplorer() {
     if (explorerFilters.sort === 'mqi_desc') {
       return mqiSortKey(b) - mqiSortKey(a);
     }
-    if (explorerFilters.sort === 'risk_desc') {
-      return (b.highRiskPercent ?? 0) - (a.highRiskPercent ?? 0);
-    }
-    if (explorerFilters.sort === 'risk_asc') {
-      // vaults with no collateral picture go last, not first
-      const aVal = a.collateralTier === 'UNALLOCATED' || a.collateralTier === 'UNKNOWN' ? 999 : (a.highRiskPercent ?? 0);
-      const bVal = b.collateralTier === 'UNALLOCATED' || b.collateralTier === 'UNKNOWN' ? 999 : (b.highRiskPercent ?? 0);
-      return aVal - bVal;
+    if (explorerFilters.sort === 'risk_desc' || explorerFilters.sort === 'risk_asc') {
+      // risk is the share outside ordinary collateral; vaults with no collateral picture go last in both directions
+      const noPicture = v => v.collateralTier === 'UNALLOCATED' || v.collateralTier === 'UNKNOWN';
+      if (noPicture(a) !== noPicture(b)) return noPicture(a) ? 1 : -1;
+      const diff = (a.ordinaryCollateralPercent ?? 0) - (b.ordinaryCollateralPercent ?? 0);
+      return explorerFilters.sort === 'risk_desc' ? diff : -diff;
     }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
@@ -1892,12 +1890,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
-  // 2. Collateral classes: share of capital in high-risk classes, and the top classes behind it
+  // 2. Collateral tags: share of capital behind ordinary collateral, with the elevated and unclassified shares beside it
   const mix = verdict.collateral || {};
-  const mixClasses = mix.classes || [];
+  const mixTags = mix.tags || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
-  // inverted so a fuller bar is better, like the other meters
-  const safePct = Math.round(Math.max(0, 100 - (mix.highPercent ?? 0)) * 100) / 100;
+  const safePct = mix.ordinaryPercent ?? 0;
 
   if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${safePct}%`;
   if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.round(safePct)}%`;
@@ -1905,10 +1902,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
     if (isUnallocated) {
       DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
     } else {
-      const top = mixClasses.slice(0, 3).map(c => `${c.label} ${c.percent}%`).join(', ');
-      DOM.riskMixDesc.textContent = top
-        ? `${top} of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`
-        : 'Share of capital outside high-risk collateral classes';
+      DOM.riskMixDesc.textContent = `elevated ${mix.elevatedPercent ?? 0}%, unclassified ${mix.unclassifiedPercent ?? 0}% of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`;
     }
   }
 
@@ -1953,14 +1947,14 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
     if (isUnallocated) {
-      DOM.riskEffectiveAssets.textContent = '0 collateral classes';
+      DOM.riskEffectiveAssets.textContent = '0 tags';
     } else {
-      DOM.riskEffectiveAssets.textContent = `${mixClasses.length} collateral class${mixClasses.length === 1 ? '' : 'es'}`;
+      DOM.riskEffectiveAssets.textContent = `${mixTags.length} tag${mixTags.length === 1 ? '' : 's'}`;
     }
   }
   if (DOM.riskCollateralList) {
     DOM.riskCollateralList.innerHTML = '';
-    const breakdown = mixClasses.map(c => ({ label: c.label, usd: c.usd, sharePercent: c.percent, weight: c.weight }));
+    const breakdown = mixTags.map(c => ({ label: c.tag, usd: c.usd, sharePercent: c.percent }));
     if (breakdown.length === 0) {
       DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
     } else {
@@ -1973,6 +1967,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
         `;
         DOM.riskCollateralList.appendChild(row);
       });
+      const note = document.createElement('span');
+      note.style.cssText = 'color:var(--text-muted); font-size:10px; margin-top:4px;';
+      note.textContent = 'A token counts under each of its tags, so shares can add up to more than 100%.';
+      DOM.riskCollateralList.appendChild(note);
     }
   }
 
@@ -2022,7 +2020,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong></td>
+        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(a.collateralTags?.length ? a.collateralTags.join(', ') : 'no tags')}</div></td>
         <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
         <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>

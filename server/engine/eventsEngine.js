@@ -1,4 +1,4 @@
-import { classifyCollateral, RED_HIGH_SHARE_PERCENT, YELLOW_MEDIUM_PLUS_SHARE_PERCENT } from './collateralEngine.js';
+import { tokenState, parseTagsJson } from './collateralEngine.js';
 import { isIdleReserveMarket } from './hhiEngine.js';
 import { getMaterialityThresholdUsd, isMarketClean, isUnpricedVault } from './mqiEngine.js';
 
@@ -704,9 +704,6 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
     : null;
 
   const collateralTier = verdict?.collateral?.tier || 'UNKNOWN';
-  const collateralLevel = collateralTier === 'UNKNOWN' ? null : (verdict?.collateral?.level || 'GREEN');
-  const highCollateralPercent = collateralTier === 'UNKNOWN' ? null : (verdict?.collateral?.highPercent ?? null);
-  const mediumPlusCollateralPercent = collateralTier === 'UNKNOWN' ? null : (verdict?.collateral?.mediumPlusPercent ?? null);
 
   const materialityUsd = getMaterialityThresholdUsd(totalAssetsUsd || 0);
   const badDebtMarkets = {};
@@ -744,18 +741,16 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
 
     if (supplyUsd >= materialityUsd && materialityUsd >= 0 && !isIdleReserveMarket(alloc)) {
       const cleanCheck = isMarketClean(alloc);
-      const collClass = classifyCollateral({
-        chainId: alloc.chain_id ?? vault?.chain_id ?? 1,
-        address: alloc.collateral_asset_address,
-        symbol: alloc.collateral_asset_symbol
-      });
-      if (!cleanCheck.isClean || collClass.effectiveWeight === 'high') {
+      const collateralTags = parseTagsJson(alloc.collateral_tags_json);
+      const collateralState = tokenState(collateralTags).state;
+      // unclassified collateral is not a flag: it only means Morpho gave no usable tags
+      if (!cleanCheck.isClean || collateralState === 'elevated') {
         flaggedMarkets[mKey] = {
           marketKey: mKey,
           label,
           collateralSymbol: alloc.collateral_asset_symbol || 'UNKNOWN',
-          collateralClass: collClass.class,
-          effectiveWeight: collClass.effectiveWeight,
+          collateralState,
+          collateralTags: collateralTags ?? [],
           reasons: cleanCheck.reasons,
           supplyUsd: Math.round(supplyUsd * 100) / 100
         };
@@ -775,9 +770,7 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
     is_listed: vault?.is_listed !== undefined ? Number(vault.is_listed) : 1,
     missed_syncs: Number(vault?.missed_syncs || 0),
     collateral_tier: collateralTier,
-    collateral_level: collateralLevel,
-    high_collateral_percent: highCollateralPercent,
-    medium_plus_collateral_percent: mediumPlusCollateralPercent,
+    collateral_model: extra.collateralModel ?? 'none',
     bad_debt_markets: badDebtMarkets,
     unverified_bad_debt_markets: unverifiedBadDebtMarkets,
     flagged_markets: flaggedMarkets,
@@ -790,24 +783,6 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
 }
 
 const VERDICT_RANK = { green: 0, yellow: 1, red: 2 };
-const COLLATERAL_LEVEL_RANK = { GREEN: 0, YELLOW: 1, RED: 2 };
-
-const resolveCollateralLevel = state => {
-  if (!state) return null;
-  if (state.collateral_tier === 'UNKNOWN') return null;
-  if (state.collateral_level) return String(state.collateral_level).toUpperCase();
-  const high = state.high_collateral_percent ?? state.highCollateralPercent;
-  const medPlus = state.medium_plus_collateral_percent ?? state.mediumPlusCollateralPercent;
-  if (typeof high === 'number' && Number.isFinite(high)) {
-    if (high >= RED_HIGH_SHARE_PERCENT) return 'RED';
-    if (typeof medPlus === 'number' && Number.isFinite(medPlus) && medPlus >= YELLOW_MEDIUM_PLUS_SHARE_PERCENT) return 'YELLOW';
-    return 'GREEN';
-  }
-  if (typeof medPlus === 'number' && Number.isFinite(medPlus)) {
-    return medPlus >= YELLOW_MEDIUM_PLUS_SHARE_PERCENT ? 'YELLOW' : 'GREEN';
-  }
-  return null;
-};
 
 /**
  * Diffs consecutive watch states for a vault and returns derived events.
@@ -822,6 +797,9 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   const chainId = Number(vaultContext.chainId ?? vaultContext.chain_id ?? 1);
   const syncHourBucket = Math.floor(nowSec / 3600);
   const events = [];
+  // A new collateral model changes verdicts and flags without anything happening to the vault, so those two stay quiet for one sync.
+  // shortcut: if the first tag fetch fails on one chain only, the model flips for the whole run and a later wave of flag events is possible, accepted
+  const sameModel = (prevState.collateral_model ?? 'classes') === nextState.collateral_model;
 
   const pushDerived = (kind, severity, title, details, transitionKey, stableBucket = false) => {
     events.push({
@@ -847,7 +825,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   // 1. Verdict transitions (ignore null/unknown)
   const prevVerdict = String(prevState.verdict_level ?? prevState.verdictLevel ?? '').toLowerCase();
   const nextVerdict = String(nextState.verdict_level ?? nextState.verdictLevel ?? '').toLowerCase();
-  if (prevVerdict in VERDICT_RANK && nextVerdict in VERDICT_RANK && prevVerdict !== nextVerdict) {
+  if (sameModel && prevVerdict in VERDICT_RANK && nextVerdict in VERDICT_RANK && prevVerdict !== nextVerdict) {
     if (VERDICT_RANK[nextVerdict] > VERDICT_RANK[prevVerdict]) {
       pushDerived(
         'verdict_worsened',
@@ -906,7 +884,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   // 4. Flagged collateral / market added with material exposure
   const prevFlagged = prevState.flagged_markets ?? prevState.flaggedMarkets ?? {};
   const nextFlagged = nextState.flagged_markets ?? nextState.flaggedMarkets ?? {};
-  for (const [mKey, info] of Object.entries(nextFlagged)) {
+  for (const [mKey, info] of Object.entries(sameModel ? nextFlagged : {})) {
     if (!prevFlagged[mKey]) {
       pushDerived(
         'flagged_collateral_added',
@@ -916,7 +894,8 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
           marketKey: mKey,
           marketLabel: info.label || mKey,
           collateralSymbol: info.collateralSymbol,
-          collateralClass: info.collateralClass,
+          collateralState: info.collateralState,
+          collateralTags: info.collateralTags,
           reasons: info.reasons || [],
           supplyUsd: info.supplyUsd
         },
@@ -981,29 +960,6 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
         true
       );
     }
-  }
-
-  // 8. Collateral class share crossed yellow (50% medium+) or red (25% high) thresholds
-  const prevCollLevel = resolveCollateralLevel(prevState);
-  const nextCollLevel = resolveCollateralLevel(nextState);
-  if (
-    prevCollLevel in COLLATERAL_LEVEL_RANK &&
-    nextCollLevel in COLLATERAL_LEVEL_RANK &&
-    prevCollLevel !== nextCollLevel
-  ) {
-    const worsened = COLLATERAL_LEVEL_RANK[nextCollLevel] > COLLATERAL_LEVEL_RANK[prevCollLevel];
-    pushDerived(
-      'collateral_class_share_crossed',
-      worsened ? 'warning' : 'info',
-      `Collateral risk mix crossed from ${prevCollLevel} to ${nextCollLevel}`,
-      {
-        previousLevel: prevCollLevel,
-        currentLevel: nextCollLevel,
-        highPercent: nextState.high_collateral_percent ?? nextState.highCollateralPercent ?? null,
-        mediumPlusPercent: nextState.medium_plus_collateral_percent ?? nextState.mediumPlusCollateralPercent ?? null
-      },
-      `${prevCollLevel}->${nextCollLevel}`
-    );
   }
 
   return events;

@@ -6,6 +6,7 @@ import {
   buildWatchState,
   diffDerivedState
 } from '../engine/eventsEngine.js';
+import { COLLATERAL_MODEL } from '../engine/collateralEngine.js';
 import { formatUnits } from './normalizers.js';
 
 const DEFAULT_RETENTION_DAYS = 180;
@@ -67,10 +68,14 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     : allVaults;
 
   const allocRows = db.prepare(`
-    SELECT va.*, m.*
+    SELECT va.*, m.*, t.tags_json AS collateral_tags_json
     FROM vault_allocations va
     JOIN markets m ON va.market_unique_key = m.unique_key
+    LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
   `).all();
+
+  // Without any fetched tags the collateral model is 'none', so a failed first fetch does not look like a model change later
+  const tagsReady = db.prepare('SELECT COUNT(*) AS c FROM token_tags WHERE tags_fetched_at IS NOT NULL').get().c > 0;
 
   const peerRowsByMarket = new Map();
   for (const a of allocRows) {
@@ -178,7 +183,8 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       fee: vault.fee,
       timelock: vaultContext.timelock,
       guardian: vaultContext.guardian,
-      lastAdminEventTs
+      lastAdminEventTs,
+      collateralModel: tagsReady ? COLLATERAL_MODEL : 'none'
     });
 
     const derivedEvents = diffDerivedState(prevState, nextState, vaultContext, nowSec);
