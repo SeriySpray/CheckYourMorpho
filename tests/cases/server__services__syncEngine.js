@@ -120,6 +120,12 @@ export default {
       assert.deepEqual(db.prepare('SELECT address, version FROM vaults ORDER BY address').all().map(x => [x.address, x.version]), [['0xaaa', 'v1'], ['0xbbb', 'v2']]);
       assert.equal(count(db, 'markets'), 2); assert.equal(count(db, 'vault_allocations'), 2);
     })],
+    ['збій збору даних про токени не ламає синк, токени застави потрапляють у token_classes', async mod => sandbox(async db => {
+      // у моку Pendle і запит тегів дають непридатну відповідь, тож refreshTokenClasses має впасти всередині
+      const r = await sync(mod, newApi([rawV1('0xaaa')]));
+      assert.equal(r.v1Count, 1);
+      assert.deepEqual(db.prepare('SELECT chain_id, address, derived_class FROM token_classes').all().map(x => ({ ...x })), [{ chain_id: 1, address: '0xweth', derived_class: 'UNKNOWN' }]);
+    })],
     ['спільний ринок двох vaults записується один раз', async mod => sandbox(async db => {
       const r = await sync(mod, newApi([rawV1('0xaaa')], [rawV2('0xbbb', '0xm1')]));
       assert.equal(r.marketsCount, 1); assert.equal(r.allocationsCount, 2); assert.equal(count(db, 'markets'), 1);

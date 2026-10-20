@@ -3,6 +3,7 @@ import { CONFIG } from '../config.js';
 import { findUnknownCollateral } from '../engine/collateralEngine.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
 import { syncVaultEvents } from './eventsService.js';
+import { refreshTokenClasses } from './tokenClasses.js';
 import {
   normalizeVault,
   normalizeVaultV2,
@@ -497,6 +498,14 @@ export async function syncAllVaults(options = {}) {
     }
 
     console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
+
+    // Platform data for the token classes; a failure here must never fail the sync
+    try {
+      const tc = await refreshTokenClasses(db);
+      console.log(`[TokenClasses] ${tc.tagsFetched} tag sets fetched, ${tc.pendleChains} Pendle chains, ${tc.derived} classes derived${tc.failed.length ? `, failed: ${tc.failed.join(', ')}` : ''}.`);
+    } catch (e) {
+      console.warn('[TokenClasses]', e.message);
+    }
 
     try {
       const evStats = syncVaultEvents(db, rawVaultsV1, rawVaultsV2, { chainIds: options.chainIds ?? null });
