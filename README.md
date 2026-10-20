@@ -9,8 +9,8 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 ## What it does
 
 - Lists every vault that Morpho marks as listed, on all chains the Morpho API returns, with search by name, symbol, curator or address and filters by network, asset and curator.
-- Sorts vaults by TVL, APY, liquidity, MQI or base asset share of collateral.
-- Opens an audit panel for a vault: its allocations by market, MQI, collateral tags, instant and crowded exit capacity, and a list of red flags.
+- Sorts vaults by TVL, APY, liquidity, MQI or low-risk share of collateral.
+- Opens an audit panel for a vault: its allocations by market, MQI, collateral tiers from AI research, instant and crowded exit capacity, and a list of red flags.
 - Lets you pin vaults in the browser (stored in `localStorage`).
 - Shows the vaults as a WebGL 2 particle sphere.
 
@@ -20,7 +20,8 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 2. The server syncs 5 seconds after start-up and then every 180 seconds. A sync writes vaults, markets and allocations in one SQLite transaction. Unlisted vaults are deleted, and a vault that is missing from 3 syncs in a row is deleted too. A V2 vault that holds a V1 vault through a MetaMorpho adapter is expanded into that V1 vault's markets pro rata.
 3. Everything is stored in `data/morpho.db` (SQLite in WAL mode). The metrics are not stored: they are computed on each request from the current rows.
 4. A small REST API serves the vault list and the per-vault audit, and keeps the computed results in memory until the next finished sync or a short timeout.
-5. The client in `client/` is plain HTML, CSS and JavaScript. It polls the API every 60 seconds.
+5. Collateral risk tiers do not come from the sync. An AI research agent runs on the owner's PC and posts one result per token to the server (see AI research runner below); the server validates and stores it.
+6. The client in `client/` is plain HTML, CSS and JavaScript. It polls the API every 60 seconds.
 
 ## Metrics
 
@@ -35,33 +36,23 @@ A failing market only lowers MQI when it is material: the allocation is at least
 
 Missing data does not lower the score. A market is compromised only for a known defect. A market whose bad debt or warnings the API did not return, and capital the sync could not expand (see Limitations), are unverified: they are left out of the MQI denominator and reported separately as `unverifiedPercent`, with the market shown as UNVERIFIED, until the data returns. MQI is `null` when nothing could be verified. A vault that holds assets but has no USD price also gets MQI `null` (unknown), not 100%; the price is taken from the vault's own markets when the API omits it.
 
-**Collateral tags.** A token is judged only by the tags Morpho assigns to it, not by its symbol and not by a list kept here. Each tag is placed in a group in one open table (below). The tags describe the type of a token, not how safe it is, and nothing here is a safety rating; there are no weights or thresholds, only shares of capital. Idle markets (no collateral asset, or LLTV 0) are not collateral and are shown separately. Shares are measured against the verified capital: capital behind adapters that could not be expanded is left out of the base and reported as `unverifiedPercent`.
+**Collateral (AI research).** Each collateral token gets a risk tier from 1 to 5 from an AI research agent that reads public sources (issuer documentation, audit reports, block explorers, DefiLlama, post-mortems) and cites them. The tier is a judgement of the model, not a measured value and not an official rating. The agent is told that missing information is never evidence of safety.
 
-| Tag | Group | Meaning |
-| --- | --- | --- |
-| `btc` | base | BTC or a BTC wrapper |
-| `eth` | base | ETH or an ETH wrapper |
-| `stablecoin` | base | Stablecoin |
-| `usd-pegged` | base | Pegged to USD |
-| `eur-pegged` | base | Pegged to EUR |
-| `EUR` | base | EUR base asset or peg |
-| `simple-permit` | neutral | Gasless signature approvals |
-| `permit` | neutral | Gasless signature approvals |
-| `erc4626` | neutral | Vault share |
-| `vault-v1` | neutral | Vault share |
-| `vault-v2` | neutral | Vault share |
-| `yield` | neutral | Token pays yield, the source is not named |
-| `lst` | neutral | Liquid staking token |
-| `lrt` | neutral | Liquid restaking token |
-| `rwa` | special | Off-chain assets or claims |
-| `stocks` | special | Tokenized shares |
-| `governance-token` | special | Price is not anchored to anything |
+| Tier | Meaning |
+| --- | --- |
+| 1 | Value depends only on long-running (over 2 years), multiply audited contracts or a base chain asset; no admin power to mint or freeze without a timelock; no unresolved incident; deep liquidity. |
+| 2 | One additional well-documented dependency with over 1 year of history, audits and no unresolved incident. |
+| 3 | Several stacked dependencies, or under 1 year of history, or gated or delayed redemption, or admin powers without a timelock. |
+| 4 | Value hard to verify or fragile: off-chain claims with limited transparency, a peg kept by market mechanisms only, thin liquidity, an unresolved past depeg or exploit, or a party that can freeze or mint without delay. |
+| 5 | Currently impaired: active depeg or exploit, redemption halted, issuer insolvency or enforcement action. |
 
-A token is **special** if it has at least one special tag (RWA, stocks, governance token). Otherwise it is **unclassified** when it has no tags, a tag that is not in the table (logged after each sync), or no base tag at all. Anything else is a **base** asset (BTC, ETH, stablecoins, pegs). The vault shows the share of capital in each of the three groups and a per-tag breakdown; a token counts under each of its tags, so the tag shares can add up to more than 100%. The verdict has no collateral flag: the shares are information only.
+The code checks the evidence, not the judgement. A result is accepted only if it follows `server/data/researchSchema.json`, every fact and the tier cite sources that exist, the address and chain are the ones asked for, an unknown backing or redemption leaves the tier at 4, 5 or empty, tier 1 and 2 are not given with low confidence, tier 5 comes with an unresolved incident, and at least one source of the tier was opened (HTTP 200) and names the token. Source URLs must be public https pages; search redirects are resolved to the real page. This lowers the chance of invented sources but does not remove it, and pages rendered by JavaScript can fail the check although the claim is right. Every received result, accepted or not, is kept in `token_research_history` (the last 20 per token).
 
-The `yield` tag is treated as neutral: it says the token pays yield but not where the yield comes from. A token whose only tag is `yield` (syrupUSDC and 20 others) cannot be placed in a group by tags alone, so it stays unclassified and never becomes base. Against the allocations at the time of writing (about $5.87B outside idle markets), `yield` as neutral gives base $3.57B, special $0.64B, unclassified $1.66B; `yield` as special would give base $3.01B, special $1.30B, unclassified $1.57B. About 26% of the capital has no tags at all.
+A tier that is two or more levels better than the current one, or better with lower confidence, is held back until the next run confirms it (within one level); a worse tier is accepted at once. A token without a record, with a record older than 60 days, or with no tier is **unrated** and counted as such, never as safe. Idle markets (no collateral asset, or LLTV 0) are not collateral and are shown separately. Shares are measured against the verified capital: capital behind adapters that could not be expanded is left out of the base and reported as `unverifiedPercent`.
 
-Morpho's tags are made by hand and are sometimes wrong, and the code does not patch them. Known cases: sUSDat is tagged `eth` but trades near $1; PT-trUSD and PT-strUSD carry `eth`; USDe has `rwa` on Ethereum but no tags on Base and chain 4663; EUTBL is tagged `eur-pegged` and `yield` only; GOOGLc, TSLAc, MSFTc and AMZNc have `rwa` without `stocks`; LsETH, uniBTC, hgETH, tETH, ETH+ and OETH lack `lst` or `lrt`. Which tag is base, neutral or special is the author's choice, not an official classification or rating.
+The vault shows the share of capital in tier 1 and 2 (low risk), tier 3 and 4, tier 5 (impaired) and unrated, a per-token breakdown, and next to each token in the market table its tier, category, model date and source links. One flag follows from it: MEDIUM "AI research: impaired collateral" when tier 5 collateral with a confidence above low reaches the materiality amount (1% of TVL or $250K, whichever is smaller). A change of a material token from one tier to another creates a `collateral_tier_changed` event (warning when the new tier is 4 or 5); the first rating of a token creates none. The interface states: "Ratings are judgements by an AI research agent (model, date) from public sources. They may be wrong or outdated and are not financial advice or an official rating."
+
+The Morpho asset tags (`btc`, `eth`, `lst`, `rwa` and so on) are still synced into `token_tags`. They appear as small labels next to a token and as a hint in the research prompt (which says they may be wrong); they have no effect on a tier or a flag.
 
 The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audit response for reference, but no longer drives a flag or the summary: it counted each token separately and marked a vault holding only cbBTC as extremely concentrated.
 
@@ -78,6 +69,7 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 | Critical Crowded Exit Deficit / Elevated Crowded Exit Contagion | CRITICAL / HIGH, depending on how far crowded exit falls below instant exit and how much TVL sits in crowded markets |
 | Unresolved Exposure (capital whose underlying markets could not be resolved) | HIGH |
 | Unverified Markets (bad debt or warnings data missing; left out of MQI) | MEDIUM |
+| AI research: impaired collateral (tier 5, confidence above low, material share) | MEDIUM |
 | Unpriced Vault (assets without a USD price) | HIGH |
 | Unknown Exit Liquidity (Morpho reported no liquidity figure) | MEDIUM |
 | Negative Net APY | CRITICAL below -5%, otherwise HIGH |
@@ -87,8 +79,10 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/status` | Row counts, time of the last full sync, whether a sync is running, last sync result, `stale` (no successful sync for over three sync intervals) and `lastSuccessAt`. |
-| GET | `/api/vaults` | Vault list with MQI, collateral tag shares and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
-| GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations. |
+| GET | `/api/vaults` | Vault list with MQI, collateral tier shares (`lowRiskCollateralPercent`, `highRiskCollateralPercent`, `impairedCollateralPercent`, `unratedCollateralPercent`) and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
+| GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations; each allocation carries `collateralResearch` (tier, category, confidence, model, date, rationale, https sources, `stale`) or `null`. |
+| GET | `/api/research/queue` | Tokens that need research, most urgent first (`limit`, default 40, max 200). Needs `Authorization: Bearer <RESEARCH_TOKEN>`; 403 if `RESEARCH_TOKEN` is not set, 401 for a wrong token. |
+| POST | `/api/research` | Imports the result for one token: `{runId, model, promptVersion, chainId, address, raw, checks}`. Same token as above. Answers 200 with `{outcome, errors}` (`accepted`, `rejected`, `kept_previous` or `pending_confirmation`), 400 for a malformed body and 413 for a body over 256 KB. |
 | POST | `/api/sync` | Starts a sync. Needs `Authorization: Bearer <SYNC_TOKEN>`. Returns 202, or waits and returns 200 with `?await=1`. Returns 403 if `SYNC_TOKEN` is not set, 401 for a wrong token, 409 while a sync is running and 413 for a body over 1 KB. |
 
 GET routes also answer HEAD. Unknown `/api/` paths return 404; every other path is served from `client/`. Requests to `/api/` are limited per client IP (300 per minute, set in `server/config.js`) and get 429 above that.
@@ -112,8 +106,40 @@ Environment variables:
 | `PORT` | `3000` | HTTP port. |
 | `HOST` | `localhost` | Bind address. |
 | `SYNC_TOKEN` | not set | Enables `POST /api/sync`. When it is not set, manual sync is disabled. |
+| `RESEARCH_TOKEN` | not set | Enables `GET /api/research/queue` and `POST /api/research`. When it is not set, both answer 403. |
 
 The sync interval, database path and Morpho API URL are fixed in `server/config.js`.
+
+## AI research runner
+
+The research runs on the owner's PC, not on the server (the Oracle VM has under 1 GB of RAM). The runner takes the work queue from the server, researches one token at a time with the `agy` CLI (Antigravity, model `gemini-3.8-flash-high`) and posts each result back. The server only validates and stores it.
+
+1. Set `RESEARCH_TOKEN` in the server environment. Without it both research endpoints answer 403.
+2. Put the same token in `%USERPROFILE%\.checkyourmorpho\research_token` (or point `RESEARCH_TOKEN_FILE` at another file). The runner never writes the token to the log and never passes it to `agy`.
+3. Install `agy` (its folder `%LOCALAPPDATA%\agy\bin` is added to `PATH` by the runner) and sign in once.
+4. Run it:
+
+```bash
+node scripts/research.mjs --api https://checkyourmorpho.duckdns.org --limit 40
+```
+
+Options: `--tokens 1:0x...,8453:0x...` researches the listed tokens instead of the queue, `--dry-run` only prints the queue, `--max-minutes 240` stops starting new tokens after that time, `--out dir` sets where raw agent output is saved (default `logs/research/<run id>/`), `--model` overrides the model. `research.bat` runs the same command and appends to `logs\research.log`.
+
+Every call is `agy -p <prompt> --output-format json --json-schema server/data/researchSchema.json --model <model> --dangerously-skip-permissions --sandbox --print-timeout 600s`, started in an empty work folder (`%LOCALAPPDATA%\cym-research\work`) with a minimal environment (no secrets). The sandbox is required because the agent sometimes tries to run commands. The prompt allows only web search and page reading, at most about 10 tool calls, and tells the agent to treat page content as data. A call is stopped after 12 minutes. A failed or invalid attempt is repeated once; the last result is posted even when invalid, so the server records it and puts a token that keeps failing on hold for 21 days. The run stops at once on a quota, credits or expired-login message. There is a 5 second pause between tokens.
+
+Before it starts the runner refuses to run with under 1.2 GB of free memory (exit code 2) and holds a lock file so two runs cannot overlap (exit code 3). With MCP servers enabled the agent opened a browser and used a lot of memory, so the runner disables `playwright`, `context7` and `pencil` through `agy mcp disable` when `agy mcp list` shows them as enabled, and logs it. This changes your `agy` settings; enable them again if you need them elsewhere.
+
+Every token in the `markets` table is queued, also those without vault capital: tokens with no record first, then by vault capital, then the oldest. A record is queued again after 7 days. One token takes 2 to 4 minutes and 100 to 250 thousand model tokens, so the first full pass takes several days at 40 tokens a day.
+
+Weekly run with Windows Task Scheduler (PowerShell; adjust the folder):
+
+```powershell
+$dir = "C:\path\to\CheckYourMorpho"
+$action = New-ScheduledTaskAction -Execute "$dir\research.bat" -WorkingDirectory $dir
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 3am
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5)
+Register-ScheduledTask -TaskName "CheckYourMorpho research" -Action $action -Trigger $trigger -Settings $settings
+```
 
 ## Tests
 
@@ -134,4 +160,5 @@ The public instance runs on an Oracle Cloud VM as a systemd service behind nginx
 - The analysis is per vault and from the lender's side. There are no user positions, health factors or borrower views.
 - Crowded exit only knows about listed vaults in the database. Direct lenders and unlisted vaults in the same market are not counted as competitors.
 - V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. The same holds for V1 positions the API returns without a market, a V1 vault whose allocation is missing, and MorphoMarketV1 assets that the market caps cover by less than 99.5% (a smaller gap is taken as accrued interest and counted as cash; the live API shows no gap at all). Such capital is not counted as cash: it is flagged as Unresolved Exposure, left out of the MQI score (shown as unverified once material), left out of the collateral shares and of the exit figure (both are measured on the verified capital).
+- Collateral tiers are model judgements from public sources. They can be wrong, outdated (up to 7 days between runs, 60 days before a record counts as unrated) or missing, and a much better tier is applied only after a second run confirms it. A token the agent cannot identify stays unrated.
 - Only the current state is kept. There is no history, no charts over time and no alerts.
