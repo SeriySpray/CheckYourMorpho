@@ -17,66 +17,6 @@ export default {
       assert.equal(c.UNKNOWN.weight, 'high'); assert.equal(c.BTC.weight, 'low'); assert.equal(c.CREDIT_FUND.weight, 'high');
     }],
   ],
-  COLLATERAL_CLASSIFIER_VERSION: [['версія класифікатора 2', ({ COLLATERAL_CLASSIFIER_VERSION: v }) => assert.equal(v, 2)]],
-  TOKEN_CLASSES: [
-    ['вісім класів, лише BTC, ETH і STABLE мають низьку вагу, PT середню', ({ TOKEN_CLASSES: c }) => {
-      assert.deepEqual(Object.keys(c).sort(), ['BTC', 'EQUITY_RWA', 'ETH', 'OTHER', 'PT', 'STABLE', 'UNKNOWN', 'YIELD_STABLE']);
-      assert.deepEqual(Object.keys(c).filter(k => c[k].weight === 'low').sort(), ['BTC', 'ETH', 'STABLE']);
-      assert.equal(c.PT.weight, 'medium'); assert.equal(c.UNKNOWN.weight, 'high');
-    }],
-  ],
-  deriveTokenClass: [
-    ['немає тегів або лише permit -> UNKNOWN', ({ deriveTokenClass: d }) => {
-      for (const tags of [null, [], ['simple-permit'], ['permit', 'simple-permit']]) assert.deepEqual(d({ tags }), { class: 'UNKNOWN', source: 'none' });
-      assert.equal(d().class, 'UNKNOWN');
-    }],
-    ['stocks -> EQUITY_RWA', ({ deriveTokenClass: d }) => assert.equal(d({ tags: ['stocks', 'rwa'] }).class, 'EQUITY_RWA')],
-    ['stablecoin -> STABLE, теги EUR теж', ({ deriveTokenClass: d }) => {
-      assert.deepEqual(d({ tags: ['simple-permit', 'stablecoin', 'usd-pegged'] }), { class: 'STABLE', source: 'morpho-tags' });
-      assert.equal(d({ tags: ['eur-pegged'] }).class, 'STABLE'); assert.equal(d({ tags: ['EUR'] }).class, 'STABLE');
-    }],
-    ['stablecoin з yield або rwa -> YIELD_STABLE', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['stablecoin', 'yield'] }).class, 'YIELD_STABLE'); assert.equal(d({ tags: ['stablecoin', 'rwa'] }).class, 'YIELD_STABLE');
-      assert.equal(d({ tags: ['usd-pegged', 'erc4626'] }).class, 'YIELD_STABLE');
-    }],
-    ['usd-pegged з eth або btc -> OTHER', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['usd-pegged', 'eth'] }).class, 'OTHER'); assert.equal(d({ tags: ['stablecoin', 'btc'] }).class, 'OTHER');
-    }],
-    ['eth + lst + yield з ratio 1.2 -> ETH, btc з ratio 1 -> BTC', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['eth', 'lst', 'yield'], priceRatio: 1.2 }).class, 'ETH'); assert.equal(d({ tags: ['btc'], priceRatio: 1 }).class, 'BTC');
-    }],
-    ['eth з ratio 0.0004 або 3 -> OTHER, межі 0.9 і 1.6 дозволені', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['eth'], priceRatio: 0.0004 }).class, 'OTHER'); assert.equal(d({ tags: ['eth'], priceRatio: 3 }).class, 'OTHER');
-      assert.equal(d({ tags: ['eth'], priceRatio: 0.9 }).class, 'ETH'); assert.equal(d({ tags: ['eth'], priceRatio: 1.6 }).class, 'ETH');
-    }],
-    ['eth без ratio -> null (вирішує викликач)', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['eth'] }), null); assert.equal(d({ tags: ['btc', 'lst'], priceRatio: null }), null);
-    }],
-    ['btc + erc4626, eth + governance-token -> OTHER навіть без ratio', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['btc', 'erc4626'] }).class, 'OTHER'); assert.equal(d({ tags: ['eth', 'governance-token'], priceRatio: 1 }).class, 'OTHER');
-      assert.equal(d({ tags: ['eth', 'vault-v2'], priceRatio: 1 }).class, 'OTHER');
-    }],
-    ['eth + btc -> OTHER', ({ deriveTokenClass: d }) => assert.equal(d({ tags: ['eth', 'btc'], priceRatio: 1 }).class, 'OTHER')],
-    ['інші теги (yield + rwa) -> OTHER', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ tags: ['yield', 'rwa'] }).class, 'OTHER'); assert.equal(d({ tags: ['governance-token'] }).class, 'OTHER');
-    }],
-    ['PT з базою ETH -> PT, база і матуритет з аргументів', ({ deriveTokenClass: d }) => {
-      assert.deepEqual(d({ pendle: { type: 'PT', expiry: 1800000000 }, underlyingClass: 'ETH' }),
-        { class: 'PT', underlyingClass: 'ETH', maturity: 1800000000, source: 'pendle' });
-    }],
-    ['expiry у вигляді ISO-рядка переводиться в секунди', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ pendle: { type: 'PT', expiry: '2027-01-01T00:00:00.000Z' }, underlyingClass: 'BTC' }).maturity, 1798761600);
-    }],
-    ['PT без бази -> underlyingClass UNKNOWN, без expiry maturity null', ({ deriveTokenClass: d }) => {
-      const r = d({ pendle: { type: 'PT' } }); assert.equal(r.underlyingClass, 'UNKNOWN'); assert.equal(r.maturity, null);
-    }],
-    ['YT, SY і LP -> OTHER', ({ deriveTokenClass: d }) => {
-      for (const type of ['YT', 'SY', 'LP']) assert.deepEqual(d({ pendle: { type }, tags: ['stablecoin'] }), { class: 'OTHER', source: 'pendle' });
-    }],
-    ['PT з тегом eth лишається PT, Pendle має пріоритет над тегами', ({ deriveTokenClass: d }) => {
-      assert.equal(d({ pendle: { type: 'PT', expiry: 1 }, tags: ['eth', 'lst'], priceRatio: 1, underlyingClass: 'ETH' }).class, 'PT');
-    }],
-  ],
   RED_HIGH_SHARE_PERCENT: [['поріг червоного 25%', ({ RED_HIGH_SHARE_PERCENT: v }) => assert.equal(v, 25)]],
   YELLOW_MEDIUM_PLUS_SHARE_PERCENT: [['поріг жовтого 50%', ({ YELLOW_MEDIUM_PLUS_SHARE_PERCENT: v }) => assert.equal(v, 50)]],
   parseMaturity: [

@@ -36,6 +36,9 @@ export function getDatabase() {
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN warnings_count INTEGER DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN warnings_json TEXT;"); } catch {}
 
+  // token_classes (Pendle/class model) was replaced by token_tags
+  dbInstance.exec('DROP TABLE IF EXISTS token_classes;');
+
   // Apply schema and pragmas
   dbInstance.exec(SCHEMA_SQL);
 

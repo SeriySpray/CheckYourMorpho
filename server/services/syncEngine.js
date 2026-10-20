@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { findUnknownCollateral } from '../engine/collateralEngine.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
 import { syncVaultEvents } from './eventsService.js';
-import { refreshTokenClasses } from './tokenClasses.js';
+import { refreshTokenTags } from './tokenTags.js';
 import {
   normalizeVault,
   normalizeVaultV2,
@@ -499,12 +499,12 @@ export async function syncAllVaults(options = {}) {
 
     console.log(`[SyncEngine] Committed: ${v1Count} V1 vaults, ${v2Count} V2 vaults, ${allocationsCount} allocations total.`);
 
-    // Platform data for the token classes; a failure here must never fail the sync
+    // Morpho asset tags of collateral tokens; a failure here must never fail the sync
     try {
-      const tc = await refreshTokenClasses(db);
-      console.log(`[TokenClasses] ${tc.tagsFetched} tag sets fetched, ${tc.pendleChains} Pendle chains, ${tc.derived} classes derived${tc.failed.length ? `, failed: ${tc.failed.join(', ')}` : ''}.`);
+      const tt = await refreshTokenTags(db);
+      console.log(`[TokenTags] ${tt.tagsFetched} tag sets fetched${tt.failed.length ? `, failed: ${tt.failed.join(', ')}` : ''}.`);
     } catch (e) {
-      console.warn('[TokenClasses]', e.message);
+      console.warn('[TokenTags]', e.message);
     }
 
     try {

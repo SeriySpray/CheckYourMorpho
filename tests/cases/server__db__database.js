@@ -57,6 +57,13 @@ export default {
       const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-db-')), 'a', 'b', 'new.db');
       await withDbAt(file, async ({ getDatabase }) => { getDatabase(); assert.ok(fs.existsSync(file)); });
     }],
+    ['видаляє застарілу token_classes і створює token_tags', async () => {
+      const f = tmpDb('legacy.db'); const d = new DatabaseSync(f); d.exec('CREATE TABLE token_classes (chain_id INTEGER, address TEXT)'); d.close();
+      await withDbAt(f, async ({ getDatabase }) => {
+        const names = getDatabase().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
+        assert.ok(!names.includes('token_classes')); assert.ok(names.includes('token_tags'));
+      });
+    }],
     ['мігрує стару схему: додає всі нові колонки', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {
       const db = getDatabase();
       for (const c of ['version', 'liquidity_usd', 'is_listed', 'missed_syncs', 'unresolved_exposure_usd']) assert.ok(cols(db, 'vaults').includes(c), `vaults.${c}`);

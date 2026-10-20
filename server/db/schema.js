@@ -167,22 +167,13 @@ CREATE TABLE IF NOT EXISTS vault_watch_state (
   updated_at INTEGER NOT NULL
 );
 
--- Token classes derived from Morpho asset tags and Pendle data (NULL json = never fetched, 'null' = source does not know the token)
-CREATE TABLE IF NOT EXISTS token_classes (
+-- Morpho asset tags per collateral token (NULL = never fetched, 'null' = Morpho does not know the token)
+CREATE TABLE IF NOT EXISTS token_tags (
   chain_id INTEGER NOT NULL,
   address TEXT NOT NULL,
   tags_json TEXT,
   price_usd REAL,
   tags_fetched_at INTEGER,
-  pendle_json TEXT,
-  pendle_fetched_at INTEGER,
-  coingecko_json TEXT,
-  coingecko_fetched_at INTEGER,
-  derived_class TEXT NOT NULL DEFAULT 'UNKNOWN',
-  underlying_class TEXT,
-  maturity INTEGER,
-  source TEXT NOT NULL DEFAULT 'none',
-  derived_at INTEGER,
   PRIMARY KEY (chain_id, address)
 );
 `;

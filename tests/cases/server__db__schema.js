@@ -27,7 +27,7 @@ export default {
       const db = fresh(SCHEMA_SQL);
       const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name).sort();
       db.close();
-      assert.deepEqual(names, ['daily_apys', 'markets', 'sync_state', 'token_classes', 'vault_allocations', 'vault_events', 'vault_snapshots', 'vault_watch_state', 'vaults']);
+      assert.deepEqual(names, ['daily_apys', 'markets', 'sync_state', 'token_tags', 'vault_allocations', 'vault_events', 'vault_snapshots', 'vault_watch_state', 'vaults']);
     }],
     ['створює всі очікувані індекси', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);

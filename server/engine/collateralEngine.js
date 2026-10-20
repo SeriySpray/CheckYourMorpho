@@ -91,60 +91,6 @@ export function classifyCollateral(token, now = new Date()) {
   return { ...describe('UNKNOWN'), source: 'none' };
 }
 
-// --- Platform-data classifier (Morpho asset tags + Pendle). Not wired into classifyCollateral yet. ---
-export const COLLATERAL_CLASSIFIER_VERSION = 2;
-export const TOKEN_CLASSES = {
-  BTC: { label: 'BTC and BTC wrappers', weight: 'low' },
-  ETH: { label: 'ETH and ETH staking tokens', weight: 'low' },
-  STABLE: { label: 'Stablecoins without yield', weight: 'low' },
-  YIELD_STABLE: { label: 'Yield-bearing, synthetic or credit dollars', weight: 'high' },
-  PT: { label: 'Pendle principal tokens', weight: 'medium' },
-  EQUITY_RWA: { label: 'Tokenized stocks', weight: 'high' },
-  OTHER: { label: 'Other assets (alts, RWA, vault shares, Pendle YT/LP/SY)', weight: 'high' },
-  UNKNOWN: { label: 'No platform data', weight: 'high' }
-};
-
-const PEG_TAGS = ['stablecoin', 'usd-pegged', 'eur-pegged', 'EUR'];
-const YIELDISH_TAGS = ['yield', 'rwa', 'erc4626', 'vault-v1', 'vault-v2', 'lst', 'lrt'];
-const WRAPPER_TAGS = ['rwa', 'erc4626', 'vault-v1', 'vault-v2', 'governance-token'];
-// shortcut: fixed price-ratio window against the family median, widen it if a genuine ETH/BTC wrapper falls outside
-const RATIO_MIN = 0.9;
-const RATIO_MAX = 1.6;
-
-/**
- * Risk class of one token from platform data; the first rule that fires wins. Low weight needs an allowed tag
- * and a consistent price, ambiguity is high, and missing data never lowers risk.
- * @param {{tags?:string[]|null, pendle?:{type:string, expiry?:number|string|null}|null, priceRatio?:number|null, underlyingClass?:string|null}} input
- *   priceRatio: token price over the median price of its family (see familyMedians in tokenClasses.js)
- * @returns {{class:string, underlyingClass?:string, maturity?:number|null, source:string}|null} null when the price ratio is needed but unknown
- */
-export function deriveTokenClass({ tags = null, pendle = null, priceRatio = null, underlyingClass = null } = {}) {
-  if (pendle?.type === 'PT') {
-    const e = pendle.expiry;
-    const maturity = typeof e === 'string' ? Date.parse(e) / 1000 : e;
-    return { class: 'PT', underlyingClass: underlyingClass || 'UNKNOWN', maturity: Number.isFinite(maturity) ? maturity : null, source: 'pendle' };
-  }
-  if (pendle) return { class: 'OTHER', source: 'pendle' };
-
-  const useful = (tags || []).filter(t => t !== 'simple-permit' && t !== 'permit');
-  if (!useful.length) return { class: 'UNKNOWN', source: 'none' };
-  const has = t => useful.includes(t);
-  const hasAny = list => list.some(has);
-  const out = cls => ({ class: cls, source: 'morpho-tags' });
-
-  if (has('stocks')) return out('EQUITY_RWA');
-  const family = has('eth') || has('btc');
-  if (hasAny(PEG_TAGS)) return out(family ? 'OTHER' : hasAny(YIELDISH_TAGS) ? 'YIELD_STABLE' : 'STABLE');
-  if (has('eth') && has('btc')) return out('OTHER');
-  if (family) {
-    if (hasAny(WRAPPER_TAGS)) return out('OTHER');
-    if (priceRatio == null) return null;
-    if (priceRatio < RATIO_MIN || priceRatio > RATIO_MAX) return out('OTHER');
-    return out(has('eth') ? 'ETH' : 'BTC');
-  }
-  return out('OTHER');
-}
-
 /**
  * Class mix of a vault.
  * @param {object} vault Vault row (call with the vault from withMaterialUnresolved so dust is not counted as unverified)
