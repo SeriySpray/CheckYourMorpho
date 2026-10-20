@@ -176,4 +176,42 @@ CREATE TABLE IF NOT EXISTS token_tags (
   tags_fetched_at INTEGER,
   PRIMARY KEY (chain_id, address)
 );
+
+-- AI research result per collateral token (one current row) and the audit trail of every received result
+CREATE TABLE IF NOT EXISTS token_research (
+  chain_id INTEGER NOT NULL,
+  address TEXT NOT NULL,
+  symbol TEXT,
+  category TEXT NOT NULL,
+  risk_tier INTEGER CHECK (risk_tier BETWEEN 1 AND 5),
+  confidence TEXT NOT NULL,
+  tier_rationale TEXT,
+  facts_json TEXT NOT NULL,
+  sources_json TEXT NOT NULL,
+  checks_json TEXT NOT NULL,
+  as_of TEXT NOT NULL,
+  researched_at INTEGER NOT NULL,
+  run_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  status TEXT NOT NULL,              -- 'rated' | 'unrated'
+  pending_tier INTEGER,              -- a much better tier that waits for confirmation by the next run
+  raw_json TEXT NOT NULL,
+  PRIMARY KEY (chain_id, address)
+);
+
+CREATE TABLE IF NOT EXISTS token_research_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chain_id INTEGER NOT NULL,
+  address TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  received_at INTEGER NOT NULL,
+  outcome TEXT NOT NULL,             -- accepted | rejected | kept_previous | pending_confirmation
+  risk_tier INTEGER,
+  errors_json TEXT,
+  raw_json TEXT,
+  checks_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_history_token ON token_research_history(chain_id, address, received_at DESC);
 `;
