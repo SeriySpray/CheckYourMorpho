@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { vault, alloc, idle } from '../fixtures.js';
 
 const tok = (address, symbol, usd, over = {}) => alloc({
@@ -33,6 +34,10 @@ export default {
     }],
   ],
   tagRiskMarkdown: [
+    ['README contains the generated table', ({ tagRiskMarkdown: f }) => {
+      const readme = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+      assert.ok(readme.includes(f()));
+    }],
     ['one row per tag plus a two-line header', ({ tagRiskMarkdown: f, TAG_RISK: t }) => {
       const lines = f().split('\n');
       assert.equal(lines.length, Object.keys(t).length + 2); assert.ok(lines.some(l => l.startsWith('| `rwa` | elevated')));
