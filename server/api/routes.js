@@ -13,6 +13,7 @@ import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
+import { researchQueue, applyResearch } from '../services/tokenResearch.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -383,6 +384,83 @@ export async function handlePostSync(req, res, url) {
       message: 'Vault synchronization started in background',
       fetchHistory
     });
+  }
+}
+
+/**
+ * Reads and parses a JSON request body, counting bytes as they arrive. Rejects with an error that carries `status`:
+ * 413 above maxBytes (the caller closes the connection), 400 for malformed JSON.
+ */
+export function readJsonBody(req, maxBytes = 262144) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  return new Promise((resolve, reject) => {
+    if (parseInt(req.headers['content-length'] || '0', 10) > maxBytes) { reject(fail(413, 'Payload Too Large')); return; }
+    const chunks = [];
+    let size = 0, settled = false;
+    const settle = (fn, v) => { if (!settled) { settled = true; fn(v); } };
+    req.on('data', chunk => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > maxBytes) settle(reject, fail(413, 'Payload Too Large'));
+      else chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try { settle(resolve, JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { settle(reject, fail(400, 'Invalid JSON')); }
+    });
+    req.on('error', () => settle(reject, fail(400, 'Request body could not be read')));
+  });
+}
+
+/** Research import is an operator action of the PC runner: off unless RESEARCH_TOKEN is set, always token-protected. */
+function authorizeResearch(req, res) {
+  const expected = process.env.RESEARCH_TOKEN || '';
+  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (expected && safeEqual(given, expected)) return true;
+  sendJson(res, expected ? 401 : 403, { error: expected ? 'Unauthorized' : 'Research import is disabled' });
+  return false;
+}
+
+/** GET /api/research/queue?limit=: tokens that need AI research, most urgent first. */
+export function handleGetResearchQueue(req, res, url) {
+  if (!authorizeResearch(req, res)) return;
+  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '40', 10) || 40));
+  try {
+    sendJson(res, 200, { tokens: researchQueue(getDatabase(), Math.floor(Date.now() / 1000), { limit }) });
+  } catch (err) {
+    console.error('[API] Research queue failed:', err);
+    sendJson(res, 500, { error: 'Failed to read the research queue' });
+  }
+}
+
+const str = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max;
+
+/** POST /api/research: one token result {runId, model, promptVersion, chainId, address, raw, checks}. */
+export async function handlePostResearch(req, res) {
+  if (!authorizeResearch(req, res)) return;
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    sendJson(res, err.status || 400, { error: err.message });
+    if (err.status === 413) req.destroy();
+    return;
+  }
+  const valid = body && typeof body === 'object' && str(body.runId, 100) && str(body.model, 100) && str(body.promptVersion, 100)
+    && Number.isInteger(body.chainId) && typeof body.address === 'string' && ADDRESS_RE.test(body.address)
+    && body.raw && typeof body.raw === 'object' && Array.isArray(body.checks) && body.checks.length <= 50;
+  if (!valid) {
+    sendJson(res, 400, { error: 'Expected {runId, model, promptVersion, chainId, address, raw, checks}' });
+    return;
+  }
+  try {
+    const result = applyResearch(getDatabase(), body, Math.floor(Date.now() / 1000));
+    // Rated tiers feed the verdict: drop both caches so the next request sees the new record
+    vaultAuditCache.clear();
+    vaultCatalog = null;
+    sendJson(res, 200, result);
+  } catch (err) {
+    console.error('[API] Research import failed:', err);
+    sendJson(res, 500, { error: 'Failed to store the research result' });
   }
 }
 
@@ -1152,6 +1230,19 @@ export function handleRequest(req, res) {
   if (pathname === '/api/sync' && req.method === 'POST') {
     handlePostSync(req, res, parsedUrl).catch(err => {
       console.error('[API] Sync request handler failed:', err);
+      if (!res.headersSent) sendJson(res, 500, { error: 'Internal server error' });
+    });
+    return;
+  }
+
+  if (pathname === '/api/research/queue' && req.method === 'GET') {
+    handleGetResearchQueue(req, res, parsedUrl);
+    return;
+  }
+
+  if (pathname === '/api/research' && req.method === 'POST') {
+    handlePostResearch(req, res).catch(err => {
+      console.error('[API] Research request handler failed:', err);
       if (!res.headersSent) sendJson(res, 500, { error: 'Internal server error' });
     });
     return;

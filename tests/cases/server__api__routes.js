@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from '../../server/config.js';
 import { mockReq, mockRes, withFetch, jsonResponse } from '../fixtures.js';
@@ -144,6 +145,21 @@ const rawHttp = (port, method, p, headers = {}) => new Promise((resolve, reject)
   });
   req.on('error', reject); req.end();
 });
+
+// --- AI research import ---
+const WETH_RAW = JSON.parse(JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'data', 'agy_weth.json'), 'utf8')).response);
+const researchBody = (over = {}) => ({
+  runId: 'run-1', model: 'gemini-test', promptVersion: 'research-prompt-2', chainId: 1, address: WETH_RAW.address, raw: WETH_RAW,
+  checks: WETH_RAW.sources.map(x => ({ id: x.id, url: x.url, finalUrl: x.url, status: 200, mentions: true })), ...over
+});
+// Request with a streamed body; destroyCalls counts destroy() calls
+const bodyReq = (method, url, chunks, headers = {}) => {
+  const req = Readable.from(chunks, { objectMode: false, autoDestroy: false });
+  Object.assign(req, { method, url, headers, destroyCalls: 0 }); req.destroy = () => { req.destroyCalls++; };
+  return req;
+};
+const jsonChunks = (obj, size = 1000) => { const b = Buffer.from(JSON.stringify(obj)); const out = []; for (let i = 0; i < b.length; i += size) out.push(b.subarray(i, i + size)); return out; };
+const auth = { authorization: 'Bearer rsecret' };
 
 // Запит до /api/sync з сокетом (await=1 вимикає таймаут сокета) і лічильником destroy().
 const syncReq = (headers = {}) => {
@@ -643,6 +659,93 @@ export default {
           assert.equal(res.statusCode, 500); assert.deepEqual(JSON.parse(res.body), { status: 'sync_failed', error: 'Synchronization failed' });
         });
       } finally { CONFIG.api.maxRetries = saved; }
+    }))],
+  ],
+  readJsonBody: [
+    ['JSON, розбитий на кілька чанків (і багатобайтовий символ посередині), розбирається', async ({ readJsonBody: f }) => {
+      const bytes = Buffer.from(JSON.stringify({ a: 'щ', n: [1, 2] }));
+      const req = bodyReq('POST', '/x', [bytes.subarray(0, 9), bytes.subarray(9)]);
+      assert.deepEqual(await f(req), { a: 'щ', n: [1, 2] });
+    }],
+    ['тіло більше за ліміт без content-length -> помилка 413', async ({ readJsonBody: f }) => {
+      await assert.rejects(() => f(bodyReq('POST', '/x', [Buffer.alloc(6), Buffer.alloc(6)]), 10), e => e.status === 413);
+      assert.deepEqual(await f(bodyReq('POST', '/x', [Buffer.from('[1,2,3,4]')]), 9), [1, 2, 3, 4]);
+    }],
+    ['content-length понад ліміт -> 413 ще до читання', async ({ readJsonBody: f }) => {
+      await assert.rejects(() => f(bodyReq('POST', '/x', [Buffer.from('{}')], { 'content-length': '300000' })), e => e.status === 413);
+    }],
+    ['некоректний або порожній JSON -> 400', async ({ readJsonBody: f }) => {
+      await assert.rejects(() => f(bodyReq('POST', '/x', [Buffer.from('{"a":')])), e => e.status === 400);
+      await assert.rejects(() => f(bodyReq('POST', '/x', [])), e => e.status === 400);
+    }],
+    ['помилка потоку -> 400', async ({ readJsonBody: f }) => {
+      const req = new Readable({ read() { this.destroy(new Error('boom')); } }); req.headers = {};
+      await assert.rejects(() => f(req), e => e.status === 400);
+    }],
+  ],
+  handleGetResearchQueue: [
+    ['без RESEARCH_TOKEN -> 403, з неправильним або без токена -> 401', async ({ handleGetResearchQueue: f }) => {
+      await withEnv('RESEARCH_TOKEN', undefined, async () => { const r = mockRes(); f(mockReq('GET', '/api/research/queue', auth), r, URL_('/api/research/queue')); assert.equal(r.statusCode, 403); });
+      await withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+        for (const h of [{ authorization: 'Bearer nope' }, {}]) { const r = mockRes(); f(mockReq('GET', '/api/research/queue', h), r, URL_('/api/research/queue')); assert.equal(r.statusCode, 401); }
+      });
+    }],
+    ['з токеном віддає токени з markets, limit обмежує і клампиться', async mod => sandbox(async db => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      for (let i = 1; i <= 5; i++) ins(db, 'markets', M(`k${i}`, { collateral_asset_address: addr(i), collateral_asset_symbol: `T${i}` }));
+      const get = qs => { const r = mockRes(); mod.handleGetResearchQueue(mockReq('GET', '/api/research/queue' + qs, auth), r, URL_('/api/research/queue' + qs)); return { status: r.statusCode, body: JSON.parse(r.body) }; };
+      const all = get('');
+      assert.equal(all.status, 200); assert.equal(all.body.tokens.length, 5);
+      assert.deepEqual(Object.keys(all.body.tokens[0]).sort(), ['address', 'chainId', 'symbol', 'tags']);
+      assert.equal(get('?limit=2').body.tokens.length, 2);
+      assert.equal(get('?limit=abc').body.tokens.length, 5); assert.equal(get('?limit=-4').body.tokens.length, 1); assert.equal(get('?limit=9999').body.tokens.length, 5);
+    }))],
+    ['маршрут GET /api/research/queue підключений у handleRequest, інші методи й шляхи -> 404', async mod => sandbox(async () => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      const r = call(mod.handleRequest, 'GET', '/api/research/queue', auth);
+      assert.equal(r.statusCode, 200); assert.deepEqual(JSON.parse(r.body), { tokens: [] });
+      assert.equal(call(mod.handleRequest, 'POST', '/api/research/queue', auth).statusCode, 404);
+      assert.equal(call(mod.handleRequest, 'GET', '/api/research', auth).statusCode, 404);
+    }))],
+  ],
+  handlePostResearch: [
+    ['без RESEARCH_TOKEN -> 403, неправильний токен -> 401', async ({ handlePostResearch: f }) => {
+      await withEnv('RESEARCH_TOKEN', undefined, async () => { const r = mockRes(); await f(bodyReq('POST', '/api/research', jsonChunks(researchBody()), auth), r); assert.equal(r.statusCode, 403); });
+      await withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+        const r = mockRes(); await f(bodyReq('POST', '/api/research', jsonChunks(researchBody()), { authorization: 'Bearer x' }), r); assert.equal(r.statusCode, 401);
+      });
+    }],
+    ['тіло понад 256 КБ -> 413 і розрив зʼєднання', async ({ handlePostResearch: f }) => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      const req = bodyReq('POST', '/api/research', [Buffer.alloc(200000), Buffer.alloc(100000)], auth), r = mockRes();
+      await f(req, r); assert.equal(r.statusCode, 413); assert.equal(req.destroyCalls, 1);
+    })],
+    ['некоректний JSON і неповні поля -> 400', async ({ handlePostResearch: f }) => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      const post = async chunks => { const r = mockRes(); await f(bodyReq('POST', '/api/research', chunks, auth), r); return r.statusCode; };
+      assert.equal(await post([Buffer.from('{oops')]), 400);
+      for (const bad of [{ runId: '' }, { model: 5 }, { chainId: '1' }, { chainId: 1.5 }, { address: '0x12' }, { raw: null }, { raw: 'x' }, { checks: {} }, { checks: Array(51).fill({}) }]) {
+        assert.equal(await post(jsonChunks(researchBody(bad))), 400, JSON.stringify(bad).slice(0, 40));
+      }
+      assert.equal(await post(jsonChunks({})), 400);
+      assert.equal(await post([Buffer.from('null')]), 400);
+    })],
+    ['валідний результат -> 200 accepted, запис у БД, кеші скинуті', async mod => sandbox(async db => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      const before = mod.getVaultCatalog();
+      assert.equal(mod.getVaultCatalog(), before);
+      const r = mockRes(); await mod.handlePostResearch(bodyReq('POST', '/api/research', jsonChunks(researchBody({ address: WETH_RAW.address.toUpperCase().replace('0X', '0x') })), auth), r);
+      assert.equal(r.statusCode, 200); assert.deepEqual(JSON.parse(r.body), { outcome: 'accepted', errors: [] });
+      const row = db.prepare('SELECT chain_id, address, risk_tier, model, run_id FROM token_research').get();
+      assert.deepEqual({ ...row }, { chain_id: 1, address: WETH_RAW.address, risk_tier: 1, model: 'gemini-test', run_id: 'run-1' });
+      assert.notEqual(mod.getVaultCatalog(), before);
+    }))],
+    ['відхилений результат -> 200 rejected з помилками, поточний запис не створюється', async mod => sandbox(async db => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      const r = mockRes(); await mod.handlePostResearch(bodyReq('POST', '/api/research', jsonChunks(researchBody({ chainId: 8453 })), auth), r);
+      const out = JSON.parse(r.body);
+      assert.equal(r.statusCode, 200); assert.equal(out.outcome, 'rejected'); assert.ok(out.errors.some(e => /chain_id/.test(e)));
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM token_research').get().c, 0);
+      assert.equal(db.prepare('SELECT outcome FROM token_research_history').get().outcome, 'rejected');
+    }))],
+    ['маршрут POST /api/research підключений у handleRequest', async mod => sandbox(async db => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
+      const res = mockRes();
+      mod.handleRequest(bodyReq('POST', '/api/research', jsonChunks(researchBody()), auth), res); await res.done;
+      assert.equal(res.statusCode, 200); assert.equal(db.prepare('SELECT COUNT(*) AS c FROM token_research').get().c, 1);
     }))],
   ],
   handleGetVaults: [
