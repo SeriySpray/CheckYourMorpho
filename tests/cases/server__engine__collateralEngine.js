@@ -68,6 +68,12 @@ export default {
         rated('c', 25e6, 1, { collateral_research_status: 'unrated', collateral_risk_tier: null }), rated('d', 25e6, 1)], NOW);
       assert.deepEqual([r.unratedPercent, r.lowRiskPercent], [75, 25]);
     }],
+    ['records stored by the fact-collecting agent (tier null, status unrated, fresh) count as unrated, nothing is low or high risk', ({ calculateResearchMix: f }) => {
+      const facts = (k, usd) => rated(k, usd, 1, { collateral_risk_tier: null, collateral_research_status: 'unrated', collateral_confidence: 'high', collateral_researched_at: NOW });
+      const r = f(vault({ total_assets_usd: 100e6 }), [facts('a', 60e6), facts('b', 40e6)], NOW);
+      assert.deepEqual([r.tier, r.unratedPercent, r.lowRiskPercent, r.highRiskPercent, r.impairedPercent], ['CLASSIFIED', 100, 0, 0, 0]);
+      assert.ok(r.tokens.every(t => t.tier === null && t.confidence === null));
+    }],
     ['allocations of one token are merged, with their shares summed', ({ calculateResearchMix: f }) => {
       const r = f(vault({ total_assets_usd: 100e6 }), [rated('a', 30e6, 3, { market_unique_key: '1:m1' }), rated('a', 20e6, 3, { market_unique_key: '1:m2' })], NOW);
       assert.equal(r.tokens.length, 1); assert.deepEqual([r.tokens[0].usd, r.tokens[0].percent, r.byRiskTier[3]], [50e6, 50, 50]);

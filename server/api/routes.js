@@ -519,6 +519,8 @@ export function collateralResearchOf(a, nowSec = Math.floor(Date.now() / 1000)) 
   if (!a.collateral_research_status) return null;
   let sources = [];
   try { sources = JSON.parse(a.collateral_sources_json); } catch { /* malformed row: no sources */ }
+  let signals = null;
+  try { signals = JSON.parse(a.collateral_signals_json); } catch { /* old row without signals */ }
   return {
     tier: a.collateral_risk_tier ?? null,
     category: a.collateral_category,
@@ -526,6 +528,9 @@ export function collateralResearchOf(a, nowSec = Math.floor(Date.now() / 1000)) 
     model: a.collateral_research_model,
     asOf: a.collateral_as_of,
     rationale: a.collateral_rationale,
+    summary: a.collateral_summary ?? null,
+    // only the value of each signal; the sources of the record are listed below
+    signals: signals && typeof signals === 'object' ? Object.fromEntries(Object.entries(signals).map(([k, v]) => [k, v?.value ?? null])) : null,
     sources: (Array.isArray(sources) ? sources : []).filter(s => isSafeUrl(s?.url)).map(s => ({ title: String(s.title ?? ''), url: s.url })),
     // a stale record is shown but counts as unrated in all shares
     stale: !(Number(a.collateral_researched_at) >= nowSec - RESEARCH_MAX_AGE_SEC)
@@ -690,6 +695,8 @@ export function handleGetVaultByAddress(req, res, address) {
         r.category AS collateral_category,
         r.as_of AS collateral_as_of,
         r.tier_rationale AS collateral_rationale,
+        r.summary AS collateral_summary,
+        r.signals_json AS collateral_signals_json,
         r.sources_json AS collateral_sources_json,
         r.model AS collateral_research_model
       FROM vault_allocations va

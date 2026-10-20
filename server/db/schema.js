@@ -185,8 +185,10 @@ CREATE TABLE IF NOT EXISTS token_research (
   category TEXT NOT NULL,
   risk_tier INTEGER CHECK (risk_tier BETWEEN 1 AND 5),
   confidence TEXT NOT NULL,
-  tier_rationale TEXT,
+  tier_rationale TEXT,               -- reserved for the analyst model
+  summary TEXT,                      -- facts-only summary from the collecting agent
   facts_json TEXT NOT NULL,
+  signals_json TEXT,
   sources_json TEXT NOT NULL,
   checks_json TEXT NOT NULL,
   as_of TEXT NOT NULL,
@@ -195,7 +197,7 @@ CREATE TABLE IF NOT EXISTS token_research (
   model TEXT NOT NULL,
   prompt_version TEXT NOT NULL,
   status TEXT NOT NULL,              -- 'rated' | 'unrated'
-  pending_tier INTEGER,              -- a much better tier that waits for confirmation by the next run
+  pending_tier INTEGER,              -- reserved for the analyst model, unused now
   raw_json TEXT NOT NULL,
   PRIMARY KEY (chain_id, address)
 );
@@ -206,7 +208,7 @@ CREATE TABLE IF NOT EXISTS token_research_history (
   address TEXT NOT NULL,
   run_id TEXT NOT NULL,
   received_at INTEGER NOT NULL,
-  outcome TEXT NOT NULL,             -- accepted | rejected | kept_previous | pending_confirmation
+  outcome TEXT NOT NULL,             -- accepted | rejected (older rows may hold kept_previous | pending_confirmation)
   risk_tier INTEGER,
   errors_json TEXT,
   raw_json TEXT,

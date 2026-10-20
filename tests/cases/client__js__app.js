@@ -1572,6 +1572,14 @@ const base = {
       f(audit({}, { collateral: { tokens: [] } }));
       assert.equal(D.riskEffectiveAssets.textContent, '0 tokens');
     }),
+    T('метр AI research: усі токени без tier -> "Assessment pending" без відсотків; з tier показує частку', ({ populateAuditModal: f, __state: s }) => {
+      const D = s.DOM;
+      f(audit({}, { collateral: { lowRiskPercent: 0, unratedPercent: 100, tokens: [{ symbol: 'A', tier: null, usd: 1, percent: 100 }] } }));
+      assert.equal(D.riskMixVal.textContent, 'Assessment pending'); assert.equal(D.riskMixBar.style.width, '0%');
+      assert.match(D.riskMixDesc.textContent, /no risk assessment has been made yet/);
+      f(audit({}, { collateral: { lowRiskPercent: 40, tokens: [{ symbol: 'A', tier: null, usd: 1, percent: 60 }, { symbol: 'B', tier: 1, usd: 1, percent: 40 }] } }));
+      assert.equal(D.riskMixVal.textContent, '40%');
+    }),
     T('метр AI research: розбивка по токенах з tier і unrated, однина для одного токена', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
       const rows = collect(D.riskCollateralList);
@@ -1674,7 +1682,17 @@ const base = {
     }),
     T('застарілий запис позначений, tier null читається як unrated, чужий HTML екранується', ({ researchCellHtml: f }) => {
       const html = f({ tier: null, category: '<img>', asOf: null, stale: true, sources: [] });
-      assert.match(html, /unrated · &lt;img&gt; · AI research, date unknown · stale, counted as unrated/);
+      assert.match(html, /&lt;img&gt; · AI-collected facts, date unknown · stale, counted as unrated/);
+    }),
+    T('без tier: категорія, чипи лише з true сигналів (до 4, у фіксованому порядку), дата, посилання і дисклеймер', ({ researchCellHtml: f }) => {
+      const sig = { can_freeze_or_blacklist: true, kyc_required: true, custodial_backing: true, has_unresolved_incident: true, upgradeable_proxy: true, has_timelock: true, independently_audited: true, admin_multisig: false, redemption_gated: null, evil: true };
+      const html = f({ tier: null, category: 'rwa-credit', asOf: '2026-10-21', summary: 'Facts <b>', model: 'm', signals: sig, sources: [{ title: 'A', url: 'https://a.example.com' }] });
+      assert.match(html, /rwa-credit · AI-collected facts, 2026-10-21 · sources <a href="https:\/\/a\.example\.com"/);
+      const chips = [...html.matchAll(/<span [^>]*>([^<]+)<\/span>/g)].map(m => m[1]);
+      assert.deepEqual(chips, ['can freeze', 'unresolved incident', 'upgradeable', 'KYC']);
+      assert.ok(html.includes('AI-collected facts, not a risk rating') && html.includes('title="m: Facts &lt;b&gt;"'));
+      assert.doesNotMatch(f({ tier: 2, category: 'x', signals: sig, sources: [] }), /<span|not a risk rating/);
+      assert.doesNotMatch(f({ tier: null, category: 'x', signals: null, sources: [] }), /<span/);
     }),
   ],
   setupModalEvents: [

@@ -35,6 +35,9 @@ export function getDatabase() {
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN realized_bad_debt_usd REAL;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN warnings_count INTEGER DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN warnings_json TEXT;"); } catch {}
+  // Research columns added later; on a first start the table does not exist yet and the ALTER fails harmlessly
+  try { dbInstance.exec("ALTER TABLE token_research ADD COLUMN summary TEXT;"); } catch {}
+  try { dbInstance.exec("ALTER TABLE token_research ADD COLUMN signals_json TEXT;"); } catch {}
 
   // token_classes (Pendle/class model) was replaced by token_tags
   dbInstance.exec('DROP TABLE IF EXISTS token_classes;');

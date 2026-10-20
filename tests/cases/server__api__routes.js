@@ -149,7 +149,7 @@ const rawHttp = (port, method, p, headers = {}) => new Promise((resolve, reject)
 // --- AI research import ---
 const WETH_RAW = JSON.parse(JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'data', 'agy_weth.json'), 'utf8')).response);
 const researchBody = (over = {}) => ({
-  runId: 'run-1', model: 'gemini-test', promptVersion: 'research-prompt-2', chainId: 1, address: WETH_RAW.address, raw: WETH_RAW,
+  runId: 'run-1', model: 'gemini-test', promptVersion: 'research-prompt-3', chainId: 1, address: WETH_RAW.address, raw: WETH_RAW,
   checks: WETH_RAW.sources.map(x => ({ id: x.id, url: x.url, finalUrl: x.url, status: 200, mentions: true })), ...over
 });
 // Request with a streamed body; destroyCalls counts destroy() calls
@@ -732,7 +732,7 @@ export default {
       const r = mockRes(); await mod.handlePostResearch(bodyReq('POST', '/api/research', jsonChunks(researchBody({ address: WETH_RAW.address.toUpperCase().replace('0X', '0x') })), auth), r);
       assert.equal(r.statusCode, 200); assert.deepEqual(JSON.parse(r.body), { outcome: 'accepted', errors: [] });
       const row = db.prepare('SELECT chain_id, address, risk_tier, model, run_id FROM token_research').get();
-      assert.deepEqual({ ...row }, { chain_id: 1, address: WETH_RAW.address, risk_tier: 1, model: 'gemini-test', run_id: 'run-1' });
+      assert.deepEqual({ ...row }, { chain_id: 1, address: WETH_RAW.address, risk_tier: null, model: 'gemini-test', run_id: 'run-1' });
       assert.notEqual(mod.getVaultCatalog(), before);
     }))],
     ['відхилений результат -> 200 rejected з помилками, поточний запис не створюється', async mod => sandbox(async db => withEnv('RESEARCH_TOKEN', 'rsecret', async () => {
@@ -1045,11 +1045,11 @@ export default {
       ins(db, 'markets', M('r3', { collateral_asset_address: addr(0x803), collateral_asset_symbol: 'R3' }));
       for (const k of ['r1', 'r2', 'r3']) ins(db, 'vault_allocations', A(0x51, k, 300));
       const sources = JSON.stringify([{ id: 1, url: 'https://docs.example.com/a', title: 'Docs' }, { id: 2, url: 'http://insecure.example.com', title: 'Plain' }, { id: 3, url: 'javascript:alert(1)', title: 'XSS' }]);
-      const rec = (n, over) => ins(db, 'token_research', { chain_id: 1, address: addr(n), category: 'rwa-credit', risk_tier: 3, confidence: 'medium', tier_rationale: 'Because.', facts_json: '{}',
+      const rec = (n, over) => ins(db, 'token_research', { chain_id: 1, address: addr(n), category: 'rwa-credit', risk_tier: 3, confidence: 'medium', tier_rationale: 'Because.', summary: 'Facts only.', signals_json: JSON.stringify({ kyc_required: { value: true, source_ids: [1] }, has_timelock: { value: null, source_ids: [] } }), facts_json: '{}',
         sources_json: sources, checks_json: '[]', as_of: '2026-10-20', researched_at: now, run_id: 'r', model: 'gemini-x', prompt_version: 'p', status: 'rated', raw_json: '{}', ...over });
       rec(0x801); rec(0x802, { researched_at: now - 90 * 86400 });
       const rows = Object.fromEntries(getJson(mod, '/api/vaults/' + addr(0x51)).body.allocations.map(a => [a.collateralSymbol, a]));
-      assert.deepEqual(rows.R1.collateralResearch, { tier: 3, category: 'rwa-credit', confidence: 'medium', model: 'gemini-x', asOf: '2026-10-20', rationale: 'Because.',
+      assert.deepEqual(rows.R1.collateralResearch, { tier: 3, category: 'rwa-credit', confidence: 'medium', model: 'gemini-x', asOf: '2026-10-20', rationale: 'Because.', summary: 'Facts only.', signals: { kyc_required: true, has_timelock: null },
         sources: [{ title: 'Docs', url: 'https://docs.example.com/a' }], stale: false });
       assert.equal(rows.R2.collateralResearch.stale, true); assert.equal(rows.R2.collateralResearch.tier, 3);
       assert.equal(rows.R3.collateralResearch, null);
@@ -1070,6 +1070,7 @@ export default {
       assert.equal(f({ collateral_research_status: null }, 1e9), null);
       const r = f({ collateral_research_status: 'unrated', collateral_risk_tier: null, collateral_researched_at: 1e9, collateral_sources_json: '{bad' }, 1e9);
       assert.deepEqual([r.tier, r.sources, r.stale], [null, [], false]);
+      assert.deepEqual([r.signals, r.summary], [null, null]); // old row without signals
     }],
     ['stale рівно після 60 днів, не раніше', ({ collateralResearchOf: f }) => {
       const at = ago => f({ collateral_research_status: 'rated', collateral_risk_tier: 2, collateral_researched_at: 1e9 - ago, collateral_sources_json: '[]' }, 1e9).stale;

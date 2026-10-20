@@ -232,7 +232,7 @@ export default {
       assert.deepEqual(r, { status: 'accepted', detail: '' });
       assert.equal(calls.agy, 1); assert.equal(calls.posts.length, 1);
       const p = calls.posts[0];
-      assert.deepEqual([p.runId, p.model, p.promptVersion, p.chainId, p.address, p.raw.risk_tier], ['run-1', 'M', 'research-prompt-2', 1, WETH, 1]);
+      assert.deepEqual([p.runId, p.model, p.promptVersion, p.chainId, p.address, p.raw.category], ['run-1', 'M', 'research-prompt-3', 1, WETH, 'wrapped-crypto']);
       assert.equal(p.checks.length, 7); assert.ok(p.checks.every(c => c.status === 200 && c.mentions));
       assert.equal(calls.saved.length, 1);
     }],
@@ -283,7 +283,7 @@ export default {
       const { deps } = tokenDeps([ok()], { post: async () => null });
       assert.equal((await f(token, { runId: 'r', model: 'M' }, deps)).status, 'failed');
     }],
-    ['unreachable pages give status 0 checks and an invalid tier, never an exception', async ({ researchToken: f }) => {
+    ['unreachable pages give status 0 checks and no usable source, never an exception', async ({ researchToken: f }) => {
       const { calls, deps } = tokenDeps([ok(), ok()], { fetchImpl: async () => { throw new Error('offline'); } });
       await f(token, { runId: 'r', model: 'M' }, deps);
       assert.equal(calls.agy, 2); assert.ok(calls.posts[0].checks.every(c => c.status === 0));

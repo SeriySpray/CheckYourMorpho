@@ -1812,23 +1812,36 @@ function updateStressedExitDisplay(isStressed) {
   }
 }
 
+// Signals shown as chips when true, in this order, at most 4. Positive signals (timelock, audit) are left out so the line never reads as a rating.
+const SIGNAL_CHIPS = [
+  ['can_freeze_or_blacklist', 'can freeze'], ['can_mint_without_limit', 'unlimited mint'], ['has_unresolved_incident', 'unresolved incident'],
+  ['upgradeable_proxy', 'upgradeable'], ['kyc_required', 'KYC'], ['custodial_backing', 'custodial'], ['redemption_gated', 'gated redemption'], ['oracle_is_market_price', 'market oracle']
+];
+
 /**
- * Line under a collateral token in the allocation table: "T3 · category · AI research, date · sources [1] [2]".
- * Source links are https only, escaped and marked nofollow; the rationale and model go into the tooltip.
+ * Block under a collateral token in the allocation table. With a tier: "T3 · category · AI research, date · sources [1] [2]".
+ * Without one (the agent only collects facts): category, signal chips, "AI-collected facts, date", sources and a disclaimer.
+ * Source links are https only, escaped and marked nofollow; the summary and model go into the tooltip.
  * @param {object|null|undefined} r collateralResearch from the audit API
  */
 function researchCellHtml(r) {
   const style = 'color:var(--text-muted); font-size:10px;';
   if (!r) return `<div style="${style}">unrated, no AI research yet</div>`;
-  const tier = r.tier ? `T${escapeHtml(r.tier)}` : 'unrated';
-  const parts = [tier, escapeHtml(r.category || 'other'), `AI research, ${escapeHtml(r.asOf || 'date unknown')}`];
+  const rated = Boolean(r.tier);
+  const parts = rated
+    ? [`T${escapeHtml(r.tier)}`, escapeHtml(r.category || 'other'), `AI research, ${escapeHtml(r.asOf || 'date unknown')}`]
+    : [escapeHtml(r.category || 'other'), `AI-collected facts, ${escapeHtml(r.asOf || 'date unknown')}`];
   if (r.stale) parts.push('stale, counted as unrated');
   const links = (Array.isArray(r.sources) ? r.sources : []).filter(x => /^https:\/\//i.test(String(x?.url)));
   if (links.length) {
     parts.push('sources ' + links.map((x, i) => `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(x.title || x.url)}">[${i + 1}]</a>`).join(' '));
   }
-  const tip = escapeHtml([r.model, r.rationale].filter(Boolean).join(': '));
-  return `<div style="${style}" title="${tip}">${parts.join(' · ')}</div>`;
+  const chips = rated ? [] : SIGNAL_CHIPS.filter(([k]) => r.signals?.[k] === true).slice(0, 4)
+    .map(([, label]) => `<span style="border:1px solid var(--border-color, rgba(255,255,255,0.2)); border-radius:3px; padding:0 4px; margin-right:3px;">${label}</span>`);
+  const tip = escapeHtml([r.model, r.summary || r.rationale].filter(Boolean).join(': '));
+  return `<div style="${style}" title="${tip}">${parts.join(' · ')}</div>`
+    + (chips.length ? `<div style="${style} margin-top:2px;">${chips.join('')}</div>` : '')
+    + (rated ? '' : `<div style="${style} font-style:italic;">AI-collected facts, not a risk rating</div>`);
 }
 
 /**
@@ -1915,11 +1928,15 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const mixTokens = mix.tokens || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
   const safePct = mix.lowRiskPercent ?? 0;
+  // The agent only collects facts for now: with no tier on any token there is no share to show
+  const assessmentPending = !isUnallocated && mixTokens.length > 0 && mixTokens.every(t => !t.tier);
 
-  if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${safePct}%`;
-  if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.round(safePct)}%`;
+  if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : assessmentPending ? 'Assessment pending' : `${safePct}%`;
+  if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated || assessmentPending ? '0%' : `${Math.round(safePct)}%`;
   if (DOM.riskMixDesc) {
-    if (isUnallocated) {
+    if (assessmentPending) {
+      DOM.riskMixDesc.textContent = 'AI-collected facts are shown beside each token; no risk assessment has been made yet';
+    } else if (isUnallocated) {
       DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
     } else {
       const t = mix.byRiskTier || {};
@@ -1990,7 +2007,9 @@ function populateAuditModal(data, isQuietRefresh = false) {
       });
       const note = document.createElement('span');
       note.style.cssText = 'color:var(--text-muted); font-size:10px; margin-top:4px;';
-      note.textContent = 'T1 is the least fragile, T5 the most. Unrated tokens have no usable AI research and are never counted as safe.';
+      note.textContent = assessmentPending
+        ? 'AI-collected facts, not a risk rating. Tokens without an assessment are never counted as safe.'
+        : 'T1 is the least fragile, T5 the most. Unrated tokens have no usable AI research and are never counted as safe.';
       DOM.riskCollateralList.appendChild(note);
     }
   }
