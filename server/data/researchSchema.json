@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["chain_id","address","symbol","identity_confirmed","category","facts","audits","incidents","risk_tier","tier_rationale","tier_source_ids","confidence","sources","as_of"],
+  "properties": {
+    "chain_id": {"type": "integer"},
+    "address": {"type": "string", "pattern": "^0x[0-9a-f]{40}$"},
+    "symbol": {"type": "string", "maxLength": 40},
+    "identity_confirmed": {"type": "boolean"},
+    "category": {"enum": ["native-crypto","wrapped-crypto","liquid-staking","liquid-restaking","fiat-stablecoin","crypto-backed-stablecoin","synthetic-stablecoin","yield-bearing-stablecoin","rwa-treasury","rwa-credit","tokenized-equity","pendle-pt","vault-or-lp-share","governance-or-alt","other"]},
+    "facts": {"type": "object", "additionalProperties": false,
+      "required": ["issuer","underlying","backing","redemption","price_oracle","admin_controls","liquidity","regulatory"],
+      "properties": {
+        "issuer": {"$ref": "#/$defs/fact"}, "underlying": {"$ref": "#/$defs/fact"}, "backing": {"$ref": "#/$defs/fact"},
+        "redemption": {"$ref": "#/$defs/fact"}, "price_oracle": {"$ref": "#/$defs/fact"}, "admin_controls": {"$ref": "#/$defs/fact"},
+        "liquidity": {"$ref": "#/$defs/fact"}, "regulatory": {"$ref": "#/$defs/fact"}}},
+    "audits": {"type": "array", "maxItems": 10, "items": {"type": "object", "additionalProperties": false,
+      "required": ["auditor","date","source_ids"],
+      "properties": {"auditor": {"type": "string", "maxLength": 80}, "date": {"type": ["string","null"]}, "source_ids": {"$ref": "#/$defs/ids"}}}},
+    "incidents": {"type": "array", "maxItems": 10, "items": {"type": "object", "additionalProperties": false,
+      "required": ["date","type","summary","resolved","source_ids"],
+      "properties": {"date": {"type": ["string","null"]}, "type": {"enum": ["depeg","exploit","redemption_halt","regulatory_action","other"]},
+        "summary": {"type": "string", "maxLength": 300}, "resolved": {"type": ["boolean","null"]}, "source_ids": {"$ref": "#/$defs/ids"}}}},
+    "risk_tier": {"type": ["integer","null"], "minimum": 1, "maximum": 5},
+    "tier_rationale": {"type": "string", "maxLength": 600},
+    "tier_source_ids": {"$ref": "#/$defs/ids"},
+    "confidence": {"enum": ["low","medium","high"]},
+    "sources": {"type": "array", "maxItems": 12, "items": {"type": "object", "additionalProperties": false,
+      "required": ["id","url","title","published","accessed"],
+      "properties": {"id": {"type": "integer", "minimum": 1}, "url": {"type": "string", "maxLength": 500, "pattern": "^https://"},
+        "title": {"type": "string", "maxLength": 200}, "published": {"type": ["string","null"]}, "accessed": {"type": "string"}}}},
+    "as_of": {"type": "string"}
+  },
+  "$defs": {
+    "ids": {"type": "array", "maxItems": 6, "items": {"type": "integer", "minimum": 1}},
+    "fact": {"type": "object", "additionalProperties": false, "required": ["value","source_ids"],
+      "properties": {"value": {"type": ["string","null"], "maxLength": 400}, "source_ids": {"$ref": "#/$defs/ids"}}}
+  }
+}
