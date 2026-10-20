@@ -228,15 +228,18 @@ export function buildResearchPrompt(token, today) {
   const chainKey = Object.entries(CONFIG.chains).find(([, id]) => id === Number(token.chainId))?.[0];
   const chainName = chainKey ? chainKey.charAt(0).toUpperCase() + chainKey.slice(1) : `Chain ${token.chainId}`;
   const explorer = EXPLORERS[token.chainId] ? `${EXPLORERS[token.chainId]}${token.address}` : 'none known; do not guess one';
+  // Symbols and tags come from chain data anyone can mint: keep them to harmless characters so they cannot carry instructions
+  const symbol = String(token.symbol ?? '').replace(/[^A-Za-z0-9._+\- ]/g, '').trim().slice(0, 30) || 'unknown (read it from the contract)';
+  const tags = (Array.isArray(token.tags) ? token.tags : []).filter(t => /^[\w-]{1,30}$/.test(t)).slice(0, 10);
   return [
     'You are a due-diligence researcher. There is no user to talk to: never ask questions, never wait for input.',
     'Answer in English only. Output exactly one JSON object matching the provided schema and nothing else.',
     '',
     'TASK',
     'Research the token below and describe what its value depends on.',
-    `Token: symbol ${token.symbol}, chain ${chainName} (chain id ${token.chainId}), contract ${token.address}.`,
+    `Token: symbol ${symbol}, chain ${chainName} (chain id ${token.chainId}), contract ${token.address}.`,
     `Block explorer page: ${explorer}`,
-    `Hints, may be wrong: Morpho tags ${JSON.stringify(token.tags ?? [])}. Today is ${today}.`,
+    `Hints, may be wrong: Morpho tags ${JSON.stringify(tags)}. Today is ${today}.`,
     '',
     'TOOLS',
     'Use ONLY the search_web and read_url_content tools. Never use a browser, run_command or any shell. At most about 10 tool calls.',
