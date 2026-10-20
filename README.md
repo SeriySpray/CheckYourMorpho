@@ -112,7 +112,7 @@ The sync interval, database path and Morpho API URL are fixed in `server/config.
 
 ## AI research runner
 
-The research runs on the owner's PC, not on the server (the Oracle VM has under 1 GB of RAM). The runner takes the work queue from the server, researches one token at a time with the `agy` CLI (Antigravity, model `gemini-3.8-flash-high`) and posts each result back. The server only validates and stores it.
+The research runs on the owner's PC, not on the server (the Oracle VM has under 1 GB of RAM). The runner takes the work queue from the server, researches the tokens with the `agy` CLI (one at a time by default) (Antigravity, model `gemini-3.8-flash-high`) and posts each result back. The server only validates and stores it.
 
 1. Set `RESEARCH_TOKEN` in the server environment. Without it both research endpoints answer 403.
 2. Put the same token in `%USERPROFILE%\.checkyourmorpho\research_token` (or point `RESEARCH_TOKEN_FILE` at another file). The runner never writes the token to the log and never passes it to `agy`.
@@ -123,11 +123,15 @@ The research runs on the owner's PC, not on the server (the Oracle VM has under 
 node scripts/research.mjs --api https://checkyourmorpho.duckdns.org --limit 40
 ```
 
-Options: `--tokens 1:0x...,8453:0x...` researches the listed tokens instead of the queue, `--dry-run` only prints the queue, `--max-minutes 240` stops starting new tokens after that time, `--out dir` sets where raw agent output is saved (default `logs/research/<run id>/`), `--model` overrides the model. `research.bat` runs the same command and appends to `logs\research.log`.
+Options: `--tokens 1:0x...,8453:0x...` researches the listed tokens instead of the queue, `--dry-run` only prints the queue, `--max-minutes 240` stops starting new tokens after that time, `--out dir` sets where raw agent output is saved (default `logs/research/<run id>/`), `--model` overrides the model, `--concurrency N` (1 to 3, default 1) runs that many `agy` calls in parallel, `--min-free-mb 1400` sets the free memory needed to start a call. `research.bat` runs the same command and appends to `logs\research.log`.
 
 Every call is `agy -p <prompt> --output-format json --json-schema server/data/researchSchema.json --model <model> --dangerously-skip-permissions --sandbox --print-timeout 600s`, started in an empty work folder (`%LOCALAPPDATA%\cym-research\work`) with a minimal environment (no secrets). The sandbox is required because the agent sometimes tries to run commands. The prompt allows only web search and page reading, at most about 10 tool calls, and tells the agent to treat page content as data. A call is stopped after 12 minutes. A failed or invalid attempt is repeated once; the last result is posted even when invalid, so the server records it and puts a token that keeps failing on hold for 21 days. The run stops at once on a quota, credits or expired-login message. There is a 5 second pause between tokens.
 
-Before it starts the runner refuses to run with under 1.2 GB of free memory (exit code 2) and holds a lock file so two runs cannot overlap (exit code 3). With MCP servers enabled the agent opened a browser and used a lot of memory, so the runner disables `playwright`, `context7` and `pencil` through `agy mcp disable` when `agy mcp list` shows them as enabled, and logs it. This changes your `agy` settings; enable them again if you need them elsewhere.
+Before it starts the runner refuses to run with under 1400 MB of free memory (exit code 2, `--min-free-mb` changes the limit). One `agy` process takes about 600 to 750 MB, so check your free RAM before raising `--concurrency`. With several workers the same free memory check is repeated before every `agy` call, not only at the start: when it is too low the worker waits and checks again every 60 seconds, and after 10 minutes the token is skipped (it stays in the queue) and logged. Workers take tokens from one shared list, so a token is never researched twice, the first calls of the workers are 30 seconds apart, `--max-minutes` covers the whole pool, and a quota, credits or expired-login message stops all workers. Every log line starts with the worker number, for example `[w2]`.
+
+The lock file `%LOCALAPPDATA%\cym-research\work\.lock` holds the PID and the start time of the run (exit code 3 when another run holds it). A lock is stale and removed at start when its process no longer exists or it is older than 8 hours, so a killed run does not block the next one. A lock of a live process is respected. With MCP servers enabled the agent opened a browser and used a lot of memory, so the runner disables `playwright`, `context7` and `pencil` through `agy mcp disable` when `agy mcp list` shows them as enabled, and logs it. This changes your `agy` settings; enable them again if you need them elsewhere.
+
+The server listens on IPv6 as well, so for a local API use `--api http://localhost:PORT` and not `http://127.0.0.1:PORT`. `GET /api/research/queue` returns at most 200 tokens per request, which is the upper limit of `--limit`.
 
 Every token in the `markets` table is queued, also those without vault capital: tokens with no record first, then by vault capital, then the oldest. A record is queued again after 7 days. One token takes 2 to 4 minutes and 100 to 250 thousand model tokens, so the first full pass takes several days at 40 tokens a day.
 

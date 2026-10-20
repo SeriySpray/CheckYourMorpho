@@ -43,7 +43,7 @@ function runDeps(over = {}) {
   };
   return { calls, deps };
 }
-const baseOpts = (over = {}) => ({ api: 'https://x', limit: 40, tokens: null, dryRun: false, maxMinutes: 240, outDir: null, model: 'm', ...over });
+const baseOpts = (over = {}) => ({ api: 'https://x', limit: 40, tokens: null, dryRun: false, maxMinutes: 240, outDir: null, model: 'm', concurrency: 1, minFreeMb: 1400, ...over });
 
 // Fake child process for runProcess
 function fakeSpawn({ pid = 4242, run }) {
@@ -61,20 +61,20 @@ function fakeSpawn({ pid = 4242, run }) {
 export default {
   RUNNER_DEFAULTS: [['values from the plan', ({ RUNNER_DEFAULTS: d }) => {
     assert.equal(d.model, 'gemini-3.8-flash-high'); assert.equal(d.limit, 40); assert.equal(d.maxMinutes, 240);
-    assert.equal(d.minFreeBytes, 1.2 * 1024 ** 3); assert.equal(d.lockMaxAgeMs, 8 * 3600e3); assert.equal(d.agyTimeoutMs, 12 * 60e3); assert.equal(d.pauseMs, 5000);
+    assert.equal(d.minFreeBytes, 1400 * 1024 ** 2); assert.deepEqual([d.concurrency, d.maxConcurrency, d.memWaitStepMs, d.memMaxWaitMs], [1, 3, 60e3, 600e3]); assert.equal(d.lockMaxAgeMs, 8 * 3600e3); assert.equal(d.agyTimeoutMs, 12 * 60e3); assert.equal(d.pauseMs, 5000);
     assert.deepEqual(d.mcpToDisable, ['playwright', 'context7', 'pencil']);
   }]],
 
   parseArgs: [
     ['defaults and a trimmed api URL', ({ parseArgs: f }) => {
       const o = f(['--api', 'https://checkyourmorpho.duckdns.org/']);
-      assert.deepEqual(o, { api: 'https://checkyourmorpho.duckdns.org', limit: 40, tokens: null, dryRun: false, maxMinutes: 240, outDir: null, model: 'gemini-3.8-flash-high' });
+      assert.deepEqual(o, { api: 'https://checkyourmorpho.duckdns.org', limit: 40, tokens: null, dryRun: false, maxMinutes: 240, outDir: null, model: 'gemini-3.8-flash-high', concurrency: 1, minFreeMb: 1400 });
       assert.equal(f(['--api', 'http://localhost:3000/base/']).api, 'http://localhost:3000/base');
     }],
     ['all flags', ({ parseArgs: f }) => {
       const a = '0x' + 'A'.repeat(40), b = '0x' + 'b'.repeat(40);
-      const o = f(['--api', 'https://h', '--limit', '5', '--tokens', `1:${a},8453:${b}`, '--dry-run', '--max-minutes', '30', '--out', 'C:\\x', '--model', 'mm']);
-      assert.deepEqual(o, { api: 'https://h', limit: 5, tokens: [{ chainId: 1, address: a.toLowerCase() }, { chainId: 8453, address: b }], dryRun: true, maxMinutes: 30, outDir: 'C:\\x', model: 'mm' });
+      const o = f(['--api', 'https://h', '--limit', '5', '--tokens', `1:${a},8453:${b}`, '--dry-run', '--max-minutes', '30', '--out', 'C:\\x', '--model', 'mm', '--concurrency', '3', '--min-free-mb', '900']);
+      assert.deepEqual(o, { api: 'https://h', limit: 5, tokens: [{ chainId: 1, address: a.toLowerCase() }, { chainId: 8453, address: b }], dryRun: true, maxMinutes: 30, outDir: 'C:\\x', model: 'mm', concurrency: 3, minFreeMb: 900 });
     }],
     ['unknown flag, missing value, missing api and bad api are errors', ({ parseArgs: f }) => {
       assert.throws(() => f(['--api', 'https://h', '--wat']), /Unknown argument/);
@@ -85,7 +85,7 @@ export default {
       assert.throws(() => f(['--api', 'not a url']), /must be a URL/);
     }],
     ['limit and max-minutes ranges, token format', ({ parseArgs: f }) => {
-      for (const [flag, v] of [['--limit', '0'], ['--limit', '201'], ['--limit', 'abc'], ['--limit', '1.5'], ['--max-minutes', '0'], ['--max-minutes', '1441']]) {
+      for (const [flag, v] of [['--limit', '0'], ['--limit', '201'], ['--limit', 'abc'], ['--limit', '1.5'], ['--max-minutes', '0'], ['--max-minutes', '1441'], ['--concurrency', '0'], ['--concurrency', '4'], ['--min-free-mb', '-1'], ['--min-free-mb', 'x']]) {
         assert.throws(() => f(['--api', 'https://h', flag, v]), /must be an integer/, `${flag} ${v}`);
       }
       assert.equal(f(['--api', 'https://h', '--limit', '200']).limit, 200);
@@ -118,9 +118,10 @@ export default {
 
   checkMemory: [
     ['threshold is inclusive and free memory is reported in GB', ({ checkMemory: f }) => {
-      assert.deepEqual(f(1.2 * 1024 ** 3), { ok: true, freeGb: 1.2 });
-      assert.deepEqual(f(1.2 * 1024 ** 3 - 1), { ok: false, freeGb: 1.2 });
+      assert.deepEqual(f(1.2 * 1024 ** 3, 1.2 * 1024 ** 3), { ok: true, freeGb: 1.2 });
+      assert.deepEqual(f(1.2 * 1024 ** 3 - 1, 1.2 * 1024 ** 3), { ok: false, freeGb: 1.2 });
       assert.deepEqual(f(0.5 * 1024 ** 3), { ok: false, freeGb: 0.5 });
+      assert.equal(f(1400 * 1024 ** 2).ok, true); assert.equal(f(1400 * 1024 ** 2 - 1).ok, false);
       assert.equal(f(100, 50).ok, true);
     }],
   ],
@@ -133,19 +134,53 @@ export default {
       a.release(); assert.ok(!fs.existsSync(file)); a.release();
       const b = f(file, Date.now(), fs); assert.equal(b.ok, true); b.release();
     }],
-    ['a lock older than 8 hours is dead and replaced; a fresh one is respected', ({ acquireLock: f }) => {
+    ['the lock holds the PID and the time of its owner', ({ acquireLock: f }) => {
+      const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-lock-')), '.lock');
+      const a = f(file, 12345, fs); assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { pid: process.pid, at: 12345 }); a.release();
+    }],
+    ['a lock of a live process is respected; the pid is probed with signal 0', ({ acquireLock: f }) => {
+      const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-lock-')), '.lock');
+      fs.writeFileSync(file, JSON.stringify({ pid: process.pid, at: Date.now() }));
+      assert.equal(f(file, Date.now(), fs).ok, false);
+      const probes = [];
+      assert.equal(f(file, Date.now(), fs, (pid, sig) => probes.push([pid, sig])).ok, false);
+      assert.deepEqual(probes, [[process.pid, 0]]);
+      assert.equal(f(file, Date.now(), fs, () => { throw Object.assign(new Error('x'), { code: 'EPERM' }); }).ok, false, 'EPERM means the process exists');
+    }],
+    ['a lock of a dead process (ESRCH) is stale and replaced', ({ acquireLock: f }) => {
+      const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-lock-')), '.lock');
+      fs.writeFileSync(file, JSON.stringify({ pid: 999999, at: Date.now() }));
+      const a = f(file, Date.now(), fs, () => { throw Object.assign(new Error('x'), { code: 'ESRCH' }); });
+      assert.equal(a.ok, true); assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).pid, process.pid); a.release();
+    }],
+    ['a lock older than 8 hours is stale even when its PID is alive', ({ acquireLock: f }) => {
+      const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-lock-')), '.lock');
+      fs.writeFileSync(file, JSON.stringify({ pid: process.pid, at: Date.now() - 9 * 3600e3 }));
+      const a = f(file, Date.now(), fs); assert.equal(a.ok, true); a.release();
+    }],
+    ['a lock without a readable PID is judged by its age only', ({ acquireLock: f }) => {
       const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-lock-')), '.lock');
       fs.writeFileSync(file, 'old');
-      const old = new Date(Date.now() - 9 * 3600e3); fs.utimesSync(file, old, old);
-      const a = f(file, Date.now(), fs); assert.equal(a.ok, true);
-      assert.notEqual(fs.readFileSync(file, 'utf8'), 'old');
-      const younger = new Date(Date.now() - 7 * 3600e3); fs.utimesSync(file, younger, younger);
       assert.equal(f(file, Date.now(), fs).ok, false);
-      a.release();
+      const old = new Date(Date.now() - 9 * 3600e3); fs.utimesSync(file, old, old);
+      const a = f(file, Date.now(), fs); assert.equal(a.ok, true); assert.notEqual(fs.readFileSync(file, 'utf8'), 'old'); a.release();
     }],
     ['other file errors are not hidden', ({ acquireLock: f }) => {
       const broken = { writeFileSync() { throw Object.assign(new Error('denied'), { code: 'EACCES' }); } };
       assert.throws(() => f('x', 0, broken), /denied/);
+    }],
+  ],
+
+  waitForMemory: [
+    ['enough memory: no wait; too little: checks every 60 s and gives up after 10 minutes', async ({ waitForMemory: f }) => {
+      const slept = [], logs = [];
+      assert.equal(await f(100, { freeBytes: () => 100, sleep: async ms => slept.push(ms) }, m => logs.push(m)), true); assert.deepEqual(slept, []);
+      assert.equal(await f(100, { freeBytes: () => 99, sleep: async ms => slept.push(ms) }, m => logs.push(m)), false);
+      assert.equal(slept.length, 10); assert.ok(slept.every(ms => ms === 60e3)); assert.equal(logs.length, 2); assert.match(logs[1], /skipping/);
+    }],
+    ['memory that frees up in time lets the call start', async ({ waitForMemory: f }) => {
+      let free = 0, slept = 0;
+      assert.equal(await f(100, { freeBytes: () => free, sleep: async () => { if (++slept === 3) free = 100; } }, () => {}), true); assert.equal(slept, 3);
     }],
   ],
 
@@ -235,6 +270,15 @@ export default {
       const { deps } = tokenDeps([ok(text)]);
       assert.equal((await f(token, { runId: 'r', model: 'M' }, deps)).status, 'accepted');
     }],
+    ['no memory for agy: nothing is started or posted and the token is reported as skipped', async ({ researchToken: f }) => {
+      const { calls, deps } = tokenDeps([ok()], { waitMemory: async () => false });
+      assert.equal((await f(token, { runId: 'r', model: 'M' }, deps)).status, 'skipped'); assert.equal(calls.agy, 0); assert.equal(calls.posts.length, 0);
+    }],
+    ['memory is checked before every agy call, also the retry', async ({ researchToken: f }) => {
+      let checks = 0;
+      const { calls, deps } = tokenDeps([ok('no json'), ok()], { waitMemory: async () => { checks++; return true; } });
+      await f(token, { runId: 'r', model: 'M' }, deps); assert.equal(calls.agy, 2); assert.equal(checks, 2);
+    }],
     ['when the server does not answer the token is reported as failed', async ({ researchToken: f }) => {
       const { deps } = tokenDeps([ok()], { post: async () => null });
       assert.equal((await f(token, { runId: 'r', model: 'M' }, deps)).status, 'failed');
@@ -305,6 +349,67 @@ export default {
     ['the lock is released even when the queue request fails', async ({ runResearch: f }) => {
       const { calls, deps } = runDeps({ getQueue: async () => { throw new Error('HTTP 401'); } });
       await assert.rejects(() => f(baseOpts(), deps), /HTTP 401/); assert.equal(calls.released, 1);
+    }],
+    ['a pool of 3 workers gives every token to exactly one worker and labels the log lines', async ({ runResearch: f }) => {
+      const addrs = ['0x1', '0x2', '0x3', '0x4', '0x5', '0x6', '0x7'];
+      const seen = [], active = { now: 0, max: 0 };
+      const { calls, deps } = runDeps({
+        getQueue: async () => addrs.map(address => ({ chainId: 1, address, symbol: null, tags: null })),
+        researchToken: async (t, ctx) => {
+          seen.push([t.address, ctx.worker]); active.now++; active.max = Math.max(active.max, active.now);
+          await new Promise(r => setImmediate(r)); active.now--;
+          return { status: 'accepted', detail: '' };
+        }
+      });
+      const r = await f(baseOpts({ concurrency: 3 }), deps);
+      assert.deepEqual(seen.map(x => x[0]).sort(), addrs); assert.equal(active.max, 3);
+      assert.deepEqual([r.exitCode, r.summary.accepted, r.summary.skipped], [0, 7, 0]);
+      assert.deepEqual([...new Set(seen.map(x => x[1]))].sort(), [1, 2, 3]);
+      assert.ok(calls.logs.filter(l => /\/7\]/.test(l)).every(l => /^\[w[123]\] /.test(l)));
+      assert.ok(calls.slept.includes(30e3) && calls.slept.includes(60e3), 'workers 2 and 3 start staggered');
+    }],
+    ['agy is not started while memory is short: the worker waits, and a token that waits 10 minutes is skipped', async ({ runResearch: f }) => {
+      const events = [];
+      let free = 4 * 1024 ** 3, startup = true;
+      const { calls, deps } = runDeps({
+        freeBytes: () => { const v = startup ? 4 * 1024 ** 3 : free; startup = false; return v; },
+        researchToken: async (t, ctx) => {
+          if (t.address === '0xa') free = 0.5 * 1024 ** 3; // memory drops after the run started
+          if (!(await ctx.waitMemory())) return { status: 'skipped', detail: 'no memory' };
+          events.push(t.address); return { status: 'accepted', detail: '' };
+        }
+      });
+      const r = await f(baseOpts({ concurrency: 2 }), deps);
+      assert.deepEqual(events, []); assert.deepEqual(r.summary, { accepted: 0, rejected: 0, kept: 0, pending: 0, failed: 0, skipped: 2 });
+      assert.ok(calls.slept.filter(ms => ms === 60e3).length >= 10); assert.ok(calls.logs.some(l => /^\[w\d\]   only 0\.5 GB free/.test(l)));
+    }],
+    ['a quota error in one worker stops all workers: no new token is taken', async ({ runResearch: f }) => {
+      const started = [];
+      const { calls, deps } = runDeps({
+        getQueue: async () => ['0x1', '0x2', '0x3', '0x4', '0x5'].map(address => ({ chainId: 1, address, symbol: null, tags: null })),
+        researchToken: async (t, ctx) => {
+          started.push(t.address); await new Promise(r => setImmediate(r));
+          return ctx.worker === 1 ? { status: 'fatal', detail: 'quota' } : { status: 'accepted', detail: '' };
+        }
+      });
+      const r = await f(baseOpts({ concurrency: 3 }), deps);
+      assert.equal(r.exitCode, 1); assert.equal(started.length, 3); assert.equal(new Set(started).size, 3);
+      assert.deepEqual([r.summary.accepted, r.summary.skipped], [2, 3]); assert.equal(calls.released, 1);
+    }],
+    ['the time budget is shared by the pool', async ({ runResearch: f }) => {
+      let t = NOW;
+      const { calls, deps } = runDeps({
+        now: () => t, getQueue: async () => ['0x1', '0x2', '0x3', '0x4'].map(address => ({ chainId: 1, address, symbol: null, tags: null })),
+        researchToken: async x => { calls.researched.push(x.address); await new Promise(r => setImmediate(r)); t += 61 * 60e3; return { status: 'accepted', detail: '' }; }
+      });
+      const r = await f(baseOpts({ maxMinutes: 60, concurrency: 2 }), deps);
+      assert.equal(calls.researched.length, 2); assert.deepEqual([r.summary.accepted, r.summary.skipped], [2, 2]);
+      assert.equal(calls.logs.filter(l => /Time budget/.test(l)).length, 1);
+    }],
+    ['more workers than tokens start only as many workers as tokens', async ({ runResearch: f }) => {
+      const { calls, deps } = runDeps();
+      await f(baseOpts({ concurrency: 3 }), deps);
+      assert.deepEqual(calls.researched.sort(), ['0xa', '0xb']); assert.ok(!calls.logs.some(l => l.startsWith('[w3]')));
     }],
   ],
 };

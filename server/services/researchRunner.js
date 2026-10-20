@@ -10,7 +10,14 @@ export const RUNNER_DEFAULTS = {
   model: 'gemini-3.8-flash-high',
   limit: 40,
   maxMinutes: 240,
-  minFreeBytes: 1.2 * 1024 ** 3,
+  minFreeBytes: 1400 * 1024 ** 2,
+  concurrency: 1,
+  maxConcurrency: 3,
+  // Free memory is rechecked before every agy call: wait this long between checks, give up on the token after memMaxWaitMs
+  memWaitStepMs: 60e3,
+  memMaxWaitMs: 10 * 60e3,
+  // Delay between the first calls of the workers, so the first agy has taken its memory before the next check
+  staggerMs: 30e3,
   lockMaxAgeMs: 8 * 3600e3,
   agyTimeoutMs: 12 * 60e3,
   pauseMs: 5000,
@@ -24,11 +31,12 @@ const FATAL_RE = /quota|credits|authentication expired/i;
 
 /**
  * Parses the CLI arguments.
- * @returns {{api:string, limit:number, tokens:Array<{chainId:number,address:string}>|null, dryRun:boolean, maxMinutes:number, outDir:string|null, model:string}}
+ * @returns {{api:string, limit:number, tokens:Array<{chainId:number,address:string}>|null, dryRun:boolean, maxMinutes:number, outDir:string|null, model:string, concurrency:number, minFreeMb:number}}
  * @throws {Error} on an unknown flag, a missing value or an invalid value
  */
 export function parseArgs(argv) {
-  const o = { api: null, limit: RUNNER_DEFAULTS.limit, tokens: null, dryRun: false, maxMinutes: RUNNER_DEFAULTS.maxMinutes, outDir: null, model: RUNNER_DEFAULTS.model };
+  const o = { api: null, limit: RUNNER_DEFAULTS.limit, tokens: null, dryRun: false, maxMinutes: RUNNER_DEFAULTS.maxMinutes, outDir: null, model: RUNNER_DEFAULTS.model,
+    concurrency: RUNNER_DEFAULTS.concurrency, minFreeMb: RUNNER_DEFAULTS.minFreeBytes / 1024 ** 2 };
   const int = (name, v, min, max) => {
     const n = Number(v);
     if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${name} must be an integer from ${min} to ${max}`);
@@ -37,7 +45,7 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--dry-run') { o.dryRun = true; continue; }
-    if (!['--api', '--limit', '--tokens', '--max-minutes', '--out', '--model'].includes(flag)) throw new Error(`Unknown argument: ${flag}`);
+    if (!['--api', '--limit', '--tokens', '--max-minutes', '--out', '--model', '--concurrency', '--min-free-mb'].includes(flag)) throw new Error(`Unknown argument: ${flag}`);
     const value = argv[++i];
     if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     if (flag === '--api') {
@@ -47,6 +55,8 @@ export function parseArgs(argv) {
       o.api = u.origin + u.pathname.replace(/\/+$/, '');
     } else if (flag === '--limit') o.limit = int('--limit', value, 1, 200);
     else if (flag === '--max-minutes') o.maxMinutes = int('--max-minutes', value, 1, 1440);
+    else if (flag === '--concurrency') o.concurrency = int('--concurrency', value, 1, RUNNER_DEFAULTS.maxConcurrency);
+    else if (flag === '--min-free-mb') o.minFreeMb = int('--min-free-mb', value, 0, 1048576);
     else if (flag === '--out') o.outDir = value;
     else if (flag === '--model') o.model = value;
     else {
@@ -84,21 +94,49 @@ export function checkMemory(freeBytes, minBytes = RUNNER_DEFAULTS.minFreeBytes) 
 }
 
 /**
- * Takes the run lock (a file created exclusively). A lock older than lockMaxAgeMs is considered dead and replaced.
- * @param {{writeFileSync:Function, statSync:Function, unlinkSync:Function}} fsImpl
+ * Takes the run lock (a file created exclusively, holding the PID and the time). A lock whose process is gone (kill(pid, 0)
+ * fails with ESRCH) or that is older than lockMaxAgeMs is stale and replaced; a lock of a live process is respected.
+ * @param {{writeFileSync:Function, readFileSync:Function, statSync:Function, unlinkSync:Function}} fsImpl
+ * @param {(pid:number, signal:number)=>void} killImpl process.kill compatible
  * @returns {{ok:boolean, release:()=>void}}
  */
-export function acquireLock(lockPath, nowMs, fsImpl) {
+export function acquireLock(lockPath, nowMs, fsImpl, killImpl = process.kill.bind(process)) {
   const take = () => { fsImpl.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, at: nowMs }), { flag: 'wx' }); };
   const release = () => { try { fsImpl.unlinkSync(lockPath); } catch { /* already gone */ } };
+  const busy = { ok: false, release: () => {} };
   try { take(); return { ok: true, release }; } catch (err) {
     if (err.code !== 'EEXIST') throw err;
   }
-  let age = 0;
-  try { age = nowMs - fsImpl.statSync(lockPath).mtimeMs; } catch { age = Infinity; }
-  if (age < RUNNER_DEFAULTS.lockMaxAgeMs) return { ok: false, release: () => {} };
+  let info = {};
+  try { info = JSON.parse(fsImpl.readFileSync(lockPath, 'utf8')) || {}; } catch { /* unreadable: judged by the file time below */ }
+  let age;
+  if (Number.isFinite(info.at)) age = nowMs - info.at;
+  else { try { age = nowMs - fsImpl.statSync(lockPath).mtimeMs; } catch { age = Infinity; } }
+  const hasPid = Number.isInteger(info.pid) && info.pid > 0;
+  let alive = false;
+  if (hasPid) {
+    try { killImpl(info.pid, 0); alive = true; } catch (err) { alive = err.code !== 'ESRCH'; } // EPERM: the process exists
+  }
+  // Without a readable PID only the age decides
+  if ((hasPid ? alive : true) && age < RUNNER_DEFAULTS.lockMaxAgeMs) return busy;
   release();
-  try { take(); return { ok: true, release }; } catch { return { ok: false, release: () => {} }; }
+  try { take(); return { ok: true, release }; } catch { return busy; }
+}
+
+/**
+ * Waits until enough memory is free before one agy call: checks every memWaitStepMs, gives up after memMaxWaitMs.
+ * @param {{freeBytes():number, sleep(ms:number):Promise<void>}} deps
+ * @returns {Promise<boolean>} true when agy may start
+ */
+export async function waitForMemory(minBytes, deps, log) {
+  const { memWaitStepMs: step, memMaxWaitMs: max } = RUNNER_DEFAULTS;
+  for (let waited = 0; ; waited += step) {
+    const m = checkMemory(deps.freeBytes(), minBytes);
+    if (m.ok) return true;
+    if (waited >= max) { log(`  only ${m.freeGb} GB free after ${max / 60e3} min; skipping this token.`); return false; }
+    if (waited === 0) log(`  only ${m.freeGb} GB free, below ${Math.round(minBytes / 1024 ** 2)} MB; waiting before starting agy.`);
+    await deps.sleep(step);
+  }
 }
 
 /** Names from `agy mcp list` output that are enabled. Lines that do not say "disabled" count as enabled (disabling twice is harmless). */
@@ -135,14 +173,15 @@ export function runProcess(spawnImpl, killTree, cmd, args, { cwd, env, timeoutMs
  * Researches one token: agy, parse, local checks, post. A failed attempt is repeated once.
  * Posts the last attempt even when invalid, so the server records the failure and can put the token on hold.
  * @param {{chainId:number, address:string, symbol:string|null, tags:string[]|null}} token
- * @param {object} deps {runAgy(prompt), fetchImpl, post(body), saveRaw(token, text), now(), log(msg)}
- * @returns {Promise<{status:'accepted'|'rejected'|'kept_previous'|'pending_confirmation'|'failed'|'fatal', detail:string}>}
+ * @param {object} deps {runAgy(prompt), fetchImpl, post(body), saveRaw(token, text), now(), log(msg), waitMemory?():Promise<boolean>}
+ * @returns {Promise<{status:'accepted'|'rejected'|'kept_previous'|'pending_confirmation'|'failed'|'fatal'|'skipped', detail:string}>}
  */
 export async function researchToken(token, { runId, model }, deps) {
   const today = new Date(deps.now()).toISOString().slice(0, 10);
   const prompt = buildResearchPrompt(token, today);
   let last = { raw: { runner_error: 'no attempt' }, checks: [], problem: 'no attempt' };
   for (let attempt = 1; attempt <= 2; attempt++) {
+    if (deps.waitMemory && !(await deps.waitMemory())) return { status: 'skipped', detail: 'not enough free memory' };
     const r = await deps.runAgy(prompt);
     deps.saveRaw(token, `${r.stdout}\n--- stderr ---\n${r.stderr}`);
     const failed = r.timedOut || r.code !== 0;
@@ -167,8 +206,9 @@ export async function researchToken(token, { runId, model }, deps) {
 
 /**
  * Whole run. Exit codes: 0 done, 1 failed or stopped by a quota/login problem, 2 not enough free memory, 3 another run holds the lock.
+ * A pool of opts.concurrency workers takes tokens from one shared list (each token goes to exactly one worker).
  * @param {ReturnType<typeof parseArgs>} opts
- * @param {object} deps {lock(), freeBytes(), mcp:{list(), disable(name)}, getQueue(limit), researchToken(token), sleep(ms), now(), log(msg)}
+ * @param {object} deps {lock(), freeBytes(), mcp:{list(), disable(name)}, getQueue(limit), researchToken(token, {worker, log, waitMemory}), sleep(ms), now(), log(msg)}
  * @returns {Promise<{exitCode:number, summary:object}>}
  */
 export async function runResearch(opts, deps) {
@@ -176,7 +216,8 @@ export async function runResearch(opts, deps) {
   const lock = deps.lock();
   if (!lock.ok) { deps.log('Another research run is active (lock file present); exiting.'); return { exitCode: 3, summary }; }
   try {
-    const mem = checkMemory(deps.freeBytes());
+    const minBytes = (opts.minFreeMb ?? RUNNER_DEFAULTS.minFreeBytes / 1024 ** 2) * 1024 ** 2;
+    const mem = checkMemory(deps.freeBytes(), minBytes);
     if (!mem.ok) { deps.log(`Only ${mem.freeGb} GB of memory is free; not starting.`); return { exitCode: 2, summary }; }
     if (!opts.dryRun) {
       for (const name of enabledMcpServers(await deps.mcp.list())) {
@@ -191,22 +232,33 @@ export async function runResearch(opts, deps) {
       return { exitCode: 0, summary };
     }
     const deadline = deps.now() + opts.maxMinutes * 60e3;
-    let exitCode = 0;
-    for (let i = 0; i < tokens.length; i++) {
-      if (deps.now() >= deadline) { summary.skipped += tokens.length - i; deps.log('Time budget used up; the rest waits for the next run.'); break; }
-      const t = tokens[i];
-      deps.log(`[${i + 1}/${tokens.length}] ${t.chainId}:${t.address} ${t.symbol ?? ''}`);
-      let res;
-      try { res = await deps.researchToken(t); } catch (err) { res = { status: 'failed', detail: err.message }; }
-      deps.log(`  -> ${res.status}${res.detail ? `: ${res.detail}` : ''}`);
-      if (res.status === 'fatal') { summary.skipped += tokens.length - i; exitCode = 1; break; }
-      if (res.status === 'accepted') summary.accepted++;
-      else if (res.status === 'rejected') summary.rejected++;
-      else if (res.status === 'kept_previous') summary.kept++;
-      else if (res.status === 'pending_confirmation') summary.pending++;
-      else summary.failed++;
-      if (i < tokens.length - 1) await deps.sleep(RUNNER_DEFAULTS.pauseMs);
-    }
+    let exitCode = 0, next = 0, stop = false, budgetLogged = false;
+    const worker = async w => {
+      const wlog = msg => deps.log(`[w${w}] ${msg}`);
+      if (w > 1) await deps.sleep((w - 1) * RUNNER_DEFAULTS.staggerMs);
+      while (!stop && next < tokens.length) {
+        if (deps.now() >= deadline) {
+          if (!budgetLogged) { budgetLogged = true; wlog('Time budget used up; the rest waits for the next run.'); }
+          break;
+        }
+        const i = next++, t = tokens[i]; // no await between the check and the increment: a token is never taken twice
+        wlog(`[${i + 1}/${tokens.length}] ${t.chainId}:${t.address} ${t.symbol ?? ''}`);
+        let res;
+        try { res = await deps.researchToken(t, { worker: w, log: wlog, waitMemory: () => waitForMemory(minBytes, deps, wlog) }); } catch (err) { res = { status: 'failed', detail: err.message }; }
+        wlog(`  -> ${res.status}${res.detail ? `: ${res.detail}` : ''}`);
+        if (res.status === 'fatal') { stop = true; exitCode = 1; summary.skipped++; break; }
+        if (res.status === 'accepted') summary.accepted++;
+        else if (res.status === 'rejected') summary.rejected++;
+        else if (res.status === 'kept_previous') summary.kept++;
+        else if (res.status === 'pending_confirmation') summary.pending++;
+        else if (res.status === 'skipped') summary.skipped++;
+        else summary.failed++;
+        if (!stop && next < tokens.length) await deps.sleep(RUNNER_DEFAULTS.pauseMs);
+      }
+    };
+    const count = Math.min(opts.concurrency ?? RUNNER_DEFAULTS.concurrency, tokens.length);
+    await Promise.all(Array.from({ length: count }, (_, k) => worker(k + 1)));
+    summary.skipped += tokens.length - next; // never taken: time budget or a fatal stop
     deps.log(`Done: ${JSON.stringify(summary)}`);
     return { exitCode, summary };
   } finally {

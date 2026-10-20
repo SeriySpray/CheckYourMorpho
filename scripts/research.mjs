@@ -4,7 +4,7 @@
  * with the agy CLI and posts the results back. All logic lives in server/services/researchRunner.js; this file only wires
  * it to the real process, network and file system.
  *
- * node scripts/research.mjs --api https://host [--limit 40] [--tokens 1:0x..,8453:0x..] [--dry-run] [--max-minutes 240] [--out dir] [--model name]
+ * node scripts/research.mjs --api https://host [--limit 40] [--tokens 1:0x..,8453:0x..] [--dry-run] [--max-minutes 240] [--out dir] [--model name] [--concurrency 1] [--min-free-mb 1400]
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,7 +18,7 @@ const log = msg => console.log(`${new Date().toISOString()} ${msg}`);
 
 let opts;
 try { opts = parseArgs(process.argv.slice(2)); } catch (err) {
-  console.error(`${err.message}\nUsage: node scripts/research.mjs --api <baseUrl> [--limit 40] [--tokens 1:0x..,8453:0x..] [--dry-run] [--max-minutes 240] [--out dir] [--model name]`);
+  console.error(`${err.message}\nUsage: node scripts/research.mjs --api <baseUrl> [--limit 40] [--tokens 1:0x..,8453:0x..] [--dry-run] [--max-minutes 240] [--out dir] [--model name] [--concurrency 1] [--min-free-mb 1400]`);
   process.exit(1);
 }
 
@@ -56,9 +56,10 @@ const deps = {
     if (!res.ok) throw new Error(`Queue request failed: HTTP ${res.status}`);
     return (await res.json()).tokens;
   },
-  researchToken: token => researchToken(token, { runId, model: opts.model }, {
+  researchToken: (token, ctx) => researchToken(token, { runId, model: opts.model }, {
     now: Date.now,
-    log,
+    log: ctx.log,
+    waitMemory: ctx.waitMemory,
     fetchImpl: fetch,
     runAgy: prompt => agy(buildAgyArgs({ prompt, model: opts.model }), RUNNER_DEFAULTS.agyTimeoutMs),
     saveRaw: (t, text) => {
