@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object", "additionalProperties": false,
-  "required": ["chain_id","address","symbol","identity_confirmed","category","facts","audits","incidents","signals","confidence","summary","sources","as_of"],
+  "required": ["chain_id","address","symbol","identity_confirmed","category","facts","audits","incidents","token_signals","system_signals","confidence","summary","sources","as_of"],
   "properties": {
     "chain_id": {"type": "integer"},
     "address": {"type": "string", "pattern": "^0x[0-9a-f]{40}$"},
@@ -21,13 +21,12 @@
       "required": ["date","type","summary","resolved","source_ids"],
       "properties": {"date": {"type": ["string","null"]}, "type": {"enum": ["depeg","exploit","redemption_halt","regulatory_action","other"]},
         "summary": {"type": "string", "maxLength": 300}, "resolved": {"type": ["boolean","null"]}, "source_ids": {"$ref": "#/$defs/ids"}}}},
-    "signals": {"type": "object", "additionalProperties": false,
-      "required": ["can_freeze_or_blacklist","can_mint_without_limit","upgradeable_proxy","has_timelock","admin_multisig","redemption_gated","kyc_required","custodial_backing","backing_attested","independently_audited","has_unresolved_incident","oracle_is_market_price"],
-      "properties": {
-        "can_freeze_or_blacklist": {"$ref": "#/$defs/signal"}, "can_mint_without_limit": {"$ref": "#/$defs/signal"}, "upgradeable_proxy": {"$ref": "#/$defs/signal"},
-        "has_timelock": {"$ref": "#/$defs/signal"}, "admin_multisig": {"$ref": "#/$defs/signal"}, "redemption_gated": {"$ref": "#/$defs/signal"},
-        "kyc_required": {"$ref": "#/$defs/signal"}, "custodial_backing": {"$ref": "#/$defs/signal"}, "backing_attested": {"$ref": "#/$defs/signal"},
-        "independently_audited": {"$ref": "#/$defs/signal"}, "has_unresolved_incident": {"$ref": "#/$defs/signal"}, "oracle_is_market_price": {"$ref": "#/$defs/signal"}}},
+    "token_signals": {"type": "object", "additionalProperties": false,
+      "required": ["can_freeze_or_blacklist","can_mint_without_limit","upgradeable_proxy","has_timelock","admin_multisig"],
+      "properties": {"can_freeze_or_blacklist": {"$ref": "#/$defs/signal"}, "can_mint_without_limit": {"$ref": "#/$defs/signal"}, "upgradeable_proxy": {"$ref": "#/$defs/signal"}, "has_timelock": {"$ref": "#/$defs/signal"}, "admin_multisig": {"$ref": "#/$defs/signal"}}},
+    "system_signals": {"type": "object", "additionalProperties": false,
+      "required": ["redemption_gated","kyc_required","custodial_backing","backing_attested","independently_audited","has_unresolved_incident","oracle_is_market_price","protocol_admin_multisig","protocol_has_timelock"],
+      "properties": {"redemption_gated": {"$ref": "#/$defs/signal"}, "kyc_required": {"$ref": "#/$defs/signal"}, "custodial_backing": {"$ref": "#/$defs/signal"}, "backing_attested": {"$ref": "#/$defs/signal"}, "independently_audited": {"$ref": "#/$defs/signal"}, "has_unresolved_incident": {"$ref": "#/$defs/signal"}, "oracle_is_market_price": {"$ref": "#/$defs/signal"}, "protocol_admin_multisig": {"$ref": "#/$defs/signal"}, "protocol_has_timelock": {"$ref": "#/$defs/signal"}}},
     "confidence": {"enum": ["low","medium","high"]},
     "summary": {"type": "string", "maxLength": 400},
     "sources": {"type": "array", "maxItems": 12, "items": {"type": "object", "additionalProperties": false,

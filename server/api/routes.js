@@ -13,7 +13,7 @@ import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
-import { researchQueue, applyResearch, isSafeUrl } from '../services/tokenResearch.js';
+import { researchQueue, applyResearch, isSafeUrl, TOKEN_SIGNAL_KEYS } from '../services/tokenResearch.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -514,6 +514,16 @@ export function handleGetVaults(req, res, url) {
   }
 }
 
+/** Stored signals as {token, system} of plain values; an old flat row is split by the known token keys, junk gives null. */
+function splitSignals(stored) {
+  if (!stored || typeof stored !== 'object') return null;
+  const vals = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, v?.value ?? null]));
+  if ('token' in stored || 'system' in stored) return { token: vals(stored.token), system: vals(stored.system) };
+  const flat = vals(stored);
+  const pick = want => Object.fromEntries(Object.entries(flat).filter(([k]) => TOKEN_SIGNAL_KEYS.includes(k) === want));
+  return { token: pick(true), system: pick(false) };
+}
+
 /** AI research shown next to a collateral token in the audit, or null when the token has no record (or is an idle market). */
 export function collateralResearchOf(a, nowSec = Math.floor(Date.now() / 1000)) {
   if (!a.collateral_research_status) return null;
@@ -530,7 +540,7 @@ export function collateralResearchOf(a, nowSec = Math.floor(Date.now() / 1000)) 
     rationale: a.collateral_rationale,
     summary: a.collateral_summary ?? null,
     // only the value of each signal; the sources of the record are listed below
-    signals: signals && typeof signals === 'object' ? Object.fromEntries(Object.entries(signals).map(([k, v]) => [k, v?.value ?? null])) : null,
+    signals: splitSignals(signals),
     sources: (Array.isArray(sources) ? sources : []).filter(s => isSafeUrl(s?.url)).map(s => ({ title: String(s.title ?? ''), url: s.url })),
     // a stale record is shown but counts as unrated in all shares
     stale: !(Number(a.collateral_researched_at) >= nowSec - RESEARCH_MAX_AGE_SEC)

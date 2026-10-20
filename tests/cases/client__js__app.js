@@ -1685,11 +1685,11 @@ const base = {
       assert.match(html, /&lt;img&gt; · AI-collected facts, date unknown · stale, counted as unrated/);
     }),
     T('без tier: категорія, чипи лише з true сигналів (до 4, у фіксованому порядку), дата, посилання і дисклеймер', ({ researchCellHtml: f }) => {
-      const sig = { can_freeze_or_blacklist: true, kyc_required: true, custodial_backing: true, has_unresolved_incident: true, upgradeable_proxy: true, has_timelock: true, independently_audited: true, admin_multisig: false, redemption_gated: null, evil: true };
+      const sig = { token: { can_freeze_or_blacklist: true, upgradeable_proxy: true, has_timelock: true, admin_multisig: false, evil: true }, system: { kyc_required: true, custodial_backing: true, has_unresolved_incident: true, independently_audited: true, redemption_gated: null, can_mint_without_limit: true } };
       const html = f({ tier: null, category: 'rwa-credit', asOf: '2026-10-21', summary: 'Facts <b>', model: 'm', signals: sig, sources: [{ title: 'A', url: 'https://a.example.com' }] });
       assert.match(html, /rwa-credit · AI-collected facts, 2026-10-21 · sources <a href="https:\/\/a\.example\.com"/);
       const chips = [...html.matchAll(/<span [^>]*>([^<]+)<\/span>/g)].map(m => m[1]);
-      assert.deepEqual(chips, ['can freeze', 'unresolved incident', 'upgradeable', 'KYC']);
+      assert.deepEqual(chips, ['token: can freeze', 'system: unresolved incident', 'token: upgradeable', 'system: KYC']);
       assert.ok(html.includes('AI-collected facts, not a risk rating') && html.includes('title="m: Facts &lt;b&gt;"'));
       assert.doesNotMatch(f({ tier: 2, category: 'x', signals: sig, sources: [] }), /<span|not a risk rating/);
       assert.doesNotMatch(f({ tier: null, category: 'x', signals: null, sources: [] }), /<span/);

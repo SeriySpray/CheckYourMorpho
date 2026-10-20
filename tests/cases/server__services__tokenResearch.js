@@ -42,15 +42,16 @@ const REDIRECT = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect
 export default {
   SCHEMA_PATH: [['the schema file exists and is valid JSON with the required keys', ({ SCHEMA_PATH: p }) => {
     const s = JSON.parse(fs.readFileSync(p, 'utf8'));
-    assert.ok(s.required.includes('signals') && s.required.includes('sources') && s.required.includes('summary'));
+    assert.ok(s.required.includes('token_signals') && s.required.includes('system_signals') && s.required.includes('sources') && s.required.includes('summary'));
     for (const k of ['risk_tier', 'tier_rationale', 'tier_source_ids']) assert.ok(!(k in s.properties), k);
-    assert.equal(Object.keys(s.properties.signals.properties).length, 12); assert.equal(s.additionalProperties, false);
+    assert.deepEqual([Object.keys(s.properties.token_signals.properties).length, Object.keys(s.properties.system_signals.properties).length], [5, 9]); assert.ok(!('signals' in s.properties)); assert.equal(s.additionalProperties, false);
     assert.equal(s.properties.sources.items.properties.url.pattern, '^https://');
   }]],
   RESEARCH_CATEGORIES: [['comes from the schema and covers the fixtures', ({ RESEARCH_CATEGORIES: c }) => {
     assert.ok(c.length > 10 && c.includes('rwa-credit') && c.includes('wrapped-crypto') && c.includes('other'));
   }]],
-  PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-3')]],
+  PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-4')]],
+  TOKEN_SIGNAL_KEYS: [['the five contract-level signals of the schema', ({ TOKEN_SIGNAL_KEYS: k }) => assert.deepEqual(k, ['can_freeze_or_blacklist', 'can_mint_without_limit', 'upgradeable_proxy', 'has_timelock', 'admin_multisig'])]],
   REQUEUE_AGE_SEC: [['7 days', ({ REQUEUE_AGE_SEC: v }) => assert.equal(v, 7 * DAY)]],
   EXPLORERS: [['known explorers are https token pages', ({ EXPLORERS: e }) => {
     assert.deepEqual(Object.keys(e).map(Number).sort((a, b) => a - b), [1, 10, 137, 8453, 42161]);
@@ -68,11 +69,11 @@ export default {
   ],
 
   validateResearch: [
-    ['the real WETH answer is valid', ({ validateResearch: f }) => { const r = validate(f, base()); assert.deepEqual(r, { ok: true, errors: [] }); }],
+    ['the real WETH answer is valid', ({ validateResearch: f }) => { const r = validate(f, base()); assert.deepEqual(r, { ok: true, errors: [], confidence: 'high', notes: [] }); }],
     ['the real syrupUSDC answer is valid once its redirects are resolved', ({ validateResearch: f }) => {
       const raw = JSON.parse(JSON.parse(SYRUP_OUT).response);
       const checks = raw.sources.map(s => ({ id: s.id, url: s.url, finalUrl: s.url.includes('vertexaisearch') ? `https://docs.example.org/p${s.id}` : s.url, status: 200, mentions: true }));
-      assert.deepEqual(validate(f, raw, checks, { chainId: 1, address: '0x80ac24aA929eaF5013f6436cdA2a7ba190f5Cc0b' }), { ok: true, errors: [] });
+      assert.deepEqual(validate(f, raw, checks, { chainId: 1, address: '0x80ac24aA929eaF5013f6436cdA2a7ba190f5Cc0b' }), { ok: true, errors: [], confidence: 'high', notes: [] });
     }],
     ['an unresolved search redirect is refused', ({ validateResearch: f }) => {
       const raw = JSON.parse(JSON.parse(SYRUP_OUT).response);
@@ -85,8 +86,8 @@ export default {
       assert.ok(withRaw(f, r => { r.facts.issuer.junk = 1; }).errors.some(e => /unexpected key/.test(e)));
     }],
     ['wrong types, enum, signal values and non-objects are refused', ({ validateResearch: f }) => {
-      assert.ok(!withRaw(f, r => { r.signals.kyc_required.value = 'yes'; }).ok); assert.ok(!withRaw(f, r => { r.summary = 'x'.repeat(401); }).ok);
-      assert.ok(!withRaw(f, r => { delete r.signals.kyc_required; }).ok); assert.ok(!withRaw(f, r => { r.signals.extra = { value: true, source_ids: [1] }; }).ok);
+      assert.ok(!withRaw(f, r => { r.system_signals.kyc_required.value = 'yes'; }).ok); assert.ok(!withRaw(f, r => { r.summary = 'x'.repeat(401); }).ok);
+      assert.ok(!withRaw(f, r => { delete r.system_signals.kyc_required; }).ok); assert.ok(!withRaw(f, r => { r.token_signals.extra = { value: true, source_ids: [1] }; }).ok);
       assert.ok(!withRaw(f, r => { r.risk_tier = 1; }).ok); assert.ok(!withRaw(f, r => { delete r.summary; }).ok);
       assert.ok(!withRaw(f, r => { r.category = 'banana'; }).ok); assert.ok(!withRaw(f, r => { r.confidence = 'certain'; }).ok);
       assert.ok(!withRaw(f, r => { r.sources[0].url = 'http://etherscan.io'; }).ok);
@@ -106,14 +107,14 @@ export default {
       assert.ok(withRaw(f, r => { r.facts.issuer.source_ids = [99]; }).errors.some(e => /source 99/.test(e)));
       assert.ok(withRaw(f, r => { r.audits[0].source_ids = [99]; }).errors.some(e => /audits\[0\]/.test(e)));
       assert.ok(withRaw(f, r => { r.incidents = [{ date: null, type: 'other', summary: 's', resolved: true, source_ids: [] }]; }).errors.some(e => /incidents\[0\]: no source/.test(e)));
-      assert.ok(withRaw(f, r => { r.signals.kyc_required.source_ids = [1, 99]; }).errors.some(e => /signals\.kyc_required: source 99/.test(e)));
+      assert.ok(withRaw(f, r => { r.system_signals.kyc_required.source_ids = [1, 99]; }).errors.some(e => /system_signals\.kyc_required: source 99/.test(e)));
     }],
     ['duplicate source ids are refused', ({ validateResearch: f }) => assert.ok(withRaw(f, r => { r.sources[1].id = 1; }).errors.some(e => /not unique/.test(e)))],
     ['a signal with a value needs sources, an unknown (null) signal does not', ({ validateResearch: f }) => {
-      assert.ok(withRaw(f, r => { r.signals.has_timelock = { value: true, source_ids: [] }; }).errors.some(e => /signals\.has_timelock: a value without a source/.test(e)));
-      assert.ok(withRaw(f, r => { r.signals.has_timelock = { value: false, source_ids: [] }; }).errors.some(e => /signals\.has_timelock/.test(e)));
-      assert.ok(withRaw(f, r => { r.signals.has_timelock = { value: null, source_ids: [] }; }).ok);
-      assert.ok(withRaw(f, r => { for (const k of Object.keys(r.signals)) r.signals[k] = { value: null, source_ids: [] }; }).ok);
+      assert.ok(withRaw(f, r => { r.token_signals.has_timelock = { value: true, source_ids: [] }; }).errors.some(e => /token_signals\.has_timelock: a value without a source/.test(e)));
+      assert.ok(withRaw(f, r => { r.token_signals.has_timelock = { value: false, source_ids: [] }; }).errors.some(e => /token_signals\.has_timelock/.test(e)));
+      assert.ok(withRaw(f, r => { r.token_signals.has_timelock = { value: null, source_ids: [] }; }).ok);
+      assert.ok(withRaw(f, r => { for (const g of [r.token_signals, r.system_signals]) for (const k of Object.keys(g)) g[k] = { value: null, source_ids: [] }; }).ok);
     }],
     ['an unconfirmed identity is refused', ({ validateResearch: f }) => {
       assert.ok(withRaw(f, r => { r.identity_confirmed = false; }).errors.some(e => /identity is not confirmed/.test(e)));
@@ -127,12 +128,15 @@ export default {
       const one = mk({ status: 404 }); one[1].status = 200;
       assert.ok(validate(f, low, one).ok);
     }],
-    ['high confidence needs two verified sources; medium needs one', ({ validateResearch: f }) => {
+    ['high confidence with one verified source is lowered to medium, not rejected; with two it stays; with none the record is rejected', ({ validateResearch: f }) => {
       const raw = base(); raw.confidence = 'high';
-      const one = raw.sources.map((s, i) => ({ id: s.id, url: s.url, finalUrl: s.url, status: i === 0 ? 200 : 404, mentions: true }));
-      assert.ok(validate(f, raw, one).errors.some(e => /high confidence needs at least 2/.test(e)));
-      raw.confidence = 'medium'; assert.ok(validate(f, raw, one).ok);
-      raw.confidence = 'high'; one[1].status = 200; assert.ok(validate(f, raw, one).ok);
+      const mk = n => raw.sources.map((s, i) => ({ id: s.id, url: s.url, finalUrl: s.url, status: i < n ? 200 : 404, mentions: true }));
+      const one = validate(f, raw, mk(1));
+      assert.deepEqual([one.ok, one.confidence, one.notes], [true, 'medium', ['confidence_downgraded: from high to medium']]);
+      const two = validate(f, raw, mk(2)); assert.deepEqual([two.ok, two.confidence, two.notes], [true, 'high', []]);
+      const none = validate(f, raw, mk(0)); assert.ok(!none.ok && none.errors.some(e => /no source was opened/.test(e)));
+      raw.confidence = 'medium'; assert.deepEqual([validate(f, raw, mk(1)).ok, validate(f, raw, mk(1)).confidence], [true, 'medium']);
+      raw.confidence = 'low'; assert.equal(validate(f, raw, mk(1)).confidence, 'low');
     }],
     ['http, IP and credential source URLs are refused', ({ validateResearch: f }) => {
       for (const u of ['https://1.2.3.4/x', 'https://localhost/x', 'https://u:p@etherscan.io/x']) {
@@ -150,13 +154,24 @@ export default {
   applyResearch: [
     ['first result is stored with signals, no tier, status unrated and a history row', async ({ applyResearch: f }) => {
       const db = freshDb();
-      assert.deepEqual(apply(f, db, base()), { outcome: 'accepted', errors: [] });
+      assert.deepEqual(apply(f, db, base()), { outcome: 'accepted', errors: [], notes: [] });
       const r = row(db);
       assert.deepEqual([r.chain_id, r.address, r.risk_tier, r.status, r.pending_tier, r.tier_rationale, r.model, r.run_id, r.researched_at, r.category], [1, WETH, null, 'unrated', null, null, 'm', 'r1', NOW, 'wrapped-crypto']);
       assert.equal(JSON.parse(r.facts_json).backing.value.startsWith('Backed 1:1'), true);
-      assert.equal(JSON.parse(r.signals_json).independently_audited.value, true);
+      assert.equal(JSON.parse(r.signals_json).system.independently_audited.value, true); assert.equal(JSON.parse(r.signals_json).token.upgradeable_proxy.value, false);
       assert.equal(r.summary, base().summary);
       assert.deepEqual(hist(db), ['accepted']);
+    }],
+    ['high confidence with one verified source is stored as medium and the downgrade is noted in history', async ({ applyResearch: f }) => {
+      const db = freshDb(); const raw = base(); raw.confidence = 'high';
+      const checks = okChecks(raw).map((c, i) => ({ ...c, status: i === 0 ? 200 : 404 }));
+      const res = f(db, { chainId: 1, address: WETH, raw, checks, runId: 'r1', model: 'm', promptVersion: 'p' }, NOW);
+      assert.deepEqual([res.outcome, res.notes], ['accepted', ['confidence_downgraded: from high to medium']]);
+      assert.equal(row(db).confidence, 'medium'); assert.equal(JSON.parse(row(db).raw_json).confidence, 'medium');
+      assert.deepEqual(JSON.parse(db.prepare('SELECT errors_json FROM token_research_history').get().errors_json), ['confidence_downgraded: from high to medium']);
+      const db2 = freshDb();
+      const none = f(db2, { chainId: 1, address: WETH, raw, checks: checks.map(c => ({ ...c, status: 404 })), runId: 'r1', model: 'm', promptVersion: 'p' }, NOW);
+      assert.equal(none.outcome, 'rejected'); assert.equal(db2.prepare('SELECT COUNT(*) AS c FROM token_research').get().c, 0);
     }],
     ['an invalid result is rejected and never overwrites the current record', async ({ applyResearch: f }) => {
       const db = freshDb(); apply(f, db, base());
@@ -169,10 +184,10 @@ export default {
     }],
     ['a newer valid result replaces the current one and both stay in history', async ({ applyResearch: f }) => {
       const db = freshDb(); apply(f, db, base());
-      const next = base(); next.summary = 'Newer summary'; next.signals.kyc_required = { value: true, source_ids: [1] };
+      const next = base(); next.summary = 'Newer summary'; next.system_signals.kyc_required = { value: true, source_ids: [1] };
       assert.equal(apply(f, db, next, 'r2', NOW + DAY).outcome, 'accepted');
       assert.equal(db.prepare('SELECT COUNT(*) AS c FROM token_research').get().c, 1);
-      assert.deepEqual([row(db).run_id, row(db).summary, JSON.parse(row(db).signals_json).kyc_required.value], ['r2', 'Newer summary', true]);
+      assert.deepEqual([row(db).run_id, row(db).summary, JSON.parse(row(db).signals_json).system.kyc_required.value], ['r2', 'Newer summary', true]);
       assert.deepEqual(db.prepare('SELECT run_id FROM token_research_history ORDER BY id').all().map(h => h.run_id), ['r1', 'r2']);
       assert.equal(JSON.parse(db.prepare('SELECT raw_json FROM token_research_history ORDER BY id').all()[0].raw_json).summary, base().summary);
     }],
@@ -242,7 +257,7 @@ export default {
     ['contains the token, explorer link, hints, date, tools rule and injection guard', ({ buildResearchPrompt: f }) => {
       const p = f({ chainId: 1, address: WETH, symbol: 'WETH', tags: ['eth'] }, '2026-10-21');
       for (const part of ['symbol WETH', 'chain Ethereum (chain id 1)', `contract ${WETH}`, `https://etherscan.io/token/${WETH}`, '["eth"]', 'Today is 2026-10-21',
-        'Use ONLY the search_web and read_url_content tools', 'Never cite vertexaisearch redirect links', 'at least 2', 'untrusted data', 'STEP 3 - SIGNALS', 'can_freeze_or_blacklist', 'oracle_is_market_price', 'Do NOT assess its risk']) {
+        'Use ONLY the search_web and read_url_content tools', 'Never cite vertexaisearch redirect links', 'at least 2', 'untrusted data', 'STEP 3 - SIGNALS', 'token_signals', 'system_signals', 'protocol_admin_multisig', 'Never mix them', 'can_freeze_or_blacklist', 'oracle_is_market_price', 'Do NOT assess its risk']) {
         assert.ok(p.includes(part), part);
       }
     }],
@@ -266,7 +281,7 @@ export default {
 
   extractResearchJson: [
     ['real agy wrapper: the response string is parsed', ({ extractResearchJson: f }) => {
-      const r = f(WETH_OUT); assert.equal(r.address, WETH); assert.equal(r.signals.independently_audited.value, true); assert.ok(!('risk_tier' in r)); assert.equal(r.sources.length, 7);
+      const r = f(WETH_OUT); assert.equal(r.address, WETH); assert.equal(r.system_signals.independently_audited.value, true); assert.ok(!('risk_tier' in r)); assert.equal(r.sources.length, 7);
       assert.equal(f(SYRUP_OUT).category, 'rwa-credit');
     }],
     ['structured_output is used when response is not JSON', ({ extractResearchJson: f }) => {

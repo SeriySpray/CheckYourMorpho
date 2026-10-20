@@ -14,7 +14,8 @@ export const SCHEMA_PATH = fileURLToPath(new URL('../data/researchSchema.json', 
 const SCHEMA = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
 
 export const RESEARCH_CATEGORIES = SCHEMA.properties.category.enum;
-export const PROMPT_VERSION = 'research-prompt-3';
+export const TOKEN_SIGNAL_KEYS = Object.keys(SCHEMA.properties.token_signals.properties);
+export const PROMPT_VERSION = 'research-prompt-4';
 // A record older than this goes back to the queue
 export const REQUEUE_AGE_SEC = 7 * 86400;
 const BACKOFF_WINDOW_SEC = 21 * 86400;
@@ -83,7 +84,7 @@ const dateOk = (s, nowSec) => typeof s === 'string' && Number.isFinite(Date.pars
  * @param {{chainId:number, address:string}} want The token that was asked for
  * @param {Array<{id:number, finalUrl:string|null, status:number, mentions:boolean}>} checks Result of checkSources
  * @param {number} nowSec
- * @returns {{ok:boolean, errors:string[]}}
+ * @returns {{ok:boolean, errors:string[], confidence?:string, notes?:string[]}} confidence is the accepted one (possibly lowered, then notes say so)
  */
 export function validateResearch(raw, want, checks, nowSec) {
   const errors = [];
@@ -104,9 +105,11 @@ export function validateResearch(raw, want, checks, nowSec) {
   }
   raw.audits.forEach((a, i) => { if (!a.source_ids.length) errors.push(`audits[${i}]: no source`); cites(`audits[${i}]`, a.source_ids); });
   raw.incidents.forEach((x, i) => { if (!x.source_ids.length) errors.push(`incidents[${i}]: no source`); cites(`incidents[${i}]`, x.source_ids); });
-  for (const [name, sig] of Object.entries(raw.signals)) {
-    if (sig.value !== null && !sig.source_ids.length) errors.push(`signals.${name}: a value without a source`);
-    cites(`signals.${name}`, sig.source_ids);
+  for (const group of ['token_signals', 'system_signals']) {
+    for (const [name, sig] of Object.entries(raw[group])) {
+      if (sig.value !== null && !sig.source_ids.length) errors.push(`${group}.${name}: a value without a source`);
+      cites(`${group}.${name}`, sig.source_ids);
+    }
   }
 
   const checkById = new Map((checks || []).map(c => [c.id, c]));
@@ -123,8 +126,12 @@ export function validateResearch(raw, want, checks, nowSec) {
   // A source counts only when it was opened (status 200) and names the token
   const verified = raw.sources.filter(x => checkById.get(x.id)?.status === 200 && checkById.get(x.id)?.mentions === true).length;
   if (!verified) errors.push('no source was opened (status 200) and mentions the token');
-  if (raw.confidence === 'high' && verified < 2) errors.push('high confidence needs at least 2 verified sources');
-  return { ok: errors.length === 0, errors };
+  // Too high a confidence is lowered, not rejected: 2+ verified sources allow high, 1 allows medium (0 is rejected above)
+  const cap = verified >= 2 ? 'high' : 'medium';
+  const order = ['low', 'medium', 'high'];
+  const confidence = order.indexOf(raw.confidence) > order.indexOf(cap) ? cap : raw.confidence;
+  const notes = confidence !== raw.confidence ? [`confidence_downgraded: from ${raw.confidence} to ${confidence}`] : [];
+  return { ok: errors.length === 0, errors, confidence, notes };
 }
 
 // --- Storage ----------------------------------------------------------------------------------------------------
@@ -138,24 +145,24 @@ function withFinalUrls(raw, checks) {
 /**
  * Validates one result and applies it to token_research. A valid result replaces the current record (every received result
  * stays in token_research_history); an invalid one never touches it. risk_tier stays empty until an analyst model sets it.
- * @returns {{outcome:'accepted'|'rejected', errors:string[]}}
+ * @returns {{outcome:'accepted'|'rejected', errors:string[], notes:string[]}}
  */
 export function applyResearch(db, { chainId, address, raw, checks, runId, model, promptVersion }, nowSec) {
   const addr = lower(address);
   const chain = Number(chainId);
-  const { ok, errors } = validateResearch(raw, { chainId: chain, address: addr }, checks, nowSec);
+  const { ok, errors, confidence, notes = [] } = validateResearch(raw, { chainId: chain, address: addr }, checks, nowSec);
   const outcome = ok ? 'accepted' : 'rejected';
   db.exec('BEGIN IMMEDIATE TRANSACTION;');
   try {
     if (ok) {
-      const r = withFinalUrls(raw, checks);
+      const r = { ...withFinalUrls(raw, checks), confidence };
       db.prepare(`INSERT OR REPLACE INTO token_research (chain_id, address, symbol, category, risk_tier, confidence, summary, facts_json, signals_json, sources_json,
         checks_json, as_of, researched_at, run_id, model, prompt_version, status, pending_tier, raw_json) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unrated', NULL, ?)`)
-        .run(chain, addr, r.symbol, r.category, r.confidence, r.summary, JSON.stringify(r.facts), JSON.stringify(r.signals), JSON.stringify(r.sources), JSON.stringify(checks ?? []),
+        .run(chain, addr, r.symbol, r.category, r.confidence, r.summary, JSON.stringify(r.facts), JSON.stringify({ token: r.token_signals, system: r.system_signals }), JSON.stringify(r.sources), JSON.stringify(checks ?? []),
           r.as_of, nowSec, runId, model, promptVersion, JSON.stringify(r));
     }
     db.prepare(`INSERT INTO token_research_history (chain_id, address, run_id, received_at, outcome, risk_tier, errors_json, raw_json, checks_json)
-      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`).run(chain, addr, runId, nowSec, outcome, JSON.stringify(errors), JSON.stringify(raw ?? null), JSON.stringify(checks ?? []));
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`).run(chain, addr, runId, nowSec, outcome, JSON.stringify([...errors, ...notes]), JSON.stringify(raw ?? null), JSON.stringify(checks ?? []));
     db.prepare(`DELETE FROM token_research_history WHERE chain_id = ? AND address = ? AND id NOT IN
       (SELECT id FROM token_research_history WHERE chain_id = ? AND address = ? ORDER BY received_at DESC, id DESC LIMIT ?)`).run(chain, addr, chain, addr, HISTORY_KEEP);
     db.exec('COMMIT;');
@@ -163,7 +170,7 @@ export function applyResearch(db, { chainId, address, raw, checks, runId, model,
     db.exec('ROLLBACK;');
     throw err;
   }
-  return { outcome, errors };
+  return { outcome, errors, notes };
 }
 
 /**
@@ -220,8 +227,9 @@ export function buildResearchPrompt(token, today) {
     '',
     'STEP 2 - FACTS. Fill in: issuer, underlying, backing, redemption, price_oracle, admin_controls, liquidity, regulatory. Also list audits and incidents (depegs, exploits, redemption halts, regulatory actions). Prefer the issuer\'s official docs, audit reports, block explorers, DefiLlama, rwa.xyz, L2Beat, reputable post-mortems. Do not cite social media or forums.',
     '',
-    'STEP 3 - SIGNALS. For each signal give value true, false or null (null = unknown or not found) and the source ids that show it:',
-    'can_freeze_or_blacklist (an address can freeze or blacklist holders), can_mint_without_limit (an admin can mint without a hard cap), upgradeable_proxy (the contract logic can be upgraded), has_timelock (admin actions pass through a timelock), admin_multisig (admin keys are held by a multisig), redemption_gated (redemption is limited, delayed, queued or restricted to approved parties), kyc_required (holding or redeeming needs KYC), custodial_backing (backing is held by a custodian or off-chain), backing_attested (proof of reserves or a regular attestation exists), independently_audited (contracts have an audit by a third party), has_unresolved_incident (a depeg, exploit, halt or enforcement action is not resolved), oracle_is_market_price (the price comes from a market feed, not from the issuer\'s own rate).',
+    'STEP 3 - SIGNALS. Two groups, each signal is true, false or null (null = unknown or not found) with the source ids that show it. token_signals describe ONLY the code and the rights on the token contract itself. system_signals describe what stands behind the token: the issuing protocol, the custodian, the redemption queue, the price feed. Never mix them: a protocol multisig or timelock is not a property of the token contract.',
+    'token_signals: can_freeze_or_blacklist (an address can freeze or blacklist holders), can_mint_without_limit (an admin can mint without a hard cap), upgradeable_proxy (the token contract logic can be upgraded), has_timelock (admin actions on the token pass through a timelock), admin_multisig (the token contract admin keys are held by a multisig). For an immutable contract with no admin functions use upgradeable_proxy=false, can_freeze_or_blacklist=false, admin_multisig=false; has_timelock is false or null depending on the source. Do NOT set these to true because the protocol DAO has a multisig.',
+    'system_signals: redemption_gated (redemption is limited, delayed, queued or restricted to approved parties), kyc_required (holding or redeeming needs KYC), custodial_backing (backing is held by a custodian or off-chain), backing_attested (proof of reserves or a regular attestation exists), independently_audited (contracts have an audit by a third party), has_unresolved_incident (a depeg, exploit, halt or enforcement action is not resolved), oracle_is_market_price (the price comes from a market feed, not from the issuer\'s own rate), protocol_admin_multisig (the protocol or issuer admin keys are held by a multisig), protocol_has_timelock (protocol admin actions pass through a timelock).',
     'Also write summary: at most 400 characters, facts only, no opinion. confidence is how well the collected facts are supported: high only if at least 2 primary sources agree.',
     '',
     'CITATION RULES',

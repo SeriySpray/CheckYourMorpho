@@ -1814,8 +1814,8 @@ function updateStressedExitDisplay(isStressed) {
 
 // Signals shown as chips when true, in this order, at most 4. Positive signals (timelock, audit) are left out so the line never reads as a rating.
 const SIGNAL_CHIPS = [
-  ['can_freeze_or_blacklist', 'can freeze'], ['can_mint_without_limit', 'unlimited mint'], ['has_unresolved_incident', 'unresolved incident'],
-  ['upgradeable_proxy', 'upgradeable'], ['kyc_required', 'KYC'], ['custodial_backing', 'custodial'], ['redemption_gated', 'gated redemption'], ['oracle_is_market_price', 'market oracle']
+  ['token', 'can_freeze_or_blacklist', 'can freeze'], ['token', 'can_mint_without_limit', 'unlimited mint'], ['system', 'has_unresolved_incident', 'unresolved incident'],
+  ['token', 'upgradeable_proxy', 'upgradeable'], ['system', 'kyc_required', 'KYC'], ['system', 'custodial_backing', 'custodial'], ['system', 'redemption_gated', 'gated redemption'], ['system', 'oracle_is_market_price', 'market oracle']
 ];
 
 /**
@@ -1836,8 +1836,8 @@ function researchCellHtml(r) {
   if (links.length) {
     parts.push('sources ' + links.map((x, i) => `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(x.title || x.url)}">[${i + 1}]</a>`).join(' '));
   }
-  const chips = rated ? [] : SIGNAL_CHIPS.filter(([k]) => r.signals?.[k] === true).slice(0, 4)
-    .map(([, label]) => `<span style="border:1px solid var(--border-color, rgba(255,255,255,0.2)); border-radius:3px; padding:0 4px; margin-right:3px;">${label}</span>`);
+  const chips = rated ? [] : SIGNAL_CHIPS.filter(([g, k]) => r.signals?.[g]?.[k] === true).slice(0, 4)
+    .map(([g, , label]) => `<span style="border:1px solid var(--border-color, rgba(255,255,255,0.2)); border-radius:3px; padding:0 4px; margin-right:3px;">${g}: ${label}</span>`);
   const tip = escapeHtml([r.model, r.summary || r.rationale].filter(Boolean).join(': '));
   return `<div style="${style}" title="${tip}">${parts.join(' · ')}</div>`
     + (chips.length ? `<div style="${style} margin-top:2px;">${chips.join('')}</div>` : '')
