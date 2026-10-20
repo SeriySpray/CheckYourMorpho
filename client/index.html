@@ -232,11 +232,11 @@
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="risk_desc" role="option" aria-selected="false">
-            <span class="item-text">Base asset share: Low First</span>
+            <span class="item-text">Low-risk collateral: Low First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="risk_asc" role="option" aria-selected="false">
-            <span class="item-text">Base asset share: High First</span>
+            <span class="item-text">Low-risk collateral: High First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
 
@@ -430,14 +430,14 @@
           <div class="meter-desc" id="risk-mqi-desc">Capital deployed in verified, non-defaulted markets</div>
         </div>
 
-        <!-- 2. Collateral Tags Meter -->
+        <!-- 2. Collateral (AI research) Meter -->
         <div class="meter-box">
           <div class="meter-header">
-            <span class="meter-label">Collateral Tags</span>
+            <span class="meter-label">Collateral (AI research)</span>
             <div class="meter-val-wrap">
               <span class="meter-value" id="risk-mix-val">0%</span>
               <span class="info-circle-wrap">
-                <button type="button" class="info-circle-btn" id="risk-mix-info-btn" aria-label="How collateral tags are grouped" aria-describedby="risk-mix-popover">
+                <button type="button" class="info-circle-btn" id="risk-mix-info-btn" aria-label="How collateral is rated" aria-describedby="risk-mix-popover">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"></circle>
                     <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -445,9 +445,9 @@
                   </svg>
                 </button>
                 <div class="info-popover" id="risk-mix-popover" role="tooltip">
-                  <div class="info-popover-title">Tag groups</div>
+                  <div class="info-popover-title">AI research</div>
                   <div class="info-popover-body">
-                    Share of capital lent against base assets (BTC, ETH, stablecoins, pegs). Tags are set by Morpho; they describe the type of a token, not a risk rating. The groups (base asset, neutral, special type) are chosen by the author in an open table in the README.
+                    Share of capital lent against collateral rated tier 1 or 2 (least fragile) on a 1 to 5 scale. Ratings are judgements by an AI research agent (model and date shown beside each token) from public sources. They may be wrong or outdated and are not financial advice or an official rating. Tokens without a fresh rating are shown as unrated and never counted as safe.
                   </div>
                 </div>
               </span>
@@ -456,7 +456,7 @@
           <div class="meter-track">
             <div class="meter-fill" id="risk-mix-bar" style="width: 0%;"></div>
           </div>
-          <div class="meter-desc" id="risk-mix-desc">Share of capital behind base asset collateral</div>
+          <div class="meter-desc" id="risk-mix-desc">Share of capital behind tier 1 and 2 collateral</div>
         </div>
 
         <!-- 3. Instant Exit Capacity Meter -->
@@ -492,7 +492,7 @@
         <div class="curator-audit-box">
           <div class="curator-audit-header">
             <span class="curator-audit-title">Collateral Allocation Breakdown</span>
-            <span class="discipline-badge" id="risk-effective-assets">0 tags</span>
+            <span class="discipline-badge" id="risk-effective-assets">0 tokens</span>
           </div>
           <div class="collateral-breakdown-list" id="risk-collateral-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
             <!-- Rendered dynamically -->

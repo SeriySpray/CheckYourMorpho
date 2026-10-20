@@ -205,7 +205,7 @@ export default {
   ],
 
   formatEventDetails: [
-    ['людські деталі для 33 видів подій', ({ formatEventDetails }) => {
+    ['людські деталі для 34 видів подій', ({ formatEventDetails }) => {
       // 1. fee_changed
       assert.equal(formatEventDetails({ oldFee: 0.10, newFee: 0.15 }, 'fee_changed'), 'Fee 10% to 15%');
       assert.equal(formatEventDetails({ feeRecipient: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' }, 'fee_changed'), 'Recipient 0x7099...79C8');
@@ -305,6 +305,11 @@ export default {
 
       // 33. collateral_class_share_crossed
       assert.equal(formatEventDetails({ previousLevel: 'GREEN', currentLevel: 'YELLOW' }, 'collateral_class_share_crossed'), 'GREEN to YELLOW');
+
+      // 34. collateral_tier_changed
+      assert.equal(formatEventDetails({ collateralSymbol: 'sUSDe', previousTier: 2, currentTier: 4 }, 'collateral_tier_changed'), 'sUSDe: tier 2 to 4 (AI research)');
+      assert.equal(formatEventDetails({ previousTier: 3, currentTier: 1 }, 'collateral_tier_changed'), 'Collateral: tier 3 to 1 (AI research)');
+      assert.equal(formatEventDetails({}, 'collateral_tier_changed'), '');
     }],
     ['ніколи не виводить технічні ключі і повертає порожній рядок при відсутності людських деталей', ({ formatEventDetails }) => {
       const technicalOnly = {
@@ -339,7 +344,7 @@ export default {
     ['за замовчуванням виключає reallocation зі списку', ({ getEventKinds }) => {
       const kindsWithout = getEventKinds(false);
       assert.equal(kindsWithout.includes('reallocation'), false);
-      assert.equal(kindsWithout.length, 32);
+      assert.equal(kindsWithout.length, 33);
       assert.ok(kindsWithout.includes('fee_changed'));
       assert.ok(kindsWithout.includes('pending_cap_increase'));
       assert.ok(kindsWithout.includes('verdict_worsened'));
@@ -347,7 +352,7 @@ export default {
     ['якщо увімкнено, включає reallocation', ({ getEventKinds }) => {
       const kindsWith = getEventKinds(true);
       assert.equal(kindsWith.includes('reallocation'), true);
-      assert.equal(kindsWith.length, 33);
+      assert.equal(kindsWith.length, 34);
     }]
   ],
 

@@ -494,8 +494,8 @@ function updateActiveFilterChips() {
       liq_desc: 'Free Liquidity: High to Low',
       mqi_asc: 'Market Quality: Flagged First',
       mqi_desc: 'Market Quality: Clean First',
-      risk_desc: 'Base asset share: Low First',
-      risk_asc: 'Base asset share: High First'
+      risk_desc: 'Low-risk collateral: Low First',
+      risk_asc: 'Low-risk collateral: High First'
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -831,9 +831,10 @@ function applyVaultAuditData(vaultAddress, auditData) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
       }
       if (verdict.collateral?.tier !== undefined) matchingVault.collateralTier = verdict.collateral.tier;
-      if (verdict.collateral?.basePercent !== undefined) matchingVault.baseCollateralPercent = verdict.collateral.basePercent;
-      if (verdict.collateral?.specialPercent !== undefined) matchingVault.specialCollateralPercent = verdict.collateral.specialPercent;
-      if (verdict.collateral?.unclassifiedPercent !== undefined) matchingVault.unclassifiedCollateralPercent = verdict.collateral.unclassifiedPercent;
+      if (verdict.collateral?.lowRiskPercent !== undefined) matchingVault.lowRiskCollateralPercent = verdict.collateral.lowRiskPercent;
+      if (verdict.collateral?.highRiskPercent !== undefined) matchingVault.highRiskCollateralPercent = verdict.collateral.highRiskPercent;
+      if (verdict.collateral?.impairedPercent !== undefined) matchingVault.impairedCollateralPercent = verdict.collateral.impairedPercent;
+      if (verdict.collateral?.unratedPercent !== undefined) matchingVault.unratedCollateralPercent = verdict.collateral.unratedPercent;
     }
   }
 
@@ -1178,10 +1179,10 @@ function renderVaultExplorer() {
       return mqiSortKey(b) - mqiSortKey(a);
     }
     if (explorerFilters.sort === 'risk_desc' || explorerFilters.sort === 'risk_asc') {
-      // sorted by the base asset share (low first for risk_desc); vaults with no collateral picture go last in both directions
+      // sorted by the low-risk collateral share (low first for risk_desc); vaults with no collateral picture go last in both directions
       const noPicture = v => v.collateralTier === 'UNALLOCATED' || v.collateralTier === 'UNKNOWN';
       if (noPicture(a) !== noPicture(b)) return noPicture(a) ? 1 : -1;
-      const diff = (a.baseCollateralPercent ?? 0) - (b.baseCollateralPercent ?? 0);
+      const diff = (a.lowRiskCollateralPercent ?? 0) - (b.lowRiskCollateralPercent ?? 0);
       return explorerFilters.sort === 'risk_desc' ? diff : -diff;
     }
     // Default: Total Deposits (TVL)
@@ -1812,6 +1813,25 @@ function updateStressedExitDisplay(isStressed) {
 }
 
 /**
+ * Line under a collateral token in the allocation table: "T3 · category · AI research, date · sources [1] [2]".
+ * Source links are https only, escaped and marked nofollow; the rationale and model go into the tooltip.
+ * @param {object|null|undefined} r collateralResearch from the audit API
+ */
+function researchCellHtml(r) {
+  const style = 'color:var(--text-muted); font-size:10px;';
+  if (!r) return `<div style="${style}">unrated, no AI research yet</div>`;
+  const tier = r.tier ? `T${escapeHtml(r.tier)}` : 'unrated';
+  const parts = [tier, escapeHtml(r.category || 'other'), `AI research, ${escapeHtml(r.asOf || 'date unknown')}`];
+  if (r.stale) parts.push('stale, counted as unrated');
+  const links = (Array.isArray(r.sources) ? r.sources : []).filter(x => /^https:\/\//i.test(String(x?.url)));
+  if (links.length) {
+    parts.push('sources ' + links.map((x, i) => `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(x.title || x.url)}">[${i + 1}]</a>`).join(' '));
+  }
+  const tip = escapeHtml([r.model, r.rationale].filter(Boolean).join(': '));
+  return `<div style="${style}" title="${tip}">${parts.join(' · ')}</div>`;
+}
+
+/**
  * Populates all fields across Panel 1, Panel 2, and Panel 3.
  */
 function populateAuditModal(data, isQuietRefresh = false) {
@@ -1890,11 +1910,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
-  // 2. Collateral tags: share of capital behind base asset collateral, with the special type and untagged shares beside it
+  // 2. Collateral (AI research): share of capital behind tier 1 and 2 collateral, with the other tiers and unrated beside it
   const mix = verdict.collateral || {};
-  const mixTags = mix.tags || [];
+  const mixTokens = mix.tokens || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
-  const safePct = mix.basePercent ?? 0;
+  const safePct = mix.lowRiskPercent ?? 0;
 
   if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${safePct}%`;
   if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.round(safePct)}%`;
@@ -1902,7 +1922,8 @@ function populateAuditModal(data, isQuietRefresh = false) {
     if (isUnallocated) {
       DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
     } else {
-      DOM.riskMixDesc.textContent = `special type ${mix.specialPercent ?? 0}%, untagged or unlisted ${mix.unclassifiedPercent ?? 0}% of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`;
+      const t = mix.byRiskTier || {};
+      DOM.riskMixDesc.textContent = `tier 3 ${t[3] ?? 0}%, tier 4 ${t[4] ?? 0}%, tier 5 ${t[5] ?? 0}%, unrated ${mix.unratedPercent ?? 0}% of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`;
     }
   }
 
@@ -1947,14 +1968,14 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
     if (isUnallocated) {
-      DOM.riskEffectiveAssets.textContent = '0 tags';
+      DOM.riskEffectiveAssets.textContent = '0 tokens';
     } else {
-      DOM.riskEffectiveAssets.textContent = `${mixTags.length} tag${mixTags.length === 1 ? '' : 's'}`;
+      DOM.riskEffectiveAssets.textContent = `${mixTokens.length} token${mixTokens.length === 1 ? '' : 's'}`;
     }
   }
   if (DOM.riskCollateralList) {
     DOM.riskCollateralList.innerHTML = '';
-    const breakdown = mixTags.map(c => ({ label: c.tag, usd: c.usd, sharePercent: c.percent }));
+    const breakdown = mixTokens.map(c => ({ label: `${c.symbol || 'Unknown'} · ${c.tier ? 'T' + c.tier : 'unrated'}`, usd: c.usd, sharePercent: c.percent }));
     if (breakdown.length === 0) {
       DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
     } else {
@@ -1969,7 +1990,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
       });
       const note = document.createElement('span');
       note.style.cssText = 'color:var(--text-muted); font-size:10px; margin-top:4px;';
-      note.textContent = 'A token counts under each of its tags, so shares can add up to more than 100%.';
+      note.textContent = 'T1 is the least fragile, T5 the most. Unrated tokens have no usable AI research and are never counted as safe.';
       DOM.riskCollateralList.appendChild(note);
     }
   }
@@ -2020,7 +2041,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(a.collateralTags?.length ? a.collateralTags.join(', ') : 'no tags')}</div></td>
+        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(a.collateralTags?.length ? a.collateralTags.join(', ') : 'no tags')}</div>${researchCellHtml(a.collateralResearch)}</td>
         <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
         <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>

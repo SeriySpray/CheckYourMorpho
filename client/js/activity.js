@@ -40,7 +40,8 @@ const EVENT_KINDS = Object.freeze([
   'tvl_drop',
   'exit_liquidity_low',
   'vault_delisted',
-  'collateral_class_share_crossed'
+  'collateral_class_share_crossed',
+  'collateral_tier_changed'
 ]);
 
 const STORAGE_KEY_SEEN = 'cym_activity_seen_ts';
@@ -242,7 +243,7 @@ function formatCapDetails(details) {
 }
 
 /**
- * Builds a human-readable one-line text summary from event details object covering all 33 kinds.
+ * Builds a human-readable one-line text summary from event details object covering all 34 kinds.
  * Never outputs technical keys (functionName, txHash, validAt, configId, rawCap).
  * Returns empty string if no human details can be composed.
  */
@@ -428,6 +429,14 @@ function formatEventDetails(details, kind = '') {
   if (k === 'collateral_class_share_crossed') {
     if (details.previousLevel && details.currentLevel) {
       return `${details.previousLevel} to ${details.currentLevel}`;
+    }
+    return '';
+  }
+
+  // 25. Collateral research tier changed
+  if (k === 'collateral_tier_changed') {
+    if (details.previousTier !== undefined && details.currentTier !== undefined) {
+      return `${details.collateralSymbol || 'Collateral'}: tier ${details.previousTier} to ${details.currentTier} (AI research)`;
     }
     return '';
   }
