@@ -62,14 +62,14 @@ const sync = (mod, api, options) => withFetch(mockApi(api), () => mod.syncAllVau
 
 export default {
   reportUnknownCollateral: [
-    ['теги поза TAG_RISK потрапляють у лог і в результат, відомі - ні', ({ reportUnknownCollateral: f }) => {
+    ['теги поза TAG_KIND потрапляють у лог і в результат, відомі - ні', ({ reportUnknownCollateral: f }) => {
       const rows = [{ tags_json: '["eth","foo"]' }, { tags_json: '["rwa","foo","bar"]' }, { tags_json: 'null' }, { tags_json: '{' }];
       const warn = console.warn;
       const logged = [];
       console.warn = (...args) => logged.push(args.join(' '));
       try {
         assert.deepEqual(f({ prepare: () => ({ all: () => rows }) }), ['foo', 'bar']);
-        assert.equal(logged.length, 2); assert.match(logged[0], /'foo'.*TAG_RISK/);
+        assert.equal(logged.length, 2); assert.match(logged[0], /'foo'.*TAG_KIND/);
       } finally { console.warn = warn; }
     }],
     ['помилка БД не кидає виняток: повертає порожній список', ({ reportUnknownCollateral: f }) => {

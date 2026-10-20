@@ -232,11 +232,11 @@
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="risk_desc" role="option" aria-selected="false">
-            <span class="item-text">Collateral Risk: High First</span>
+            <span class="item-text">Base asset share: Low First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="risk_asc" role="option" aria-selected="false">
-            <span class="item-text">Collateral Risk: Low First</span>
+            <span class="item-text">Base asset share: High First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
 
@@ -437,7 +437,7 @@
             <div class="meter-val-wrap">
               <span class="meter-value" id="risk-mix-val">0%</span>
               <span class="info-circle-wrap">
-                <button type="button" class="info-circle-btn" id="risk-mix-info-btn" aria-label="How collateral risk is assessed" aria-describedby="risk-mix-popover">
+                <button type="button" class="info-circle-btn" id="risk-mix-info-btn" aria-label="How collateral tags are grouped" aria-describedby="risk-mix-popover">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"></circle>
                     <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -445,9 +445,9 @@
                   </svg>
                 </button>
                 <div class="info-popover" id="risk-mix-popover" role="tooltip">
-                  <div class="info-popover-title">Assessment</div>
+                  <div class="info-popover-title">Tag groups</div>
                   <div class="info-popover-body">
-                    The share of capital lent against collateral whose Morpho tags are all ordinary (BTC, ETH, stablecoins). Tags are set by Morpho and are sometimes wrong; which tags count as ordinary or elevated is <strong>the author's choice</strong>, published in the README. It is not an official rating or financial advice.
+                    Share of capital lent against base assets (BTC, ETH, stablecoins, pegs). Tags are set by Morpho; they describe the type of a token, not a risk rating. The groups (base asset, neutral, special type) are chosen by the author in an open table in the README.
                   </div>
                 </div>
               </span>
@@ -456,7 +456,7 @@
           <div class="meter-track">
             <div class="meter-fill" id="risk-mix-bar" style="width: 0%;"></div>
           </div>
-          <div class="meter-desc" id="risk-mix-desc">Share of capital behind ordinary collateral</div>
+          <div class="meter-desc" id="risk-mix-desc">Share of capital behind base asset collateral</div>
         </div>
 
         <!-- 3. Instant Exit Capacity Meter -->

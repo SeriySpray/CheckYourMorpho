@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const VAULT_ADDR = '0x1111111111111111111111111111111111111111';
 const NOW = 1_750_000_000;
 const DAY = 86400;
-const M = { collateral_model: 'morpho-tags-1' };
+const M = { collateral_model: 'morpho-tags-2' };
 
 const baseCtx = (overrides = {}) => ({
   address: VAULT_ADDR,
@@ -284,7 +284,7 @@ export default {
         liquidity: { exitUnknown: false, instantExitCapacityPercent: 40 },
         collateral: { tier: 'CLASSIFIED' }
       };
-      const st = buildWatchState(vault, allocs, verdict, { timelock: 86400, lastAdminEventTs: NOW, collateralModel: 'morpho-tags-1' });
+      const st = buildWatchState(vault, allocs, verdict, { timelock: 86400, lastAdminEventTs: NOW, collateralModel: 'morpho-tags-2' });
       assert.equal(st.chain_id, 8453);
       assert.equal(st.name, 'Base USDC Vault');
       assert.equal(st.verdict_level, 'red');
@@ -293,17 +293,17 @@ export default {
       assert.equal(st.is_listed, 1);
       assert.ok(st.bad_debt_markets['0xm1']);
       assert.equal(st.last_admin_event_ts, NOW);
-      assert.equal(st.collateral_model, 'morpho-tags-1'); assert.equal('collateral_level' in st, false);
+      assert.equal(st.collateral_model, 'morpho-tags-2'); assert.equal('collateral_level' in st, false);
       assert.equal(buildWatchState(vault, allocs, verdict).collateral_model, 'none');
     }],
-    ['flagged_markets: elevated-тег позначається, unclassified і ordinary ні', ({ buildWatchState }) => {
+    ['flagged_markets: special-тег позначається, unclassified і base ні', ({ buildWatchState }) => {
       const vault = { address: VAULT_ADDR, chain_id: 1, total_assets_usd: 1_000_000, liquidity_usd: 1e9 };
       const mk = (key, tags) => ({ market_unique_key: key, supply_assets_usd: 500_000, bad_debt_usd: 0, realized_bad_debt_usd: 0, is_listed: 1,
         oracle_address: '0x1', lltv_percent: 86, collateral_asset_symbol: key, loan_asset_symbol: 'USDC', warnings_json: '[]',
         collateral_asset_address: `0x${key}`, collateral_tags_json: tags });
       const st = buildWatchState(vault, [mk('rwa', '["stablecoin","rwa"]'), mk('none', null), mk('eth', '["eth"]')], null);
       assert.deepEqual(Object.keys(st.flagged_markets), ['rwa']);
-      assert.equal(st.flagged_markets.rwa.collateralState, 'elevated'); assert.deepEqual(st.flagged_markets.rwa.collateralTags, ['stablecoin', 'rwa']);
+      assert.equal(st.flagged_markets.rwa.collateralState, 'special'); assert.deepEqual(st.flagged_markets.rwa.collateralTags, ['stablecoin', 'rwa']);
     }],
   ],
   diffDerivedState: [
@@ -363,7 +363,7 @@ export default {
         ...M,
         bad_debt_markets: { '0xm1': { label: 'wstETH/USDC', badDebtUsd: 12000, supplyUsd: 200000 } },
         unverified_bad_debt_markets: [],
-        flagged_markets: { '0xm2': { label: 'sUSDe/USDC', collateralSymbol: 'sUSDe', collateralState: 'elevated', collateralTags: ['rwa'], reasons: [], supplyUsd: 300000 } },
+        flagged_markets: { '0xm2': { label: 'sUSDe/USDC', collateralSymbol: 'sUSDe', collateralState: 'special', collateralTags: ['rwa'], reasons: [], supplyUsd: 300000 } },
         is_listed: 0,
         collateral_tier: 'CLASSIFIED'
       };
@@ -372,7 +372,7 @@ export default {
       assert.deepEqual(JSON.parse(evs[1].details_json).collateralTags, ['rwa']);
     }],
     ['під час зміни моделі застави flagged_collateral_added мовчить, bad_debt_appeared ні', ({ diffDerivedState }) => {
-      const flagged = { '0xm2': { label: 'x', collateralState: 'elevated', collateralTags: ['rwa'], reasons: [], supplyUsd: 1 } };
+      const flagged = { '0xm2': { label: 'x', collateralState: 'special', collateralTags: ['rwa'], reasons: [], supplyUsd: 1 } };
       const evs = diffDerivedState({ bad_debt_markets: {}, flagged_markets: {} }, { ...M, bad_debt_markets: { '0xm1': { label: 'a', badDebtUsd: 1, supplyUsd: 1 } }, flagged_markets: flagged }, baseCtx(), NOW);
       assert.deepEqual(evs.map(e => e.kind), ['bad_debt_appeared']);
     }],

@@ -494,8 +494,8 @@ function updateActiveFilterChips() {
       liq_desc: 'Free Liquidity: High to Low',
       mqi_asc: 'Market Quality: Flagged First',
       mqi_desc: 'Market Quality: Clean First',
-      risk_desc: 'Collateral Risk: High First',
-      risk_asc: 'Collateral Risk: Low First'
+      risk_desc: 'Base asset share: Low First',
+      risk_asc: 'Base asset share: High First'
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -831,8 +831,8 @@ function applyVaultAuditData(vaultAddress, auditData) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
       }
       if (verdict.collateral?.tier !== undefined) matchingVault.collateralTier = verdict.collateral.tier;
-      if (verdict.collateral?.ordinaryPercent !== undefined) matchingVault.ordinaryCollateralPercent = verdict.collateral.ordinaryPercent;
-      if (verdict.collateral?.elevatedPercent !== undefined) matchingVault.elevatedCollateralPercent = verdict.collateral.elevatedPercent;
+      if (verdict.collateral?.basePercent !== undefined) matchingVault.baseCollateralPercent = verdict.collateral.basePercent;
+      if (verdict.collateral?.specialPercent !== undefined) matchingVault.specialCollateralPercent = verdict.collateral.specialPercent;
       if (verdict.collateral?.unclassifiedPercent !== undefined) matchingVault.unclassifiedCollateralPercent = verdict.collateral.unclassifiedPercent;
     }
   }
@@ -1178,10 +1178,10 @@ function renderVaultExplorer() {
       return mqiSortKey(b) - mqiSortKey(a);
     }
     if (explorerFilters.sort === 'risk_desc' || explorerFilters.sort === 'risk_asc') {
-      // risk is the share outside ordinary collateral; vaults with no collateral picture go last in both directions
+      // sorted by the base asset share (low first for risk_desc); vaults with no collateral picture go last in both directions
       const noPicture = v => v.collateralTier === 'UNALLOCATED' || v.collateralTier === 'UNKNOWN';
       if (noPicture(a) !== noPicture(b)) return noPicture(a) ? 1 : -1;
-      const diff = (a.ordinaryCollateralPercent ?? 0) - (b.ordinaryCollateralPercent ?? 0);
+      const diff = (a.baseCollateralPercent ?? 0) - (b.baseCollateralPercent ?? 0);
       return explorerFilters.sort === 'risk_desc' ? diff : -diff;
     }
     // Default: Total Deposits (TVL)
@@ -1890,11 +1890,11 @@ function populateAuditModal(data, isQuietRefresh = false) {
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
-  // 2. Collateral tags: share of capital behind ordinary collateral, with the elevated and unclassified shares beside it
+  // 2. Collateral tags: share of capital behind base asset collateral, with the special type and untagged shares beside it
   const mix = verdict.collateral || {};
   const mixTags = mix.tags || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
-  const safePct = mix.ordinaryPercent ?? 0;
+  const safePct = mix.basePercent ?? 0;
 
   if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : `${safePct}%`;
   if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated ? '0%' : `${Math.round(safePct)}%`;
@@ -1902,7 +1902,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
     if (isUnallocated) {
       DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
     } else {
-      DOM.riskMixDesc.textContent = `elevated ${mix.elevatedPercent ?? 0}%, unclassified ${mix.unclassifiedPercent ?? 0}% of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`;
+      DOM.riskMixDesc.textContent = `special type ${mix.specialPercent ?? 0}%, untagged or unlisted ${mix.unclassifiedPercent ?? 0}% of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`;
     }
   }
 

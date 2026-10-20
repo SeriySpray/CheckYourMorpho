@@ -510,8 +510,8 @@ export function getVaultCatalog() {
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
       collateralTier: collateral.tier,
-      ordinaryCollateralPercent: collateral.ordinaryPercent,
-      elevatedCollateralPercent: collateral.elevatedPercent,
+      baseCollateralPercent: collateral.basePercent,
+      specialCollateralPercent: collateral.specialPercent,
       unclassifiedCollateralPercent: collateral.unclassifiedPercent,
       updatedAt: row.metadata_updated_at
     };

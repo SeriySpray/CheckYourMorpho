@@ -9,7 +9,7 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 ## What it does
 
 - Lists every vault that Morpho marks as listed, on all chains the Morpho API returns, with search by name, symbol, curator or address and filters by network, asset and curator.
-- Sorts vaults by TVL, APY, liquidity, MQI or collateral risk.
+- Sorts vaults by TVL, APY, liquidity, MQI or base asset share of collateral.
 - Opens an audit panel for a vault: its allocations by market, MQI, collateral tags, instant and crowded exit capacity, and a list of red flags.
 - Lets you pin vaults in the browser (stored in `localStorage`).
 - Shows the vaults as a WebGL 2 particle sphere.
@@ -35,16 +35,16 @@ A failing market only lowers MQI when it is material: the allocation is at least
 
 Missing data does not lower the score. A market is compromised only for a known defect. A market whose bad debt or warnings the API did not return, and capital the sync could not expand (see Limitations), are unverified: they are left out of the MQI denominator and reported separately as `unverifiedPercent`, with the market shown as UNVERIFIED, until the data returns. MQI is `null` when nothing could be verified. A vault that holds assets but has no USD price also gets MQI `null` (unknown), not 100%; the price is taken from the vault's own markets when the API omits it.
 
-**Collateral tags.** A token is judged only by the tags Morpho assigns to it, not by its symbol and not by a list kept here. Risk is set per tag in one open table (below); there are no weights or thresholds, only shares of capital. Idle markets (no collateral asset, or LLTV 0) are not collateral and are shown separately. Shares are measured against the verified capital: capital behind adapters that could not be expanded is left out of the base and reported as `unverifiedPercent`.
+**Collateral tags.** A token is judged only by the tags Morpho assigns to it, not by its symbol and not by a list kept here. Each tag is placed in a group in one open table (below). The tags describe the type of a token, not how safe it is, and nothing here is a safety rating; there are no weights or thresholds, only shares of capital. Idle markets (no collateral asset, or LLTV 0) are not collateral and are shown separately. Shares are measured against the verified capital: capital behind adapters that could not be expanded is left out of the base and reported as `unverifiedPercent`.
 
-| Tag | Risk | Meaning |
+| Tag | Group | Meaning |
 | --- | --- | --- |
-| `btc` | ordinary | BTC or a BTC wrapper |
-| `eth` | ordinary | ETH or an ETH wrapper |
-| `stablecoin` | ordinary | Stablecoin |
-| `usd-pegged` | ordinary | Pegged to USD |
-| `eur-pegged` | ordinary | Pegged to EUR |
-| `EUR` | ordinary | EUR base asset or peg |
+| `btc` | base | BTC or a BTC wrapper |
+| `eth` | base | ETH or an ETH wrapper |
+| `stablecoin` | base | Stablecoin |
+| `usd-pegged` | base | Pegged to USD |
+| `eur-pegged` | base | Pegged to EUR |
+| `EUR` | base | EUR base asset or peg |
 | `simple-permit` | neutral | Gasless signature approvals |
 | `permit` | neutral | Gasless signature approvals |
 | `erc4626` | neutral | Vault share |
@@ -53,15 +53,15 @@ Missing data does not lower the score. A market is compromised only for a known 
 | `yield` | neutral | Token pays yield, the source is not named |
 | `lst` | neutral | Liquid staking token |
 | `lrt` | neutral | Liquid restaking token |
-| `rwa` | elevated | Off-chain assets or claims |
-| `stocks` | elevated | Tokenized shares |
-| `governance-token` | elevated | Price is not anchored to anything |
+| `rwa` | special | Off-chain assets or claims |
+| `stocks` | special | Tokenized shares |
+| `governance-token` | special | Price is not anchored to anything |
 
-A token is **elevated** if it has at least one elevated tag. Otherwise it is **unclassified** when it has no tags, a tag that is not in the table (logged after each sync), or no ordinary tag at all. Anything else is **ordinary**. The vault shows the share of capital in each of the three groups and a per-tag breakdown; a token counts under each of its tags, so the tag shares can add up to more than 100%. The verdict has no collateral flag: the shares are information only.
+A token is **special** if it has at least one special tag (RWA, stocks, governance token). Otherwise it is **unclassified** when it has no tags, a tag that is not in the table (logged after each sync), or no base tag at all. Anything else is a **base** asset (BTC, ETH, stablecoins, pegs). The vault shows the share of capital in each of the three groups and a per-tag breakdown; a token counts under each of its tags, so the tag shares can add up to more than 100%. The verdict has no collateral flag: the shares are information only.
 
-The `yield` tag is treated as neutral: it says the token pays yield but not where the yield comes from. A token whose only tag is `yield` (syrupUSDC and 20 others) cannot be told apart from risky ones by tags alone, so it stays unclassified and never becomes ordinary. Against the allocations at the time of writing (about $5.87B outside idle markets), `yield` as neutral gives ordinary $3.57B, elevated $0.64B, unclassified $1.66B; `yield` as elevated would give ordinary $3.01B, elevated $1.30B, unclassified $1.57B. About 26% of the capital has no tags at all.
+The `yield` tag is treated as neutral: it says the token pays yield but not where the yield comes from. A token whose only tag is `yield` (syrupUSDC and 20 others) cannot be placed in a group by tags alone, so it stays unclassified and never becomes base. Against the allocations at the time of writing (about $5.87B outside idle markets), `yield` as neutral gives base $3.57B, special $0.64B, unclassified $1.66B; `yield` as special would give base $3.01B, special $1.30B, unclassified $1.57B. About 26% of the capital has no tags at all.
 
-Morpho's tags are made by hand and are sometimes wrong, and the code does not patch them. Known cases: sUSDat is tagged `eth` but trades near $1; PT-trUSD and PT-strUSD carry `eth`; USDe has `rwa` on Ethereum but no tags on Base and chain 4663; EUTBL is tagged `eur-pegged` and `yield` only; GOOGLc, TSLAc, MSFTc and AMZNc have `rwa` without `stocks`; LsETH, uniBTC, hgETH, tETH, ETH+ and OETH lack `lst` or `lrt`. Which tag is ordinary, neutral or elevated is the author's choice, not an official rating.
+Morpho's tags are made by hand and are sometimes wrong, and the code does not patch them. Known cases: sUSDat is tagged `eth` but trades near $1; PT-trUSD and PT-strUSD carry `eth`; USDe has `rwa` on Ethereum but no tags on Base and chain 4663; EUTBL is tagged `eur-pegged` and `yield` only; GOOGLc, TSLAc, MSFTc and AMZNc have `rwa` without `stocks`; LsETH, uniBTC, hgETH, tETH, ETH+ and OETH lack `lst` or `lrt`. Which tag is base, neutral or special is the author's choice, not an official classification or rating.
 
 The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audit response for reference, but no longer drives a flag or the summary: it counted each token separately and marked a vault holding only cbBTC as extremely concentrated.
 
@@ -87,7 +87,7 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/status` | Row counts, time of the last full sync, whether a sync is running, last sync result, `stale` (no successful sync for over three sync intervals) and `lastSuccessAt`. |
-| GET | `/api/vaults` | Vault list with MQI, collateral risk and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
+| GET | `/api/vaults` | Vault list with MQI, collateral tag shares and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
 | GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations. |
 | POST | `/api/sync` | Starts a sync. Needs `Authorization: Bearer <SYNC_TOKEN>`. Returns 202, or waits and returns 200 with `?await=1`. Returns 403 if `SYNC_TOKEN` is not set, 401 for a wrong token, 409 while a sync is running and 413 for a body over 1 KB. |
 

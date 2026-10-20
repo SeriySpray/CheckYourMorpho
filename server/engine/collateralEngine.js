@@ -1,7 +1,7 @@
 /**
- * Collateral tag model. A token is judged only by the tags Morpho gave it, and risk is set per tag in the open
- * TAG_RISK table (see the README). Tokens with an elevated tag are elevated; tokens with no tags, an unlisted tag or no
- * base tag stay unclassified; the rest are ordinary. There are no weights or thresholds, only shares.
+ * Collateral tag model. A token is grouped only by the tags Morpho gave it; the group of each tag is set in the open
+ * TAG_KIND table (see the README). Tokens with a special tag are special; tokens with no tags, an unlisted tag or no
+ * base tag stay unclassified; the rest are base. There are no weights or thresholds, only shares.
  *
  * Shares are measured against the verified capital (TVL minus capital behind adapters that could not be expanded),
  * the same base the other engines use.
@@ -10,47 +10,47 @@ import { isIdleReserveMarket } from './hhiEngine.js';
 
 const keyOf = (chainId, address) => `${Number(chainId)}:${String(address || '').trim().toLowerCase()}`;
 
-// --- Morpho-tag model: risk is set per tag in one open table, a token is judged only by the tags Morpho gave it. ---
-export const COLLATERAL_MODEL = 'morpho-tags-1';
-export const TAG_RISK = {
-  btc: { risk: 'ordinary', note: 'BTC or a BTC wrapper' },
-  eth: { risk: 'ordinary', note: 'ETH or an ETH wrapper' },
-  stablecoin: { risk: 'ordinary', note: 'Stablecoin' },
-  'usd-pegged': { risk: 'ordinary', note: 'Pegged to USD' },
-  'eur-pegged': { risk: 'ordinary', note: 'Pegged to EUR' },
-  EUR: { risk: 'ordinary', note: 'EUR base asset or peg' },
-  'simple-permit': { risk: 'neutral', note: 'Gasless signature approvals' },
-  permit: { risk: 'neutral', note: 'Gasless signature approvals' },
-  erc4626: { risk: 'neutral', note: 'Vault share' },
-  'vault-v1': { risk: 'neutral', note: 'Vault share' },
-  'vault-v2': { risk: 'neutral', note: 'Vault share' },
-  yield: { risk: 'neutral', note: 'Token pays yield, the source is not named' },
-  lst: { risk: 'neutral', note: 'Liquid staking token' },
-  lrt: { risk: 'neutral', note: 'Liquid restaking token' },
-  rwa: { risk: 'elevated', note: 'Off-chain assets or claims' },
-  stocks: { risk: 'elevated', note: 'Tokenized shares' },
-  'governance-token': { risk: 'elevated', note: 'Price is not anchored to anything' }
+// --- Morpho-tag model: the group of a tag is set in one open table, a token is grouped only by the tags Morpho gave it. ---
+export const COLLATERAL_MODEL = 'morpho-tags-2';
+export const TAG_KIND = {
+  btc: { kind: 'base', note: 'BTC or a BTC wrapper' },
+  eth: { kind: 'base', note: 'ETH or an ETH wrapper' },
+  stablecoin: { kind: 'base', note: 'Stablecoin' },
+  'usd-pegged': { kind: 'base', note: 'Pegged to USD' },
+  'eur-pegged': { kind: 'base', note: 'Pegged to EUR' },
+  EUR: { kind: 'base', note: 'EUR base asset or peg' },
+  'simple-permit': { kind: 'neutral', note: 'Gasless signature approvals' },
+  permit: { kind: 'neutral', note: 'Gasless signature approvals' },
+  erc4626: { kind: 'neutral', note: 'Vault share' },
+  'vault-v1': { kind: 'neutral', note: 'Vault share' },
+  'vault-v2': { kind: 'neutral', note: 'Vault share' },
+  yield: { kind: 'neutral', note: 'Token pays yield, the source is not named' },
+  lst: { kind: 'neutral', note: 'Liquid staking token' },
+  lrt: { kind: 'neutral', note: 'Liquid restaking token' },
+  rwa: { kind: 'special', note: 'Off-chain assets or claims' },
+  stocks: { kind: 'special', note: 'Tokenized shares' },
+  'governance-token': { kind: 'special', note: 'Price is not anchored to anything' }
 };
 
 /**
- * Risk state of one token from its Morpho tags.
+ * Group of one token from its Morpho tags.
  * @param {string[]|null} tags
- * @returns {{state:'ordinary'|'elevated'|'unclassified', reason:null|'untagged'|'no base tag'|string}} reason is 'unlisted:<tag>' for a tag outside TAG_RISK
+ * @returns {{state:'base'|'special'|'unclassified', reason:null|'untagged'|'no base tag'|string}} reason is 'unlisted:<tag>' for a tag outside TAG_KIND
  */
 export function tokenState(tags) {
   if (!Array.isArray(tags) || !tags.length) return { state: 'unclassified', reason: 'untagged' };
-  const risks = tags.map(t => TAG_RISK[t]?.risk);
-  if (risks.includes('elevated')) return { state: 'elevated', reason: null };
-  const unlisted = tags.find(t => !TAG_RISK[t]);
+  const kinds = tags.map(t => TAG_KIND[t]?.kind);
+  if (kinds.includes('special')) return { state: 'special', reason: null };
+  const unlisted = tags.find(t => !TAG_KIND[t]);
   if (unlisted !== undefined) return { state: 'unclassified', reason: `unlisted:${unlisted}` };
-  if (!risks.includes('ordinary')) return { state: 'unclassified', reason: 'no base tag' };
-  return { state: 'ordinary', reason: null };
+  if (!kinds.includes('base')) return { state: 'unclassified', reason: 'no base tag' };
+  return { state: 'base', reason: null };
 }
 
 /** The tag table as a markdown table, the single source for the README. */
-export function tagRiskMarkdown() {
-  const rows = Object.entries(TAG_RISK).map(([tag, v]) => `| \`${tag}\` | ${v.risk} | ${v.note} |`);
-  return ['| Tag | Risk | Meaning |', '| --- | --- | --- |', ...rows].join('\n');
+export function tagKindMarkdown() {
+  const rows = Object.entries(TAG_KIND).map(([tag, v]) => `| \`${tag}\` | ${v.kind} | ${v.note} |`);
+  return ['| Tag | Group | Meaning |', '| --- | --- | --- |', ...rows].join('\n');
 }
 
 /** Tags from a token_tags JSON string; null when missing, 'null' or malformed. */
@@ -73,7 +73,7 @@ export function calculateTagMix(vault, allocations = []) {
 
   const byToken = new Map();
   const byTag = new Map();
-  const byState = { ordinary: 0, elevated: 0, unclassified: 0 };
+  const byState = { base: 0, special: 0, unclassified: 0 };
   let idleUsd = 0;
   let deployedUsd = 0;
   for (const alloc of allocations) {
@@ -92,17 +92,17 @@ export function calculateTagMix(vault, allocations = []) {
     byState[state] += usd;
     deployedUsd += usd;
     for (const tag of new Set(tags || [])) {
-      const risk = TAG_RISK[tag]?.risk;
-      if (risk && risk !== 'neutral') byTag.set(tag, (byTag.get(tag) || 0) + usd);
+      const kind = TAG_KIND[tag]?.kind;
+      if (kind && kind !== 'neutral') byTag.set(tag, (byTag.get(tag) || 0) + usd);
     }
   }
 
   return {
     tier: knownUsd <= 0 ? 'UNKNOWN' : deployedUsd <= 0 ? 'UNALLOCATED' : 'CLASSIFIED',
-    ordinaryPercent: pct(byState.ordinary),
-    elevatedPercent: pct(byState.elevated),
+    basePercent: pct(byState.base),
+    specialPercent: pct(byState.special),
     unclassifiedPercent: pct(byState.unclassified),
-    tags: [...byTag.entries()].sort((a, b) => b[1] - a[1]).map(([tag, usd]) => ({ tag, risk: TAG_RISK[tag].risk, usd: round(usd), percent: pct(usd) })),
+    tags: [...byTag.entries()].sort((a, b) => b[1] - a[1]).map(([tag, usd]) => ({ tag, kind: TAG_KIND[tag].kind, usd: round(usd), percent: pct(usd) })),
     tokens: [...byToken.values()].sort((a, b) => b.usd - a.usd).map(t => ({ ...t, usd: round(t.usd), percent: pct(t.usd) })),
     idlePercent: pct(idleUsd),
     undeployedPercent: pct(Math.max(0, knownUsd - idleUsd - deployedUsd)),

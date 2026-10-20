@@ -744,7 +744,7 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
       const collateralTags = parseTagsJson(alloc.collateral_tags_json);
       const collateralState = tokenState(collateralTags).state;
       // unclassified collateral is not a flag: it only means Morpho gave no usable tags
-      if (!cleanCheck.isClean || collateralState === 'elevated') {
+      if (!cleanCheck.isClean || collateralState === 'special') {
         flaggedMarkets[mKey] = {
           marketKey: mKey,
           label,

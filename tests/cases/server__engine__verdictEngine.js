@@ -55,7 +55,7 @@ export default {
     ['повертає метадані vault і точний summary', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), diversified());
       assert.equal(r.vaultAddress, '0xvault'); assert.equal(r.vaultName, 'Test Vault'); assert.equal(r.version, 'v1'); assert.equal(r.chainId, 1);
-      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral \(Morpho tags\): ordinary 100%, elevated 0%, unclassified 0%\. Exit Liquidity: 100%\.$/);
+      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral \(Morpho tags\): base asset 100%, special type \(RWA, stocks, governance\) 0%, untagged or unlisted tags 0%\. Exit Liquidity: 100%\.$/);
     }],
     ['vault без активної застави -> summary "Collateral: N/A"', ({ generateVaultVerdict: f }) =>
       assert.match(f(vault({ liquidity_usd: 100e6 }), []).summary, /Collateral: N\/A\. Exit Liquidity: 100%\.$/)],
@@ -72,19 +72,19 @@ export default {
       assert.equal(r.mqi.mqiPercent, 100);
       assert.equal(flag(r, 'Compromised Market Exposure').level, 'CRITICAL');
     }],
-    ['100% у WETH з тегом eth -> жодного прапорця застав, ordinary 100%', ({ generateVaultVerdict: f }) => {
+    ['100% у WETH з тегом eth -> жодного прапорця застав, base 100%', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6 })]);
-      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.ordinaryPercent, 100);
+      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.basePercent, 100);
     }],
     ['застава без тегів 100% -> прапорця немає, unclassified 100%', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6, collateral_tags_json: null })]);
       assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.unclassifiedPercent, 100);
-      assert.match(r.summary, /ordinary 0%, elevated 0%, unclassified 100%/);
+      assert.match(r.summary, /base asset 0%, special type \(RWA, stocks, governance\) 0%, untagged or unlisted tags 100%/);
     }],
-    ['60% rwa + 40% WETH -> прапорця немає, elevated 60% у summary', ({ generateVaultVerdict: f }) => {
+    ['60% rwa + 40% WETH -> прапорця немає, special 60% у summary', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 60e6, collateral_tags_json: '["stablecoin","rwa"]' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 40e6 })]);
       assert.deepEqual(r.redFlags, []);
-      assert.match(r.summary, /Collateral \(Morpho tags\): ordinary 40%, elevated 60%, unclassified 0%\./);
+      assert.match(r.summary, /Collateral \(Morpho tags\): base asset 40%, special type \(RWA, stocks, governance\) 60%, untagged or unlisted tags 0%\./);
     }],
     ["п'ять рівних застав низького ризику -> жодного прапорця застав", ({ generateVaultVerdict: f }) =>
       assert.deepEqual(f(vault(), diversified().slice(0, 5).map(a => ({ ...a, supply_assets_usd: 20e6 }))).redFlags, [])],

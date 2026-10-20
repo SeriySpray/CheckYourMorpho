@@ -121,8 +121,8 @@ const verdictOf = (over = {}) => ({
   mqi: { mqiPercent: 100, isAllClean: true, compromisedMarkets: [], compromisedPercent: 0, unverifiedPercent: 0, unpriced: false, ...over.mqi },
   liquidity: { instantExitCapacityPercent: 40, instantExitCapacityUsd: 4e6, stressedExitCapacityPercent: 40, stressedExitCapacityUsd: 4e6, ...over.liquidity },
   collateral: {
-    tier: 'CLASSIFIED', ordinaryPercent: 87.5, elevatedPercent: 12.5, unclassifiedPercent: 0, unverifiedPercent: 0,
-    tags: [{ tag: 'eth', risk: 'ordinary', usd: 5e6, percent: 50 }, { tag: 'btc', risk: 'ordinary', usd: 2.5e6, percent: 25 }], ...over.collateral
+    tier: 'CLASSIFIED', basePercent: 87.5, specialPercent: 12.5, unclassifiedPercent: 0, unverifiedPercent: 0,
+    tags: [{ tag: 'eth', kind: 'base', usd: 5e6, percent: 50 }, { tag: 'btc', kind: 'base', usd: 2.5e6, percent: 25 }], ...over.collateral
   },
   redFlags: over.redFlags ?? []
 });
@@ -848,7 +848,7 @@ const base = {
       s.allVaults = [item];
       const data = audit({ totalAssetsUsd: 2e6, netApy: 0.07, asset: { symbol: 'USDC', decimals: 6 } }, {
         mqi: { mqiPercent: 87.5, isAllClean: false, compromisedMarkets: [{}, {}], compromisedPercent: 12.5, unverifiedPercent: 1, unpriced: false },
-        liquidity: { instantExitCapacityPercent: 33, instantExitCapacityUsd: 660000 }, collateral: { ordinaryPercent: 60, elevatedPercent: 30, unclassifiedPercent: 10, tier: 'CLASSIFIED' }
+        liquidity: { instantExitCapacityPercent: 33, instantExitCapacityUsd: 660000 }, collateral: { basePercent: 60, specialPercent: 30, unclassifiedPercent: 10, tier: 'CLASSIFIED' }
       });
       f('0xaaa1', data);
       assert.equal(s.clientAuditCache.get('0xaaa1'), data);
@@ -857,7 +857,7 @@ const base = {
       assert.equal(item.mqiPercent, 87.5); assert.equal(item.isAllClean, false);
       assert.equal(item.compromisedCount, 2); assert.equal(item.compromisedPercent, 12.5); assert.equal(item.unverifiedPercent, 1);
       assert.equal(item.isUnpriced, false); assert.equal(item.exitCapPercent, 33); assert.equal(item.exitCapUsd, 660000);
-      assert.deepEqual([item.ordinaryCollateralPercent, item.elevatedCollateralPercent, item.unclassifiedCollateralPercent, item.collateralTier], [60, 30, 10, 'CLASSIFIED']);
+      assert.deepEqual([item.baseCollateralPercent, item.specialCollateralPercent, item.unclassifiedCollateralPercent, item.collateralTier], [60, 30, 10, 'CLASSIFIED']);
       assert.deepEqual(item.asset, { symbol: 'USDC', logo: 'keep', decimals: 6 });
     }),
     T('відкрита модалка цього vault оновлюється, закрита - ні', ({ applyVaultAuditData: f, __state: s }) => {
@@ -1047,17 +1047,17 @@ const base = {
     }),
     T('сортування за APY, ліквідністю, MQI і ризиком застав', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
-        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true, ordinaryCollateralPercent: 80, collateralTier: 'CLASSIFIED' }),
-        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null, ordinaryCollateralPercent: null, collateralTier: 'UNKNOWN' }),
-        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false, ordinaryCollateralPercent: 10, collateralTier: 'CLASSIFIED' }),
-        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false, ordinaryCollateralPercent: 50, collateralTier: 'CLASSIFIED' })
+        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true, baseCollateralPercent: 80, collateralTier: 'CLASSIFIED' }),
+        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null, baseCollateralPercent: null, collateralTier: 'UNKNOWN' }),
+        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false, baseCollateralPercent: 10, collateralTier: 'CLASSIFIED' }),
+        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false, baseCollateralPercent: 50, collateralTier: 'CLASSIFIED' })
       ];
       const order = sort => { s.explorerFilters.sort = sort; const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')).join(''); };
       assert.equal(order('apy_desc'), 'bcad');
       assert.equal(order('liq_desc'), 'acbd');
       assert.equal(order('mqi_asc'), 'bdca'); // невідомий першим, позначений 100 - перед чистим
       assert.equal(order('mqi_desc'), 'acdb');
-      assert.equal(order('risk_desc'), 'cdab'); // менше ordinary - ризикованіше, без картини застав у кінці
+      assert.equal(order('risk_desc'), 'cdab'); // менша частка base спочатку, без картини застав у кінці
       assert.equal(order('risk_asc'), 'adcb');
     }),
     T('бейджі рядка: Unpriced, Unverified, % Flagged, кількість Flagged, % Unverified, чистий без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
@@ -1519,7 +1519,7 @@ const base = {
       assert.equal(D.riskMqiPct.textContent, '100%'); assert.equal(D.riskMqiBar.style.width, '100%');
       assert.equal(D.riskMqiDesc.textContent, '100% of capital is deployed in verified, non-defaulted markets');
       assert.equal(D.riskMixVal.textContent, '87.5%'); assert.equal(D.riskMixBar.style.width, '88%');
-      assert.equal(D.riskMixDesc.textContent, 'elevated 12.5%, unclassified 0% of total capital');
+      assert.equal(D.riskMixDesc.textContent, 'special type 12.5%, untagged or unlisted 0% of total capital');
       assert.equal(D.riskEffectiveAssets.textContent, '2 tags');
       assert.equal(collateral.length, 3); // two tags and the overlap note
       assert.match(collateral[0].innerHTML, /eth[\s\S]*\$5\.00M[\s\S]*50%/);
@@ -1565,8 +1565,8 @@ const base = {
       assert.match(D.riskCollateralList.innerHTML, /No active collateral backing recorded/);
       f(audit({}, { collateral: { tier: 'UNALLOCATED', tags: [] } }));
       assert.equal(D.riskMixDesc.textContent, 'No active collateral backing');
-      f(audit({}, { collateral: { unverifiedPercent: 10, ordinaryPercent: 0, elevatedPercent: 90, unclassifiedPercent: 10 } }));
-      assert.equal(D.riskMixDesc.textContent, 'elevated 90%, unclassified 10% of verified capital');
+      f(audit({}, { collateral: { unverifiedPercent: 10, basePercent: 0, specialPercent: 90, unclassifiedPercent: 10 } }));
+      assert.equal(D.riskMixDesc.textContent, 'special type 90%, untagged or unlisted 10% of verified capital');
       assert.equal(D.riskMixBar.style.width, '0%'); assert.equal(D.riskMixVal.textContent, '0%');
       f(audit({}, { collateral: { tags: [] } }));
       assert.equal(D.riskEffectiveAssets.textContent, '0 tags');

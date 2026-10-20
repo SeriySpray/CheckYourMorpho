@@ -146,7 +146,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   // A rounded 100 next to a real defect must not read as fully clean
   if (mqi.compromisedMarkets.length > 0 && mqi.mqiPercent === 100) mqiText += ` (${mqi.compromisedPercent}% in compromised markets)`;
   let summary = collateral.tier === 'CLASSIFIED'
-    ? `MQI: ${mqiText}. Collateral (Morpho tags): ordinary ${collateral.ordinaryPercent}%, elevated ${collateral.elevatedPercent}%, unclassified ${collateral.unclassifiedPercent}%. ${exitSummary}.`
+    ? `MQI: ${mqiText}. Collateral (Morpho tags): base asset ${collateral.basePercent}%, special type (RWA, stocks, governance) ${collateral.specialPercent}%, untagged or unlisted tags ${collateral.unclassifiedPercent}%. ${exitSummary}.`
     : `MQI: ${mqiText}. Collateral: N/A. ${exitSummary}.`;
 
   return {
