@@ -8,15 +8,13 @@ import fs from 'node:fs';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from '../config.js';
-import { parseTagsJson } from '../engine/collateralEngine.js';
+import { parseTagsJson, RESEARCH_MAX_AGE_SEC } from '../engine/collateralEngine.js';
 
 export const SCHEMA_PATH = fileURLToPath(new URL('../data/researchSchema.json', import.meta.url));
 const SCHEMA = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
 
 export const RESEARCH_CATEGORIES = SCHEMA.properties.category.enum;
 export const PROMPT_VERSION = 'research-prompt-2';
-// A record older than this is treated as unrated in all calculations
-export const RESEARCH_MAX_AGE_SEC = 60 * 86400;
 // A record older than this goes back to the queue
 export const REQUEUE_AGE_SEC = 7 * 86400;
 const BACKOFF_WINDOW_SEC = 21 * 86400;

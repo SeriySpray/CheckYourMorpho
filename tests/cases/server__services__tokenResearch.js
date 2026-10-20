@@ -57,7 +57,6 @@ export default {
     assert.ok(c.length > 10 && c.includes('rwa-credit') && c.includes('wrapped-crypto') && c.includes('other'));
   }]],
   PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-2')]],
-  RESEARCH_MAX_AGE_SEC: [['60 days', ({ RESEARCH_MAX_AGE_SEC: v }) => assert.equal(v, 60 * DAY)]],
   REQUEUE_AGE_SEC: [['7 days', ({ REQUEUE_AGE_SEC: v }) => assert.equal(v, 7 * DAY)]],
   EXPLORERS: [['known explorers are https token pages', ({ EXPLORERS: e }) => {
     assert.deepEqual(Object.keys(e).map(Number).sort((a, b) => a - b), [1, 10, 137, 8453, 42161]);

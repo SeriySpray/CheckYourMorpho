@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { vault, alloc, diversified } from '../fixtures.js';
+import { vault, alloc, diversified, unrated } from '../fixtures.js';
 
 const titles = r => r.redFlags.map(x => x.title);
 const flag = (r, title) => r.redFlags.find(x => x.title === title);
@@ -55,7 +55,7 @@ export default {
     ['повертає метадані vault і точний summary', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), diversified());
       assert.equal(r.vaultAddress, '0xvault'); assert.equal(r.vaultName, 'Test Vault'); assert.equal(r.version, 'v1'); assert.equal(r.chainId, 1);
-      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral \(Morpho tags\): base asset 100%, special type \(RWA, stocks, governance\) 0%, untagged or unlisted tags 0%\. Exit Liquidity: 100%\.$/);
+      assert.match(r.summary, /^MQI: 100% clean capital\. Collateral \(AI research\): low-risk 100%, elevated 0%, impaired 0%, unrated 0%\. Exit Liquidity: 100%\.$/);
     }],
     ['vault без активної застави -> summary "Collateral: N/A"', ({ generateVaultVerdict: f }) =>
       assert.match(f(vault({ liquidity_usd: 100e6 }), []).summary, /Collateral: N\/A\. Exit Liquidity: 100%\.$/)],
@@ -72,19 +72,40 @@ export default {
       assert.equal(r.mqi.mqiPercent, 100);
       assert.equal(flag(r, 'Compromised Market Exposure').level, 'CRITICAL');
     }],
-    ['100% у WETH з тегом eth -> жодного прапорця застав, base 100%', ({ generateVaultVerdict: f }) => {
+    ['100% у WETH з research tier 1 -> жодного прапорця застав, low-risk 100%', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6 })]);
-      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.basePercent, 100);
+      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.lowRiskPercent, 100);
     }],
-    ['застава без тегів 100% -> прапорця немає, unclassified 100%', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, collateral_tags_json: null })]);
-      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.unclassifiedPercent, 100);
-      assert.match(r.summary, /base asset 0%, special type \(RWA, stocks, governance\) 0%, untagged or unlisted tags 100%/);
+    ['застава без запису research 100% -> прапорця немає, unrated 100% (відсутність даних не робить безпечним)', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [unrated({ supply_assets_usd: 100e6 })]);
+      assert.deepEqual(r.redFlags, []); assert.equal(r.collateral.unratedPercent, 100); assert.equal(r.collateral.lowRiskPercent, 0);
+      assert.match(r.summary, /Collateral \(AI research\): low-risk 0%, elevated 0%, impaired 0%, unrated 100%/);
     }],
-    ['60% rwa + 40% WETH -> прапорця немає, special 60% у summary', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 60e6, collateral_tags_json: '["stablecoin","rwa"]' }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 40e6 })]);
+    ['запис старший за 60 днів вважається unrated', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, collateral_researched_at: Math.floor(Date.now() / 1000) - 61 * 86400 })]);
+      assert.equal(r.collateral.unratedPercent, 100);
+    }],
+    ['60% tier 3 + 40% tier 1 -> прапорця немає, elevated 60% у summary', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 60e6, collateral_risk_tier: 3 }), alloc({ market_unique_key: '1:0xdef', supply_assets_usd: 40e6 })]);
       assert.deepEqual(r.redFlags, []);
-      assert.match(r.summary, /Collateral \(Morpho tags\): base asset 40%, special type \(RWA, stocks, governance\) 60%, untagged or unlisted tags 0%\./);
+      assert.match(r.summary, /Collateral \(AI research\): low-risk 40%, elevated 60%, impaired 0%, unrated 0%\./);
+    }],
+    ['tier 5 з confidence medium на суттєву суму -> MEDIUM "AI research: impaired collateral"', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 5e6, collateral_risk_tier: 5, collateral_confidence: 'medium', collateral_asset_symbol: 'BAD' }), alloc({ market_unique_key: '1:0xdef', collateral_asset_address: '0xother', supply_assets_usd: 95e6 })]);
+      const x = flag(r, 'AI research: impaired collateral');
+      assert.equal(x.level, 'MEDIUM'); assert.match(x.message, /^5% of capital \(\$5\.00M\).*\(tier 5\): BAD\./); assert.match(x.message, /may be wrong or outdated/);
+      assert.match(r.summary, /impaired 5%/);
+    }],
+    ['tier 5 з low confidence, застарілий tier 5 і tier 4 прапорця не дають', ({ generateVaultVerdict: f }) => {
+      const at = over => f(vault(), [alloc({ supply_assets_usd: 50e6, collateral_risk_tier: 5, ...over }), alloc({ market_unique_key: '1:0xdef', collateral_asset_address: '0xother', supply_assets_usd: 50e6 })]);
+      assert.equal(flag(at({ collateral_confidence: 'low' }), 'AI research: impaired collateral'), undefined);
+      assert.equal(flag(at({ collateral_researched_at: Math.floor(Date.now() / 1000) - 90 * 86400 }), 'AI research: impaired collateral'), undefined);
+      assert.equal(flag(at({ collateral_risk_tier: 4 }), 'AI research: impaired collateral'), undefined);
+    }],
+    ['tier 5 нижче порога суттєвості (1% TVL, не більше $250K) прапорця не дає, на порозі дає', ({ generateVaultVerdict: f }) => {
+      const at = usd => f(vault(), [alloc({ supply_assets_usd: usd, collateral_risk_tier: 5 }), alloc({ market_unique_key: '1:0xdef', collateral_asset_address: '0xother', supply_assets_usd: 100e6 - usd })]);
+      assert.equal(flag(at(0.249e6), 'AI research: impaired collateral'), undefined);
+      assert.ok(flag(at(0.25e6), 'AI research: impaired collateral'));
     }],
     ["п'ять рівних застав низького ризику -> жодного прапорця застав", ({ generateVaultVerdict: f }) =>
       assert.deepEqual(f(vault(), diversified().slice(0, 5).map(a => ({ ...a, supply_assets_usd: 20e6 }))).redFlags, [])],

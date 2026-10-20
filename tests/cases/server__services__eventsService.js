@@ -260,5 +260,32 @@ export default {
       assert.equal(db.prepare("SELECT COUNT(*) AS c FROM vault_events WHERE kind = 'vault_delisted'").get().c, 1);
       db.close();
     }],
+    ['модель застави none до першого rated-запису, далі ai-research-1; зміна tier створює collateral_tier_changed', ({ syncVaultEvents }) => {
+      const db = makeDb();
+      const TOKEN = '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0';
+      const setRecord = (tier, at) => db.prepare(`
+        INSERT OR REPLACE INTO token_research (chain_id, address, category, risk_tier, confidence, facts_json, sources_json, checks_json, as_of, researched_at, run_id, model, prompt_version, status, raw_json)
+        VALUES (1, ?, 'liquid-staking', ?, 'high', '{}', '[]', '[]', '2026-01-01', ?, 'r', 'm', 'p', 'rated', '{}')`).run(TOKEN, tier, at);
+      const state = () => JSON.parse(db.prepare('SELECT state_json FROM vault_watch_state WHERE vault_address = ?').get(V1_ADDR).state_json);
+      const kinds = () => db.prepare("SELECT kind, severity FROM vault_events WHERE kind = 'collateral_tier_changed'").all().map(r => [r.kind, r.severity]);
+
+      syncVaultEvents(db, [], [], { nowSec: NOW });
+      assert.equal(state().collateral_model, 'none'); assert.deepEqual(state().collateral_tiers, { [`1:${TOKEN}`]: null });
+
+      setRecord(2, NOW - DAY);
+      syncVaultEvents(db, [], [], { nowSec: NOW + 3600 });
+      assert.equal(state().collateral_model, 'ai-research-1'); assert.deepEqual(state().collateral_tiers, { [`1:${TOKEN}`]: 2 });
+      assert.deepEqual(kinds(), []);
+
+      setRecord(4, NOW);
+      syncVaultEvents(db, [], [], { nowSec: NOW + 7200 });
+      assert.deepEqual(kinds(), [['collateral_tier_changed', 'warning']]);
+      assert.equal(state().collateral_tiers[`1:${TOKEN}`], 4);
+
+      // a record older than 60 days counts as unrated: no event for the drop to null
+      syncVaultEvents(db, [], [], { nowSec: NOW + 61 * DAY });
+      assert.equal(state().collateral_tiers[`1:${TOKEN}`], null); assert.equal(kinds().length, 1);
+      db.close();
+    }],
   ],
 };

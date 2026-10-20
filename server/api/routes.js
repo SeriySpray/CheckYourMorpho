@@ -8,12 +8,12 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
-import { calculateTagMix, parseTagsJson, tokenState } from '../engine/collateralEngine.js';
+import { calculateResearchMix, parseTagsJson, RESEARCH_MAX_AGE_SEC } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
-import { researchQueue, applyResearch } from '../services/tokenResearch.js';
+import { researchQueue, applyResearch, isSafeUrl } from '../services/tokenResearch.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -514,6 +514,24 @@ export function handleGetVaults(req, res, url) {
   }
 }
 
+/** AI research shown next to a collateral token in the audit, or null when the token has no record (or is an idle market). */
+export function collateralResearchOf(a, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!a.collateral_research_status) return null;
+  let sources = [];
+  try { sources = JSON.parse(a.collateral_sources_json); } catch { /* malformed row: no sources */ }
+  return {
+    tier: a.collateral_risk_tier ?? null,
+    category: a.collateral_category,
+    confidence: a.collateral_confidence,
+    model: a.collateral_research_model,
+    asOf: a.collateral_as_of,
+    rationale: a.collateral_rationale,
+    sources: (Array.isArray(sources) ? sources : []).filter(s => isSafeUrl(s?.url)).map(s => ({ title: String(s.title ?? ''), url: s.url })),
+    // a stale record is shown but counts as unrated in all shares
+    stale: !(Number(a.collateral_researched_at) >= nowSec - RESEARCH_MAX_AGE_SEC)
+  };
+}
+
 /** List entries with MQI/collateral mix/liquidity for every vault, ordered by address so sort ties stay stable. */
 export function getVaultCatalog() {
   if (vaultCatalog && Date.now() - vaultCatalog.timestamp < CATALOG_TTL_MS) return vaultCatalog.vaults;
@@ -522,10 +540,11 @@ export function getVaultCatalog() {
   const rows = db.prepare('SELECT * FROM vaults ORDER BY address').all();
 
   const allocRows = db.prepare(`
-    SELECT va.*, m.*, t.tags_json AS collateral_tags_json
+    SELECT va.*, m.*, r.risk_tier AS collateral_risk_tier, r.confidence AS collateral_confidence, r.researched_at AS collateral_researched_at,
+           r.status AS collateral_research_status, r.category AS collateral_category
     FROM vault_allocations va
     JOIN markets m ON va.market_unique_key = m.unique_key
-    LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
+    LEFT JOIN token_research r ON r.chain_id = m.chain_id AND r.address = lower(m.collateral_asset_address)
   `).all();
 
   // Peer supplies per market come from the same rows: every allocation of every vault is loaded anyway
@@ -547,7 +566,7 @@ export function getVaultCatalog() {
     const scored = withEffectiveTotal(row, allocs);
     const mqi = calculateMQI(scored, allocs);
     const hhi = calculateHHI(withMaterialUnresolved(scored, mqi), allocs);
-    const collateral = calculateTagMix(withMaterialUnresolved(scored, mqi), allocs);
+    const collateral = calculateResearchMix(withMaterialUnresolved(scored, mqi), allocs);
     const liq = calculateLiquidityMetrics(withMaterialUnresolved(scored, mqi), allocs);
 
     return {
@@ -588,9 +607,10 @@ export function getVaultCatalog() {
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
       collateralTier: collateral.tier,
-      baseCollateralPercent: collateral.basePercent,
-      specialCollateralPercent: collateral.specialPercent,
-      unclassifiedCollateralPercent: collateral.unclassifiedPercent,
+      lowRiskCollateralPercent: collateral.lowRiskPercent,
+      highRiskCollateralPercent: collateral.highRiskPercent,
+      impairedCollateralPercent: collateral.impairedPercent,
+      unratedCollateralPercent: collateral.unratedPercent,
       updatedAt: row.metadata_updated_at
     };
   });
@@ -662,10 +682,20 @@ export function handleGetVaultByAddress(req, res, address) {
         m.realized_bad_debt_usd,
         m.warnings_count,
         m.warnings_json,
-        t.tags_json AS collateral_tags_json
+        t.tags_json AS collateral_tags_json,
+        r.risk_tier AS collateral_risk_tier,
+        r.confidence AS collateral_confidence,
+        r.researched_at AS collateral_researched_at,
+        r.status AS collateral_research_status,
+        r.category AS collateral_category,
+        r.as_of AS collateral_as_of,
+        r.tier_rationale AS collateral_rationale,
+        r.sources_json AS collateral_sources_json,
+        r.model AS collateral_research_model
       FROM vault_allocations va
       JOIN markets m ON va.market_unique_key = m.unique_key
       LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
+      LEFT JOIN token_research r ON r.chain_id = m.chain_id AND r.address = lower(m.collateral_asset_address)
       WHERE va.vault_address = ?
       ORDER BY va.supply_assets_usd DESC
     `).all(cleanAddress);
@@ -692,7 +722,7 @@ export function handleGetVaultByAddress(req, res, address) {
       alloc.peer_vaults = peerData.peers;
     }
 
-    // Compute comprehensive institutional audit verdict (MQI + collateral tags + Exit Liquidity)
+    // Compute comprehensive institutional audit verdict (MQI + collateral research tiers + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
     const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
     const unverifiedKeys = new Set(verdict.mqi.unverifiedMarkets.map(m => m.marketUniqueKey));
@@ -735,7 +765,7 @@ export function handleGetVaultByAddress(req, res, address) {
           loanSymbol: a.loan_asset_symbol,
           collateralSymbol: a.collateral_asset_symbol,
           collateralTags: parseTagsJson(a.collateral_tags_json) ?? [],
-          collateralState: tokenState(parseTagsJson(a.collateral_tags_json)).state,
+          collateralResearch: collateralResearchOf(a),
           // an LLTV the API did not report is unknown (null), not 0%
           lltvPercent: a.lltv == null || a.lltv === '' ? null : a.lltv_percent,
           supplyAssetsHuman: a.supply_assets_human,

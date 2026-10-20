@@ -1,69 +1,49 @@
 /**
- * Collateral tag model. A token is grouped only by the tags Morpho gave it; the group of each tag is set in the open
- * TAG_KIND table (see the README). Tokens with a special tag are special; tokens with no tags, an unlisted tag or no
- * base tag stay unclassified; the rest are base. There are no weights or thresholds, only shares.
+ * Collateral model "ai-research-1". Every collateral token has an optional risk tier 1..5 from the AI research table
+ * (token_research, see services/tokenResearch.js). A token with no usable record is unrated, and unrated is never treated
+ * as safe. A record is usable when it is rated, has a tier and is not older than RESEARCH_MAX_AGE_SEC.
  *
  * Shares are measured against the verified capital (TVL minus capital behind adapters that could not be expanded),
- * the same base the other engines use.
+ * the same base the other engines use. There are no weights; the tier is a judgement of an AI agent, not a measured value.
  */
 import { isIdleReserveMarket } from './hhiEngine.js';
 
 const keyOf = (chainId, address) => `${Number(chainId)}:${String(address || '').trim().toLowerCase()}`;
 
-// --- Morpho-tag model: the group of a tag is set in one open table, a token is grouped only by the tags Morpho gave it. ---
-export const COLLATERAL_MODEL = 'morpho-tags-2';
-export const TAG_KIND = {
-  btc: { kind: 'base', note: 'BTC or a BTC wrapper' },
-  eth: { kind: 'base', note: 'ETH or an ETH wrapper' },
-  stablecoin: { kind: 'base', note: 'Stablecoin' },
-  'usd-pegged': { kind: 'base', note: 'Pegged to USD' },
-  'eur-pegged': { kind: 'base', note: 'Pegged to EUR' },
-  EUR: { kind: 'base', note: 'EUR base asset or peg' },
-  'simple-permit': { kind: 'neutral', note: 'Gasless signature approvals' },
-  permit: { kind: 'neutral', note: 'Gasless signature approvals' },
-  erc4626: { kind: 'neutral', note: 'Vault share' },
-  'vault-v1': { kind: 'neutral', note: 'Vault share' },
-  'vault-v2': { kind: 'neutral', note: 'Vault share' },
-  yield: { kind: 'neutral', note: 'Token pays yield, the source is not named' },
-  lst: { kind: 'neutral', note: 'Liquid staking token' },
-  lrt: { kind: 'neutral', note: 'Liquid restaking token' },
-  rwa: { kind: 'special', note: 'Off-chain assets or claims' },
-  stocks: { kind: 'special', note: 'Tokenized shares' },
-  'governance-token': { kind: 'special', note: 'Price is not anchored to anything' }
-};
-
-/**
- * Group of one token from its Morpho tags.
- * @param {string[]|null} tags
- * @returns {{state:'base'|'special'|'unclassified', reason:null|'untagged'|'no base tag'|string}} reason is 'unlisted:<tag>' for a tag outside TAG_KIND
- */
-export function tokenState(tags) {
-  if (!Array.isArray(tags) || !tags.length) return { state: 'unclassified', reason: 'untagged' };
-  const kinds = tags.map(t => TAG_KIND[t]?.kind);
-  if (kinds.includes('special')) return { state: 'special', reason: null };
-  const unlisted = tags.find(t => !TAG_KIND[t]);
-  if (unlisted !== undefined) return { state: 'unclassified', reason: `unlisted:${unlisted}` };
-  if (!kinds.includes('base')) return { state: 'unclassified', reason: 'no base tag' };
-  return { state: 'base', reason: null };
-}
-
-/** The tag table as a markdown table, the single source for the README. */
-export function tagKindMarkdown() {
-  const rows = Object.entries(TAG_KIND).map(([tag, v]) => `| \`${tag}\` | ${v.kind} | ${v.note} |`);
-  return ['| Tag | Group | Meaning |', '| --- | --- | --- |', ...rows].join('\n');
-}
+export const COLLATERAL_MODEL = 'ai-research-1';
+// A research record older than this counts as unrated
+export const RESEARCH_MAX_AGE_SEC = 60 * 86400;
 
 /** Tags from a token_tags JSON string; null when missing, 'null' or malformed. */
 export function parseTagsJson(json) {
   try { const v = JSON.parse(json); return Array.isArray(v) ? v : null; } catch { return null; }
 }
 
+/** True when the allocation's collateral has a usable research record (rated, tier 1..5, fresh). */
+export function isResearchRated(alloc, nowSec = Math.floor(Date.now() / 1000)) {
+  const tier = Number(alloc.collateral_risk_tier);
+  return alloc.collateral_research_status === 'rated' && Number.isInteger(tier) && tier >= 1 && tier <= 5
+    && Number(alloc.collateral_researched_at) >= nowSec - RESEARCH_MAX_AGE_SEC;
+}
+
+/** Tier 1..5 of the allocation's collateral, or null when it is unrated. */
+export function researchTierOf(alloc, nowSec = Math.floor(Date.now() / 1000)) {
+  return isResearchRated(alloc, nowSec) ? Number(alloc.collateral_risk_tier) : null;
+}
+
+/** Tier 5 with a confidence above low: the only state that raises a flag. */
+export function isImpairedCollateral(alloc, nowSec = Math.floor(Date.now() / 1000)) {
+  return researchTierOf(alloc, nowSec) === 5 && alloc.collateral_confidence !== 'low';
+}
+
 /**
- * Tag mix of a vault. Same percent base as the other engines (TVL minus unverified capital).
+ * Tier mix of a vault. Same percent base as the other engines (TVL minus unverified capital).
  * @param {object} vault Vault row (use the one from withMaterialUnresolved)
- * @param {Array<object>} allocations Allocations joined with markets and token_tags (collateral_tags_json)
+ * @param {Array<object>} allocations Allocations joined with markets and token_research (collateral_risk_tier, collateral_confidence,
+ *   collateral_researched_at, collateral_research_status, collateral_category)
+ * @param {number} nowSec Clock for the freshness rule
  */
-export function calculateTagMix(vault, allocations = []) {
+export function calculateResearchMix(vault, allocations = [], nowSec = Math.floor(Date.now() / 1000)) {
   const totalUsd = Number(vault.total_assets_usd) || 0;
   const unresolvedUsd = Math.min(totalUsd, Math.max(0, Number(vault.unresolved_exposure_usd) || 0));
   const knownUsd = totalUsd - unresolvedUsd;
@@ -72,37 +52,34 @@ export function calculateTagMix(vault, allocations = []) {
   const round = usd => Math.round(usd * 100) / 100;
 
   const byToken = new Map();
-  const byTag = new Map();
-  const byState = { base: 0, special: 0, unclassified: 0 };
+  const tierUsd = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let unratedUsd = 0;
   let idleUsd = 0;
   let deployedUsd = 0;
   for (const alloc of allocations) {
     const usd = Math.max(0, Number(alloc.supply_assets_usd) || 0);
     if (usd <= 0) continue;
     if (isIdleReserveMarket(alloc)) { idleUsd += usd; continue; }
-    const tags = parseTagsJson(alloc.collateral_tags_json);
-    const { state, reason } = tokenState(tags);
+    const tier = researchTierOf(alloc, nowSec);
     const key = keyOf(alloc.chain_id, alloc.collateral_asset_address);
     const t = byToken.get(key) || {
       chainId: alloc.chain_id, address: String(alloc.collateral_asset_address || '').toLowerCase(),
-      symbol: alloc.collateral_asset_symbol, tags: tags || [], state, reason, usd: 0
+      symbol: alloc.collateral_asset_symbol, tier, confidence: tier === null ? null : alloc.collateral_confidence ?? null,
+      category: alloc.collateral_category ?? null, usd: 0
     };
     t.usd += usd;
     byToken.set(key, t);
-    byState[state] += usd;
+    if (tier === null) unratedUsd += usd; else tierUsd[tier] += usd;
     deployedUsd += usd;
-    for (const tag of new Set(tags || [])) {
-      const kind = TAG_KIND[tag]?.kind;
-      if (kind && kind !== 'neutral') byTag.set(tag, (byTag.get(tag) || 0) + usd);
-    }
   }
 
   return {
     tier: knownUsd <= 0 ? 'UNKNOWN' : deployedUsd <= 0 ? 'UNALLOCATED' : 'CLASSIFIED',
-    basePercent: pct(byState.base),
-    specialPercent: pct(byState.special),
-    unclassifiedPercent: pct(byState.unclassified),
-    tags: [...byTag.entries()].sort((a, b) => b[1] - a[1]).map(([tag, usd]) => ({ tag, kind: TAG_KIND[tag].kind, usd: round(usd), percent: pct(usd) })),
+    byRiskTier: Object.fromEntries(Object.entries(tierUsd).map(([k, usd]) => [k, pct(usd)])),
+    lowRiskPercent: pct(tierUsd[1] + tierUsd[2]),
+    highRiskPercent: pct(tierUsd[4] + tierUsd[5]),
+    impairedPercent: pct(tierUsd[5]),
+    unratedPercent: pct(unratedUsd),
     tokens: [...byToken.values()].sort((a, b) => b.usd - a.usd).map(t => ({ ...t, usd: round(t.usd), percent: pct(t.usd) })),
     idlePercent: pct(idleUsd),
     undeployedPercent: pct(Math.max(0, knownUsd - idleUsd - deployedUsd)),

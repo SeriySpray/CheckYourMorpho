@@ -1,25 +1,26 @@
-import { calculateMQI, withMaterialUnresolved } from './mqiEngine.js';
+import { calculateMQI, withMaterialUnresolved, getMaterialityThresholdUsd } from './mqiEngine.js';
 import { calculateHHI } from './hhiEngine.js';
-import { calculateTagMix } from './collateralEngine.js';
+import { calculateResearchMix } from './collateralEngine.js';
 import { calculateLiquidityMetrics } from './liquidityEngine.js';
 
 /**
  * Synthesizes the institutional vault audit based strictly on:
  * 1. Market Quality Index (MQI)
- * 2. Collateral tag mix (shares by Morpho tags, informational only, no flag); the HHI is still returned for reference
+ * 2. Collateral risk tiers from AI research (shares per tier; only impaired collateral raises a flag); the HHI is still returned for reference
  * 3. Instant Exit Capacity
  * 
  * @param {object} vault Vault row from database
- * @param {Array<object>} allocations Active allocations joined with markets
+ * @param {Array<object>} allocations Active allocations joined with markets and token_research
+ * @param {number} nowSec Clock for the research freshness rule
  * @returns {object} Clean institutional audit verdict
  */
-export function generateVaultVerdict(vault, allocations = []) {
+export function generateVaultVerdict(vault, allocations = [], nowSec = Math.floor(Date.now() / 1000)) {
   // 1. Market Quality Index (MQI) [0% - 100%]
   const mqi = calculateMQI(vault, allocations);
 
   // 2. Herfindahl-Hirschman Concentration Index (HHI) [0.00 - 1.00]
   const hhi = calculateHHI(withMaterialUnresolved(vault, mqi), allocations);
-  const collateral = calculateTagMix(withMaterialUnresolved(vault, mqi), allocations);
+  const collateral = calculateResearchMix(withMaterialUnresolved(vault, mqi), allocations, nowSec);
 
   // 3. Instant Exit Liquidity
   const liquidity = calculateLiquidityMetrics(withMaterialUnresolved(vault, mqi), allocations);
@@ -64,6 +65,17 @@ export function generateVaultVerdict(vault, allocations = []) {
       level: 'MEDIUM',
       title: 'Unverified Markets',
       message: `Markets holding capital the API returned incomplete data for (${marketsSummary}) are not confirmed clean or compromised and are left out of the MQI score until the data is available.`
+    });
+  }
+
+  // Flag 2: collateral that the AI research rates as impaired (tier 5, confidence above low), once the exposure is material
+  const impaired = collateral.tokens.filter(t => t.tier === 5 && t.confidence !== 'low');
+  const impairedUsd = impaired.reduce((sum, t) => sum + t.usd, 0);
+  if (impaired.length > 0 && impairedUsd >= getMaterialityThresholdUsd(Number(vault.total_assets_usd) || 0)) {
+    redFlags.push({
+      level: 'MEDIUM',
+      title: 'AI research: impaired collateral',
+      message: `${collateral.impairedPercent}% of capital ($${(impairedUsd / 1e6).toFixed(2)}M) is lent against collateral that the AI research agent rates as impaired (tier 5): ${impaired.map(t => t.symbol).join(', ')}. This is a model judgement from public sources and may be wrong or outdated.`
     });
   }
 
@@ -145,8 +157,9 @@ export function generateVaultVerdict(vault, allocations = []) {
       : `${mqi.mqiPercent}% clean capital`;
   // A rounded 100 next to a real defect must not read as fully clean
   if (mqi.compromisedMarkets.length > 0 && mqi.mqiPercent === 100) mqiText += ` (${mqi.compromisedPercent}% in compromised markets)`;
+  const elevatedPercent = Math.round((collateral.byRiskTier[3] + collateral.byRiskTier[4]) * 100) / 100;
   let summary = collateral.tier === 'CLASSIFIED'
-    ? `MQI: ${mqiText}. Collateral (Morpho tags): base asset ${collateral.basePercent}%, special type (RWA, stocks, governance) ${collateral.specialPercent}%, untagged or unlisted tags ${collateral.unclassifiedPercent}%. ${exitSummary}.`
+    ? `MQI: ${mqiText}. Collateral (AI research): low-risk ${collateral.lowRiskPercent}%, elevated ${elevatedPercent}%, impaired ${collateral.impairedPercent}%, unrated ${collateral.unratedPercent}%. ${exitSummary}.`
     : `MQI: ${mqiText}. Collateral: N/A. ${exitSummary}.`;
 
   return {

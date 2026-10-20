@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const VAULT_ADDR = '0x1111111111111111111111111111111111111111';
 const NOW = 1_750_000_000;
 const DAY = 86400;
-const M = { collateral_model: 'morpho-tags-2' };
+const M = { collateral_model: 'ai-research-1' };
 
 const baseCtx = (overrides = {}) => ({
   address: VAULT_ADDR,
@@ -22,9 +22,9 @@ const baseCtx = (overrides = {}) => ({
 
 export default {
   EVENT_KINDS: [
-    ['містить усі 33 дозволені типи подій (admin, pending, derived) і заморожений', ({ EVENT_KINDS }) => {
+    ['містить усі 34 дозволені типи подій (admin, pending, derived) і заморожений', ({ EVENT_KINDS }) => {
       assert.ok(Object.isFrozen(EVENT_KINDS));
-      assert.equal(EVENT_KINDS.length, 33);
+      assert.equal(EVENT_KINDS.length, 34);
       for (const k of [
         'fee_changed', 'timelock_changed', 'cap_changed', 'guardian_changed', 'curator_changed',
         'owner_changed', 'allocator_changed', 'skim_recipient_changed', 'supply_queue_changed',
@@ -34,7 +34,7 @@ export default {
         'pending_force_deallocate_penalty', 'pending_abdicate',
         'verdict_worsened', 'verdict_improved', 'mqi_dropped', 'bad_debt_appeared',
         'flagged_collateral_added', 'tvl_drop', 'exit_liquidity_low', 'vault_delisted',
-        'collateral_class_share_crossed'
+        'collateral_class_share_crossed', 'collateral_tier_changed'
       ]) {
         assert.ok(EVENT_KINDS.includes(k), `missing kind: ${k}`);
       }
@@ -284,7 +284,7 @@ export default {
         liquidity: { exitUnknown: false, instantExitCapacityPercent: 40 },
         collateral: { tier: 'CLASSIFIED' }
       };
-      const st = buildWatchState(vault, allocs, verdict, { timelock: 86400, lastAdminEventTs: NOW, collateralModel: 'morpho-tags-2' });
+      const st = buildWatchState(vault, allocs, verdict, { timelock: 86400, lastAdminEventTs: NOW, collateralModel: 'ai-research-1' });
       assert.equal(st.chain_id, 8453);
       assert.equal(st.name, 'Base USDC Vault');
       assert.equal(st.verdict_level, 'red');
@@ -293,17 +293,34 @@ export default {
       assert.equal(st.is_listed, 1);
       assert.ok(st.bad_debt_markets['0xm1']);
       assert.equal(st.last_admin_event_ts, NOW);
-      assert.equal(st.collateral_model, 'morpho-tags-2'); assert.equal('collateral_level' in st, false);
+      assert.equal(st.collateral_model, 'ai-research-1'); assert.equal('collateral_level' in st, false);
       assert.equal(buildWatchState(vault, allocs, verdict).collateral_model, 'none');
     }],
-    ['flagged_markets: special-тег позначається, unclassified і base ні', ({ buildWatchState }) => {
+    ['flagged_markets: лише tier 5 з confidence вище low (свіжий запис) позначається, unrated і нижчі tier ні', ({ buildWatchState }) => {
       const vault = { address: VAULT_ADDR, chain_id: 1, total_assets_usd: 1_000_000, liquidity_usd: 1e9 };
-      const mk = (key, tags) => ({ market_unique_key: key, supply_assets_usd: 500_000, bad_debt_usd: 0, realized_bad_debt_usd: 0, is_listed: 1,
-        oracle_address: '0x1', lltv_percent: 86, collateral_asset_symbol: key, loan_asset_symbol: 'USDC', warnings_json: '[]',
-        collateral_asset_address: `0x${key}`, collateral_tags_json: tags });
-      const st = buildWatchState(vault, [mk('rwa', '["stablecoin","rwa"]'), mk('none', null), mk('eth', '["eth"]')], null);
-      assert.deepEqual(Object.keys(st.flagged_markets), ['rwa']);
-      assert.equal(st.flagged_markets.rwa.collateralState, 'special'); assert.deepEqual(st.flagged_markets.rwa.collateralTags, ['stablecoin', 'rwa']);
+      const fresh = Math.floor(Date.now() / 1000);
+      const mk = (key, over = {}) => ({ market_unique_key: key, supply_assets_usd: 100_000, bad_debt_usd: 0, realized_bad_debt_usd: 0, is_listed: 1,
+        oracle_address: '0x1', lltv_percent: 86, collateral_asset_symbol: key, loan_asset_symbol: 'USDC', warnings_json: '[]', chain_id: 1,
+        collateral_asset_address: `0x${key}`, collateral_research_status: 'rated', collateral_risk_tier: 1, collateral_confidence: 'high', collateral_researched_at: fresh, ...over });
+      const st = buildWatchState(vault, [mk('bad'), mk('t5', { collateral_risk_tier: 5 }), mk('t5low', { collateral_risk_tier: 5, collateral_confidence: 'low' }),
+        mk('t5old', { collateral_risk_tier: 5, collateral_researched_at: fresh - 90 * DAY }), mk('t4', { collateral_risk_tier: 4 }),
+        mk('none', { collateral_research_status: null, collateral_risk_tier: null, collateral_researched_at: null })], null);
+      assert.deepEqual(Object.keys(st.flagged_markets), ['t5']);
+      assert.equal(st.flagged_markets.t5.collateralTier, 5);
+      // a dirty market is flagged whatever its tier; an unrated one reports tier null
+      const dirty = buildWatchState(vault, [mk('x', { is_listed: 0, collateral_research_status: null, collateral_risk_tier: null })], null);
+      assert.equal(dirty.flagged_markets.x.collateralTier, null);
+    }],
+    ['collateral_tiers: tier матеріальних токенів (null для unrated), частки одного токена складаються, дрібні токени і idle пропускаються', ({ buildWatchState }) => {
+      const vault = { address: VAULT_ADDR, chain_id: 1, total_assets_usd: 10_000_000, liquidity_usd: 1e9 };
+      const fresh = Math.floor(Date.now() / 1000);
+      const mk = (key, token, usd, over = {}) => ({ market_unique_key: key, supply_assets_usd: usd, bad_debt_usd: 0, realized_bad_debt_usd: 0, is_listed: 1,
+        oracle_address: '0x1', lltv_percent: 86, collateral_asset_symbol: token, loan_asset_symbol: 'USDC', warnings_json: '[]', chain_id: 1,
+        collateral_asset_address: `0x${token}`, collateral_research_status: 'rated', collateral_risk_tier: 3, collateral_confidence: 'high', collateral_researched_at: fresh, ...over });
+      // materiality for a $10M vault is $100K
+      const st = buildWatchState(vault, [mk('m1', 'A', 60_000), mk('m2', 'A', 60_000), mk('m3', 'B', 90_000), mk('m4', 'C', 500_000, { collateral_research_status: null, collateral_risk_tier: null, collateral_researched_at: null }),
+        { ...mk('m5', 'NONE', 300_000), collateral_asset_address: '', lltv_percent: 0, oracle_address: '' }], null, { nowSec: fresh });
+      assert.deepEqual(st.collateral_tiers, { '1:0xa': 3, '1:0xc': null });
     }],
   ],
   diffDerivedState: [
@@ -363,18 +380,41 @@ export default {
         ...M,
         bad_debt_markets: { '0xm1': { label: 'wstETH/USDC', badDebtUsd: 12000, supplyUsd: 200000 } },
         unverified_bad_debt_markets: [],
-        flagged_markets: { '0xm2': { label: 'sUSDe/USDC', collateralSymbol: 'sUSDe', collateralState: 'special', collateralTags: ['rwa'], reasons: [], supplyUsd: 300000 } },
+        flagged_markets: { '0xm2': { label: 'sUSDe/USDC', collateralSymbol: 'sUSDe', collateralTier: 5, reasons: [], supplyUsd: 300000 } },
         is_listed: 0,
         collateral_tier: 'CLASSIFIED'
       };
       const evs = diffDerivedState(prev, next, baseCtx(), NOW);
       assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical'], ['flagged_collateral_added', 'warning'], ['vault_delisted', 'warning']]);
-      assert.deepEqual(JSON.parse(evs[1].details_json).collateralTags, ['rwa']);
+      assert.equal(JSON.parse(evs[1].details_json).collateralTier, 5);
     }],
-    ['під час зміни моделі застави flagged_collateral_added мовчить, bad_debt_appeared ні', ({ diffDerivedState }) => {
-      const flagged = { '0xm2': { label: 'x', collateralState: 'special', collateralTags: ['rwa'], reasons: [], supplyUsd: 1 } };
-      const evs = diffDerivedState({ bad_debt_markets: {}, flagged_markets: {} }, { ...M, bad_debt_markets: { '0xm1': { label: 'a', badDebtUsd: 1, supplyUsd: 1 } }, flagged_markets: flagged }, baseCtx(), NOW);
+    ['під час зміни моделі застави flagged_collateral_added і collateral_tier_changed мовчать, bad_debt_appeared ні', ({ diffDerivedState }) => {
+      const flagged = { '0xm2': { label: 'x', collateralTier: 5, reasons: [], supplyUsd: 1 } };
+      const evs = diffDerivedState({ bad_debt_markets: {}, flagged_markets: {}, collateral_tiers: { '1:0xa': 2 } },
+        { ...M, bad_debt_markets: { '0xm1': { label: 'a', badDebtUsd: 1, supplyUsd: 1 } }, flagged_markets: flagged, collateral_tiers: { '1:0xa': 5 } }, baseCtx(), NOW);
       assert.deepEqual(evs.map(e => e.kind), ['bad_debt_appeared']);
+    }],
+    ['collateral_tier_changed: число -> інше число, warning коли стало >= 4, інакше info, символ береться з алокацій', ({ diffDerivedState }) => {
+      const ctx = baseCtx({ allocations: [{ chain_id: 1, collateral_asset_address: '0xABC', collateral_asset_symbol: 'sUSDe' }] });
+      const evs = diffDerivedState({ ...M, collateral_tiers: { '1:0xabc': 2, '1:0xdef': 4, '1:0xaaa': 3 } },
+        { ...M, collateral_tiers: { '1:0xabc': 4, '1:0xdef': 3, '1:0xaaa': 3 } }, ctx, NOW);
+      assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['collateral_tier_changed', 'warning'], ['collateral_tier_changed', 'info']]);
+      const d = JSON.parse(evs[0].details_json);
+      assert.deepEqual(d, { tokenKey: '1:0xabc', collateralSymbol: 'sUSDe', previousTier: 2, currentTier: 4 });
+      assert.match(evs[0].title, /sUSDe risk tier changed from 2 to 4/);
+      assert.equal(JSON.parse(evs[1].details_json).collateralSymbol, '1:0xdef');
+      assert.notEqual(evs[0].dedupe_key, evs[1].dedupe_key);
+    }],
+    ['collateral_tier_changed: unrated -> rated, rated -> unrated, перший знімок без collateral_tiers і незмінений tier подій не дають', ({ diffDerivedState }) => {
+      const next = { ...M, collateral_tiers: { '1:0xa': 3, '1:0xb': null, '1:0xc': 5, '1:0xd': 2 } };
+      const prev = { ...M, collateral_tiers: { '1:0xa': null, '1:0xb': 3, '1:0xd': 2 } };
+      assert.deepEqual(diffDerivedState(prev, next, baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState({ ...M }, next, baseCtx(), NOW), []);
+    }],
+    ['collateral_tier_changed: ключ дедуплікації залежить від токена, нового tier і години', ({ diffDerivedState }) => {
+      const prev = { ...M, collateral_tiers: { '1:0xa': 1 } };
+      const at = (tier, now) => diffDerivedState(prev, { ...M, collateral_tiers: { '1:0xa': tier } }, baseCtx(), now)[0].dedupe_key;
+      assert.equal(at(3, NOW), at(3, NOW + 60)); assert.notEqual(at(3, NOW), at(4, NOW)); assert.notEqual(at(3, NOW), at(3, NOW + 2 * 3600));
     }],
   ],
 };

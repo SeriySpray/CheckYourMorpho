@@ -1037,6 +1037,24 @@ export default {
       assert.equal(get(), 'Before');
       await resetCaches(); assert.equal(get(), 'After');
     })],
+    ['allocations[].collateralResearch: tier, джерела лише https, stale; токен без запису -> null', async mod => sandbox(async db => {
+      const now = Math.floor(Date.now() / 1000);
+      ins(db, 'vaults', V(0x51, { total_assets_usd: 1000 }));
+      ins(db, 'markets', M('r1', { collateral_asset_address: addr(0x801), collateral_asset_symbol: 'R1' }));
+      ins(db, 'markets', M('r2', { collateral_asset_address: addr(0x802), collateral_asset_symbol: 'R2' }));
+      ins(db, 'markets', M('r3', { collateral_asset_address: addr(0x803), collateral_asset_symbol: 'R3' }));
+      for (const k of ['r1', 'r2', 'r3']) ins(db, 'vault_allocations', A(0x51, k, 300));
+      const sources = JSON.stringify([{ id: 1, url: 'https://docs.example.com/a', title: 'Docs' }, { id: 2, url: 'http://insecure.example.com', title: 'Plain' }, { id: 3, url: 'javascript:alert(1)', title: 'XSS' }]);
+      const rec = (n, over) => ins(db, 'token_research', { chain_id: 1, address: addr(n), category: 'rwa-credit', risk_tier: 3, confidence: 'medium', tier_rationale: 'Because.', facts_json: '{}',
+        sources_json: sources, checks_json: '[]', as_of: '2026-10-20', researched_at: now, run_id: 'r', model: 'gemini-x', prompt_version: 'p', status: 'rated', raw_json: '{}', ...over });
+      rec(0x801); rec(0x802, { researched_at: now - 90 * 86400 });
+      const rows = Object.fromEntries(getJson(mod, '/api/vaults/' + addr(0x51)).body.allocations.map(a => [a.collateralSymbol, a]));
+      assert.deepEqual(rows.R1.collateralResearch, { tier: 3, category: 'rwa-credit', confidence: 'medium', model: 'gemini-x', asOf: '2026-10-20', rationale: 'Because.',
+        sources: [{ title: 'Docs', url: 'https://docs.example.com/a' }], stale: false });
+      assert.equal(rows.R2.collateralResearch.stale, true); assert.equal(rows.R2.collateralResearch.tier, 3);
+      assert.equal(rows.R3.collateralResearch, null);
+      assert.ok(!('collateralState' in rows.R1));
+    })],
     ['кеш аудиту обмежений 500 записами: 501-й витісняє найстаріший', async mod => sandbox(async db => {
       db.exec('BEGIN'); for (let i = 0; i <= 500; i++) ins(db, 'vaults', V(0x1000 + i, { name: 'Old' })); db.exec('COMMIT');
       const get = i => getJson(mod, '/api/vaults/' + addr(0x1000 + i)).body.vault.name;
@@ -1047,12 +1065,39 @@ export default {
       assert.equal(get(0), 'New', 'найстаріший запис мав бути витіснений');
     })],
   ],
+  collateralResearchOf: [
+    ['без запису -> null; з записом - поля, без джерел при зіпсованому JSON', ({ collateralResearchOf: f }) => {
+      assert.equal(f({ collateral_research_status: null }, 1e9), null);
+      const r = f({ collateral_research_status: 'unrated', collateral_risk_tier: null, collateral_researched_at: 1e9, collateral_sources_json: '{bad' }, 1e9);
+      assert.deepEqual([r.tier, r.sources, r.stale], [null, [], false]);
+    }],
+    ['stale рівно після 60 днів, не раніше', ({ collateralResearchOf: f }) => {
+      const at = ago => f({ collateral_research_status: 'rated', collateral_risk_tier: 2, collateral_researched_at: 1e9 - ago, collateral_sources_json: '[]' }, 1e9).stale;
+      assert.equal(at(60 * 86400), false); assert.equal(at(60 * 86400 + 1), true);
+    }],
+  ],
   getVaultCatalog: [
     ['усі vaults (і нелістинговані) з метриками, впорядковані за адресою', async mod => sandbox(async db => {
       seedCatalog(db);
       const c = mod.getVaultCatalog();
       assert.deepEqual(c.map(v => parseInt(v.address, 16)), [1, 2, 3, 4]);
       for (const v of c) assert.ok('mqiPercent' in v && 'hhi' in v && 'exitCapPercent' in v, v.address);
+    })],
+    ['частки tier у каталозі: low-risk, high-risk, impaired і unrated рахуються з token_research, застарілий запис - unrated', async mod => sandbox(async db => {
+      const now = Math.floor(Date.now() / 1000);
+      const tok = (n, over = {}) => ({ chain_id: 1, address: addr(n), category: 'other', risk_tier: 1, confidence: 'high', facts_json: '{}', sources_json: '[]', checks_json: '[]',
+        as_of: '2026-01-01', researched_at: now, run_id: 'r', model: 'm', prompt_version: 'p', status: 'rated', raw_json: '{}', ...over });
+      ins(db, 'vaults', V(0x50, { total_assets_usd: 1000 }));
+      for (const [i, token] of [[1, 0x701], [2, 0x702], [3, 0x703], [4, 0x704]]) {
+        ins(db, 'markets', M(`t${i}`, { collateral_asset_address: addr(token), collateral_asset_symbol: `T${i}`, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0 }));
+        ins(db, 'vault_allocations', A(0x50, `t${i}`, 250));
+      }
+      ins(db, 'token_research', tok(0x701, { risk_tier: 1 }));
+      ins(db, 'token_research', tok(0x702, { risk_tier: 5 }));
+      ins(db, 'token_research', tok(0x703, { risk_tier: 2, researched_at: now - 61 * 86400 }));
+      const v = mod.getVaultCatalog().find(x => x.address === addr(0x50));
+      assert.deepEqual([v.lowRiskCollateralPercent, v.highRiskCollateralPercent, v.impairedCollateralPercent, v.unratedCollateralPercent, v.collateralTier], [25, 25, 25, 50, 'CLASSIFIED']);
+      assert.ok(!('baseCollateralPercent' in v) && !('specialCollateralPercent' in v) && !('unclassifiedCollateralPercent' in v));
     })],
     ['повторний виклик повертає той самий масив до синхронізації, після неї - новий', async mod => sandbox(async db => {
       seedCatalog(db);

@@ -68,14 +68,15 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     : allVaults;
 
   const allocRows = db.prepare(`
-    SELECT va.*, m.*, t.tags_json AS collateral_tags_json
+    SELECT va.*, m.*, r.risk_tier AS collateral_risk_tier, r.confidence AS collateral_confidence, r.researched_at AS collateral_researched_at,
+           r.status AS collateral_research_status, r.category AS collateral_category
     FROM vault_allocations va
     JOIN markets m ON va.market_unique_key = m.unique_key
-    LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
+    LEFT JOIN token_research r ON r.chain_id = m.chain_id AND r.address = lower(m.collateral_asset_address)
   `).all();
 
-  // Without any fetched tags the collateral model is 'none', so a failed first fetch does not look like a model change later
-  const tagsReady = db.prepare('SELECT COUNT(*) AS c FROM token_tags WHERE tags_fetched_at IS NOT NULL').get().c > 0;
+  // Until the first rated record exists the collateral model is 'none', so the first research import does not look like a model change later
+  const researchReady = db.prepare("SELECT COUNT(*) AS c FROM token_research WHERE status = 'rated'").get().c > 0;
 
   const peerRowsByMarket = new Map();
   for (const a of allocRows) {
@@ -178,13 +179,14 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     }
 
     const scoredVault = withEffectiveTotal(vault, allocs);
-    const verdict = generateVaultVerdict(scoredVault, allocs);
+    const verdict = generateVaultVerdict(scoredVault, allocs, nowSec);
     const nextState = buildWatchState(vault, allocs, verdict, {
       fee: vault.fee,
       timelock: vaultContext.timelock,
       guardian: vaultContext.guardian,
       lastAdminEventTs,
-      collateralModel: tagsReady ? COLLATERAL_MODEL : 'none'
+      collateralModel: researchReady ? COLLATERAL_MODEL : 'none',
+      nowSec
     });
 
     const derivedEvents = diffDerivedState(prevState, nextState, vaultContext, nowSec);

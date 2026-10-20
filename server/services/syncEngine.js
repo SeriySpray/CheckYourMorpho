@@ -1,6 +1,5 @@
 import { getDatabase, checkpointDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
-import { TAG_KIND, parseTagsJson } from '../engine/collateralEngine.js';
 import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
 import { syncVaultEvents } from './eventsService.js';
 import { refreshTokenTags } from './tokenTags.js';
@@ -105,21 +104,6 @@ export function unresolvedV1Assets(rawV) {
   const allocation = rawV.state?.allocation;
   if (!Array.isArray(allocation)) return toBigInt(rawV.state?.totalAssets);
   return allocation.filter(a => !a.market).reduce((acc, a) => acc + toBigInt(a.supplyAssets), 0n);
-}
-
-/** Morpho tags on collateral that are missing from the TAG_KIND table: logged so the table can be reviewed. */
-export function reportUnknownCollateral(db) {
-  try {
-    const unlisted = new Set();
-    for (const r of db.prepare('SELECT tags_json FROM token_tags WHERE tags_json IS NOT NULL').all()) {
-      for (const tag of parseTagsJson(r.tags_json) || []) if (!TAG_KIND[tag]) unlisted.add(tag);
-    }
-    for (const tag of unlisted) console.warn(`[SyncEngine] Morpho tag '${tag}' is not in TAG_KIND: tokens carrying it stay unclassified`);
-    return [...unlisted];
-  } catch (err) {
-    console.warn('[SyncEngine] Could not check for unlisted tags:', err.message);
-    return [];
-  }
 }
 
 /** Unresolved raw assets priced as a share of the vault's own TVL, in the units the engines compare with. */
@@ -509,8 +493,6 @@ export async function syncAllVaults(options = {}) {
     } catch (evErr) {
       console.error('[Events] Failed to sync vault events:', evErr.message);
     }
-
-    reportUnknownCollateral(db);
 
     // Perform non-blocking WAL maintenance checkpoint
     checkpointDatabase();
