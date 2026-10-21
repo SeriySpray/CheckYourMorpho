@@ -121,7 +121,7 @@ The sync interval, database path and Morpho API URL are fixed in `server/config.
 
 ## AI research runner
 
-The research runs on the owner's PC, not on the server (the Oracle VM has under 1 GB of RAM). The runner takes the work queue from the server, researches the tokens with the `agy` CLI (one at a time by default) (Antigravity, model `gemini-3.8-flash-high`) and posts each result back. The server only validates and stores it.
+The research runs on the owner's PC, not on the server (the Oracle VM has under 1 GB of RAM). The runner takes the work queue from the server, researches the tokens with the `agy` CLI (one at a time by default) (Antigravity, model `gemini-3.8-flash-low`) and posts each result back. The server only validates and stores it.
 
 1. Set `RESEARCH_TOKEN` in the server environment. Without it both research endpoints answer 403.
 2. Put the same token in `%USERPROFILE%\.checkyourmorpho\research_token` (or point `RESEARCH_TOKEN_FILE` at another file). The runner never writes the token to the log and never passes it to `agy`.

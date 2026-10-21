@@ -7,7 +7,7 @@ import path from 'node:path';
 import { buildResearchPrompt, checkSources, extractResearchJson, validateResearch, SCHEMA_PATH, PROMPT_VERSION } from './tokenResearch.js';
 
 export const RUNNER_DEFAULTS = {
-  model: 'gemini-3.8-flash-high',
+  model: 'gemini-3.8-flash-low',
   limit: 40,
   maxMinutes: 240,
   minFreeBytes: 1400 * 1024 ** 2,

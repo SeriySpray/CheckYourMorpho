@@ -60,7 +60,7 @@ function fakeSpawn({ pid = 4242, run }) {
 
 export default {
   RUNNER_DEFAULTS: [['values from the plan', ({ RUNNER_DEFAULTS: d }) => {
-    assert.equal(d.model, 'gemini-3.8-flash-high'); assert.equal(d.limit, 40); assert.equal(d.maxMinutes, 240);
+    assert.equal(d.model, 'gemini-3.8-flash-low'); assert.equal(d.limit, 40); assert.equal(d.maxMinutes, 240);
     assert.equal(d.minFreeBytes, 1400 * 1024 ** 2); assert.deepEqual([d.concurrency, d.maxConcurrency, d.memWaitStepMs, d.memMaxWaitMs], [1, 3, 60e3, 600e3]); assert.equal(d.lockMaxAgeMs, 8 * 3600e3); assert.equal(d.agyTimeoutMs, 12 * 60e3); assert.equal(d.pauseMs, 5000);
     assert.deepEqual(d.mcpToDisable, ['playwright', 'context7', 'pencil']);
   }]],
@@ -68,7 +68,7 @@ export default {
   parseArgs: [
     ['defaults and a trimmed api URL', ({ parseArgs: f }) => {
       const o = f(['--api', 'https://checkyourmorpho.duckdns.org/']);
-      assert.deepEqual(o, { api: 'https://checkyourmorpho.duckdns.org', limit: 40, tokens: null, dryRun: false, maxMinutes: 240, outDir: null, model: 'gemini-3.8-flash-high', concurrency: 1, minFreeMb: 1400 });
+      assert.deepEqual(o, { api: 'https://checkyourmorpho.duckdns.org', limit: 40, tokens: null, dryRun: false, maxMinutes: 240, outDir: null, model: 'gemini-3.8-flash-low', concurrency: 1, minFreeMb: 1400 });
       assert.equal(f(['--api', 'http://localhost:3000/base/']).api, 'http://localhost:3000/base');
     }],
     ['all flags', ({ parseArgs: f }) => {
@@ -95,7 +95,7 @@ export default {
 
   buildAgyArgs: [
     ['non-interactive, JSON output, schema, model, sandbox, skip-permissions and 600 s print timeout', ({ buildAgyArgs: f }) => {
-      assert.deepEqual(f({ prompt: 'P' }), ['-p', 'P', '--output-format', 'json', '--json-schema', SCHEMA_PATH, '--model', 'gemini-3.8-flash-high',
+      assert.deepEqual(f({ prompt: 'P' }), ['-p', 'P', '--output-format', 'json', '--json-schema', SCHEMA_PATH, '--model', 'gemini-3.8-flash-low',
         '--dangerously-skip-permissions', '--sandbox', '--print-timeout', '600s']);
       const a = f({ prompt: 'P', schemaPath: 'S', model: 'M' });
       assert.ok(a.includes('S') && a.includes('M') && a.includes('--sandbox') && !a.includes('--effort') && !a.includes('--mode'));
