@@ -1,4 +1,4 @@
-import { calculateMQI, withMaterialUnresolved } from './mqiEngine.js';
+import { calculateMQI, withMaterialUnresolved, getMaterialityThresholdUsd } from './mqiEngine.js';
 import { calculateHHI } from './hhiEngine.js';
 import { calculateCollateralMix } from './collateralEngine.js';
 import { calculateLiquidityMetrics } from './liquidityEngine.js';
@@ -16,6 +16,8 @@ import { calculateLiquidityMetrics } from './liquidityEngine.js';
 export function generateVaultVerdict(vault, allocations = []) {
   // 1. Market Quality Index (MQI) [0% - 100%]
   const mqi = calculateMQI(vault, allocations);
+  // Red flags need their capital to be material; the score above counts every dollar
+  const materialUsd = getMaterialityThresholdUsd(vault.total_assets_usd);
 
   // 2. Herfindahl-Hirschman Concentration Index (HHI) [0.00 - 1.00]
   const hhi = calculateHHI(withMaterialUnresolved(vault, mqi), allocations);
@@ -27,8 +29,8 @@ export function generateVaultVerdict(vault, allocations = []) {
   // 4. Objective, Fact-Based Audit Flags
   const redFlags = [];
 
-  // Flag 1: Compromised or Defaulted Markets (material allocations, see mqiEngine materiality rule).
-  // Tested on the list itself: mqiPercent is rounded to 0.1 and can read 100 for a real but small share.
+  // Flag 1: Compromised or Defaulted Markets. The score counts every position; the red flag needs their sum to be
+  // material (getMaterialityThresholdUsd), so a few dollars in a defective market do not turn a vault red.
   if (mqi.unpriced) {
     redFlags.push({
       level: 'HIGH',
@@ -37,7 +39,7 @@ export function generateVaultVerdict(vault, allocations = []) {
     });
   }
 
-  if (mqi.compromisedMarkets.length > 0) {
+  if (mqi.compromisedAssetsUsd >= materialUsd && mqi.compromisedMarkets.length > 0) {
     const compromisedPct = mqi.compromisedPercent;
     const reasonsSummary = mqi.compromisedMarkets.map(m => `${m.collateralSymbol}/${m.loanSymbol} (${m.weightPercent}% TVL): ${m.reasons.join(', ')}`).join('; ');
     redFlags.push({
@@ -48,7 +50,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 1b: Material capital behind V2 adapters whose markets could not be resolved (see mqiEngine)
-  if (mqi.unresolvedAssetsUsd > 0) {
+  if (mqi.unresolvedAssetsUsd > 0 && mqi.unresolvedAssetsUsd >= materialUsd) {
     const unresolvedPct = mqi.unresolvedPercent;
     redFlags.push({
       level: 'HIGH',
@@ -58,7 +60,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // Flag 1c: Markets whose bad debt or warnings data did not come back from the API
-  if (mqi.unverifiedMarkets.length > 0) {
+  if (mqi.unverifiedMarkets.length > 0 && mqi.unverifiedMarkets.reduce((acc, m) => acc + m.supplyAssetsUsd, 0) >= materialUsd) {
     const marketsSummary = mqi.unverifiedMarkets.map(m => `${m.collateralSymbol}/${m.loanSymbol} (${m.weightPercent}%): ${m.reasons.join(', ')}`).join('; ');
     redFlags.push({
       level: 'MEDIUM',
@@ -144,7 +146,6 @@ export function generateVaultVerdict(vault, allocations = []) {
       ? `${mqi.mqiPercent}% of verified capital is clean (${mqi.unverifiedPercent}% of capital unverified)`
       : `${mqi.mqiPercent}% clean capital`;
   // A rounded 100 next to a real defect must not read as fully clean
-  if (mqi.compromisedMarkets.length > 0 && mqi.mqiPercent === 100) mqiText += ` (${mqi.compromisedPercent}% in compromised markets)`;
   const summary = `MQI: ${mqiText}. ${exitSummary}.`;
 
   return {

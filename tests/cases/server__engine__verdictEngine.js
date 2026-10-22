@@ -16,16 +16,16 @@ const crowd = (S, F, P) => (S < 100e6 ? [mkt(0, S, F, P), mkt(1, 100e6 - S, 0)] 
 
 export default {
   generateVaultVerdict: [
-    ['дрібний нерозкритий капітал ($200K із $100M) ігнорується однаково в MQI, HHI і виході', ({ generateVaultVerdict: f }) => {
+    ['дрібний нерозкритий капітал ($200K із $100M) однаково враховується в MQI, HHI і виході, але не дає червоного прапорця', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 200e3 }), []);
-      assert.equal(r.mqi.unverifiedPercent, 0); assert.equal(r.hhi.unverifiedPercent, 0); assert.equal(r.liquidity.unverifiedPercent, 0);
+      assert.equal(r.mqi.unverifiedPercent, 0.2); assert.equal(r.hhi.unverifiedPercent, 0.2); assert.equal(r.liquidity.unverifiedPercent, 0.2);
+      assert.equal(flag(r, 'Unresolved Exposure'), undefined);
       const big = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 30e6 }), []);
       assert.equal(big.hhi.unverifiedPercent, 30); assert.equal(big.liquidity.unverifiedPercent, 30);
     }],
-    ['округлений до 100 MQI поряд з брудним ринком не читається як повністю чистий, малий відсоток не стає 0', ({ generateVaultVerdict: f }) => {
+    ['MQI поряд з брудним ринком не округлюється до 100, малий відсоток не стає 0', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ total_assets_usd: 10e9 }), [alloc({ is_listed: 0, supply_assets_usd: 250e3, market_unique_key: '1:0xbad' })]);
-      assert.equal(r.mqi.mqiPercent, 100);
-      assert.ok(r.summary.includes('compromised markets'), r.summary);
+      assert.equal(r.mqi.mqiPercent, 99.9);
       assert.ok(!flag(r, 'Compromised Market Exposure').message.startsWith('0%'));
     }],
     ['актив без USD-ціни: немає й Restricted Exit Liquidity з "Only null%" (null < 20 у JS true)', ({ generateVaultVerdict: f }) => {
@@ -67,10 +67,15 @@ export default {
       const r = f(vault(), [...diversified().slice(0, 9), alloc({ is_listed: 0, supply_assets_usd: 1.25e6, market_unique_key: '1:0xbad', collateral_asset_symbol: 'BAD' })]);
       assert.match(flag(r, 'Compromised Market Exposure').message, /^1\.25% of capital .*BAD\/USDC \([\d.]+% TVL\): Unlisted market/);
     }],
-    ['мала, але суттєва брудна позиція у vault $10B дає CRITICAL, хоча MQI округлюється до 100%', ({ generateVaultVerdict: f }) => {
+    ['мала, але суттєва брудна позиція у vault $10B дає CRITICAL, а MQI 99.9, не 100%', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ total_assets_usd: 10e9 }), [alloc({ supply_assets_usd: 300e3, bad_debt_usd: 1e6 })]);
-      assert.equal(r.mqi.mqiPercent, 100);
+      assert.equal(r.mqi.mqiPercent, 99.9);
       assert.equal(flag(r, 'Compromised Market Exposure').level, 'CRITICAL');
+    }],
+    ['брудні $145 у vault $112K: MQI знижується (99.9), але червоного прапорця немає (нижче суттєвості)', ({ generateVaultVerdict: f }) => {
+      const r = f(vault({ total_assets_usd: 112e3 }), [alloc({ is_listed: 0, supply_assets_usd: 145 })]);
+      assert.equal(r.mqi.mqiPercent, 99.9); assert.equal(r.mqi.compromisedMarkets.length, 1);
+      assert.equal(flag(r, 'Compromised Market Exposure'), undefined);
     }],
     ["п'ять рівних застав -> жодного прапорця застав", ({ generateVaultVerdict: f }) =>
       assert.deepEqual(f(vault(), diversified().slice(0, 5).map(a => ({ ...a, supply_assets_usd: 20e6 }))).redFlags, [])],

@@ -9,7 +9,7 @@ export default {
     ['підставляє суттєвий нерозкритий капітал з MQI, не мутує vault', ({ withMaterialUnresolved: f, calculateMQI: c }) => {
       const v = vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 200e3 });
       const r = f(v, c(v, []));
-      assert.equal(r.unresolved_exposure_usd, 0); assert.equal(v.unresolved_exposure_usd, 200e3);
+      assert.equal(r.unresolved_exposure_usd, 200e3); assert.equal(v.unresolved_exposure_usd, 200e3);
       const big = vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 30e6 });
       assert.equal(f(big, c(big, [])).unresolved_exposure_usd, 30e6);
     }],
@@ -17,7 +17,18 @@ export default {
   getMaterialityThresholdUsd: [
     ['1% TVL для малого vault', ({ getMaterialityThresholdUsd: f }) => assert.equal(f(1e6), 10000)],
     ['рівно на межі стелі: TVL 25M -> 250K', ({ getMaterialityThresholdUsd: f }) => assert.equal(f(25e6), 250000)],
-    ['стеля 250K для великого vault', ({ getMaterialityThresholdUsd: f }) => assert.equal(f(1e9), 250000)],
+    ['$250K брудних у vault $1B: 99.9, а не 100 (точна частка 0.03% не стає чистою)', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 1e9 }), [dirty(250e3)]);
+      assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.mqiPercent, 99.9); assert.equal(r.isAllClean, false);
+    }],
+    ['монотонність: більша брудна позиція ніколи не покращує MQI ($249999 -> $250000)', ({ calculateMQI: f }) => {
+      const v = vault({ total_assets_usd: 100e6 });
+      const base = Array.from({ length: 12 }, (_, i) => dirty(20e3, { market_unique_key: `1:0xs${i}` }));
+      const below = f(v, [...base, dirty(249999)]);
+      const at = f(v, [...base, dirty(250000)]);
+      assert.ok(at.compromisedAssetsUsd > below.compromisedAssetsUsd); assert.ok(at.mqiPercent <= below.mqiPercent);
+      assert.equal(at.compromisedMarkets.length, below.compromisedMarkets.length);
+    }],
     ['рядок з числом приймається: "2000000" -> 20000', ({ getMaterialityThresholdUsd: f }) => assert.equal(f('2000000'), 20000)],
     ['нечислове значення -> 0', ({ getMaterialityThresholdUsd: f }) => {
       assert.equal(f(undefined), 0); assert.equal(f('abc'), 0); assert.equal(f(0), 0);
@@ -127,8 +138,8 @@ export default {
       }
     }],
     ['нечитабельна позиція поруч із читабельною чистою -> чиста лишається чистою, решта нерозкрита', ({ calculateMQI: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 40e6 }), dirty(null)]);
-      assert.equal(r.cleanAssetsUsd, 40e6); assert.equal(r.unresolvedAssetsUsd, 60e6); assert.equal(r.mqiPercent, 100);
+      const r = f(vault(), [alloc({ supply_assets_usd: 60e6 }), dirty(null)]);
+      assert.equal(r.cleanAssetsUsd, 60e6); assert.equal(r.unresolvedAssetsUsd, 40e6); assert.equal(r.mqiPercent, 100);
       assert.equal(r.isAllClean, false);
     }],
     ['усі суми читабельні -> залишок TVL лишається кешем (регресія)', ({ calculateMQI: f }) => {
@@ -159,18 +170,14 @@ export default {
       const r = f(vault({ total_assets_usd: 1e6 }), [dirty(5e3), dirty(5e3, { market_unique_key: '1:0xbad2' })]);
       assert.equal(r.mqiPercent, 99); assert.equal(r.compromisedMarkets.length, 2); assert.equal(r.compromisedAssetsUsd, 1e4);
     }],
-    ['дві брудні по 0.49% TVL (разом 0.98%) -> пил, 100%, рахуються чистими ринками', ({ calculateMQI: f }) => {
+    ['дві брудні по 0.49% TVL рахуються за точним розміром: 99%, не пил і не 100%', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 1e6 }), [dirty(4.9e3), dirty(4.9e3, { market_unique_key: '1:0xbad2' })]);
-      assert.equal(r.mqiPercent, 100); assert.equal(r.compromisedMarkets.length, 0); assert.equal(r.cleanMarketsCount, 2);
-      assert.equal(r.isAllClean, true);
+      assert.equal(r.mqiPercent, 99); assert.equal(r.compromisedMarkets.length, 2); assert.equal(r.compromisedAssetsUsd, 9.8e3);
+      assert.equal(r.isAllClean, false);
     }],
-    ['несуттєвий брудний пил вважається чистим', ({ calculateMQI: f }) => {
+    ['малий брудний ринок у vault $1B ($100K) позначається, а MQI не округлюється до 100', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 1e9 }), [alloc({ is_listed: 0, supply_assets_usd: 100e3 })]);
-      assert.equal(r.mqiPercent, 100); assert.equal(r.compromisedMarkets.length, 0);
-    }],
-    ['стеля 250K: у vault $1B брудні 250K суттєві, хоча mqiPercent округлюється до 100', ({ calculateMQI: f }) => {
-      const r = f(vault({ total_assets_usd: 1e9 }), [dirty(250e3)]);
-      assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.mqiPercent, 100); assert.equal(r.isAllClean, false);
+      assert.equal(r.mqiPercent, 99.9); assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.isAllClean, false);
     }],
     ['брудна позиція з bad debt у vault $1B не "відмивається" правилом 1%', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 1e9 }), [alloc({ supply_assets_usd: 9.9e6, bad_debt_usd: 5e6 })]);
@@ -201,11 +208,11 @@ export default {
       const r = f(vault({ unresolved_exposure_usd: 50e6 }), [alloc({ supply_assets_usd: 50e6 })]);
       assert.equal(r.mqiPercent, 100); assert.equal(r.unverifiedPercent, 50); assert.equal(r.isAllClean, false); assert.equal(r.cleanAssetsUsd + r.compromisedAssetsUsd + r.unresolvedAssetsUsd, 100e6);
     }],
-    ['C1: нерозкрита сума нижче порогу суттєвості (200K із 100M, поріг 250K) рахується чистою, рівно на порозі - ні', ({ calculateMQI: f }) => {
-      const below = f(vault({ unresolved_exposure_usd: 200e3 }), []);
-      assert.equal(below.mqiPercent, 100); assert.equal(below.unresolvedAssetsUsd, 0); assert.equal(below.isAllClean, true);
-      const at = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 100e3 }), []);
-      assert.equal(at.mqiPercent, 100); assert.equal(at.unverifiedPercent, 1); assert.equal(at.isAllClean, false);
+    ['C1: нерозкрита сума рахується повністю, без порогів (200K із 100M -> 0.2% непідтверджено, не чисто)', ({ calculateMQI: f }) => {
+      const r = f(vault({ unresolved_exposure_usd: 200e3 }), []);
+      assert.equal(r.mqiPercent, 100); assert.equal(r.unresolvedAssetsUsd, 200e3); assert.equal(r.unverifiedPercent, 0.2); assert.equal(r.isAllClean, false);
+      const small = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 100e3 }), []);
+      assert.equal(small.unverifiedPercent, 1); assert.equal(small.isAllClean, false);
     }],
     ['актив без USD-ціни (total_assets > 0, USD 0) -> MQI невідомий (null), не 100%', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 0, total_assets: '1000000' }), []);
@@ -219,23 +226,19 @@ export default {
       const r = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 90e3 }), [dirty(90e3)]);
       assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.unresolvedAssetsUsd, 90e3); assert.equal(r.isAllClean, false);
     }],
-    ['окремо кожен під порогом (0.9% брудного або 0.9% нерозкритого) лишається пилом', ({ calculateMQI: f }) => {
-      assert.equal(f(vault({ total_assets_usd: 10e6 }), [dirty(90e3)]).isAllClean, true);
-      assert.equal(f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 90e3 }), []).isAllClean, true);
+    ['дрібний брудний (0.9%) або дрібний нерозкритий (0.9%) окремо теж не дають isAllClean', ({ calculateMQI: f }) => {
+      assert.equal(f(vault({ total_assets_usd: 10e6 }), [dirty(90e3)]).isAllClean, false);
+      assert.equal(f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 90e3 }), []).isAllClean, false);
     }],
-    ['кумулятивний поріг не виводить у список ринок дешевший за $1', ({ calculateMQI: f }) => {
-      const r = f(vault({ total_assets_usd: 10e6, unresolved_exposure_usd: 90e3 }), [dirty(90e3), dirty(0.5, { market_unique_key: '1:0xdust' })]);
-      assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.compromisedMarkets[0].marketUniqueKey, '1:0xbad90000');
+    ['брудний ринок без постачання (0 USD або менше цента) не потрапляє у список, з постачанням $0.5 потрапляє', ({ calculateMQI: f }) => {
+      const v = vault({ total_assets_usd: 10e6 });
+      assert.equal(f(v, [dirty(0)]).compromisedMarkets.length, 0);
+      const residue = f(v, [dirty(0.004)]); assert.equal(residue.compromisedMarkets.length, 0); assert.equal(residue.mqiPercent, 100);
+      assert.equal(f(v, [dirty(0.5)]).compromisedMarkets.length, 1);
     }],
-    ['кумулятивне правило: нерозкритий 300K (поріг 250K) робить суттєвим брудний ринок $1M, але не брудний пил $50', ({ calculateMQI: f }) => {
-      const v = vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 300e3 });
-      const r = f(v, [dirty(1e6), dirty(50, { market_unique_key: '1:0xdust' })]);
-      assert.deepEqual(r.compromisedMarkets.map(m => m.marketUniqueKey), ['1:0xbad1000000']);
-      assert.equal(f(v, [dirty(50)]).compromisedMarkets.length, 0);
-    }],
-    ['кумулятивне правило: брудний $1M не робить суттєвим нерозкритий розрив $240 (нижче 10% порога)', ({ calculateMQI: f }) => {
-      const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 240 }), [dirty(1e6)]);
-      assert.equal(r.compromisedMarkets.length, 1); assert.equal(r.unresolvedAssetsUsd, 0);
+    ['брудне і нерозкрите рахуються разом без порогів: 300K нерозкритого, брудні $1M і $50 -> обидва брудні в списку', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 100e6, unresolved_exposure_usd: 300e3 }), [dirty(1e6), dirty(50, { market_unique_key: '1:0xdust' })]);
+      assert.equal(r.compromisedMarkets.length, 2); assert.equal(r.unresolvedAssetsUsd, 300e3);
     }],
     ['20 брудних ринків по $24K у vault $100M (разом $480K > поріг $250K) усі позначаються, а не відсікаються межею пилу', ({ calculateMQI: f }) => {
       const dirtyList = Array.from({ length: 20 }, (_, i) => dirty(24e3, { market_unique_key: `1:0xd${i}` }));
@@ -298,9 +301,13 @@ export default {
       assert.equal(r.mqiPercent, 66.7); assert.equal(r.compromisedPercent, 20); assert.equal(r.unverifiedPercent, 40);
       assert.equal(r.cleanAssetsUsd + r.compromisedAssetsUsd + r.unverifiedAssetsUsd, 100e6);
     }],
-    ['непідтверджений ринок нижче порогу суттєвості лишається пилом і нічого не змінює', ({ calculateMQI: f }) => {
+    ['непідтверджений ринок на $50K у vault $10M рахується: у списку, isAllClean false, MQI 100 від перевіреної частини', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 10e6 }), [alloc({ supply_assets_usd: 50e3, bad_debt_usd: null })]);
-      assert.equal(r.unverifiedMarkets.length, 0); assert.equal(r.isAllClean, true);
+      assert.equal(r.unverifiedMarkets.length, 1); assert.equal(r.isAllClean, false); assert.equal(r.mqiPercent, 100);
+    }],
+    ['перевіреної частини менше за непідтверджену -> MQI null, не 100 (3M чисто, 7M без даних)', ({ calculateMQI: f }) => {
+      const r = f(vault({ total_assets_usd: 10e6 }), [alloc({ supply_assets_usd: 3e6 }), alloc({ supply_assets_usd: 7e6, bad_debt_usd: null, market_unique_key: '1:0xnd' })]);
+      assert.equal(r.mqiPercent, null); assert.equal(r.unverifiedPercent, 70);
     }],
   ],
   isUnpricedVault: [

@@ -13,16 +13,17 @@
  *   - it has no critical protocol security warnings (not_whitelisted, or a RED integrity warning)
  * It is compromised if any of these is violated (a known defect), and unverified if the API did not
  * report the data to decide. Unverified markets and unexpanded adapters leave the denominator and are
- * reported separately. A defective position counts once it is material (see getMaterialityThresholdUsd);
- * small ones count together once their sum reaches the threshold. MQI is null if nothing could be verified.
+ * reported separately. Every position counts at its exact size, with no materiality cut-off in the score
+ * (a defect never rounds up to 100%). MQI is null if nothing could be verified.
  */
 
 
 import { isIdleReserveMarket } from './hhiEngine.js';
 
 /**
- * Minimum allocation (USD) that counts as material for a vault: 1% of TVL, but never more
- * than $250K, so a flagged position in a very large vault cannot hide below a percentage cut.
+ * Minimum compromised capital (USD) that raises a red verdict flag or an alert for a vault: 1% of TVL, but never
+ * more than $250K, so a flagged position in a very large vault cannot hide below a percentage cut.
+ * It filters noise in verdicts and alerts only; the MQI score itself has no cut-off.
  * shortcut: fixed $250K cap, make it configurable if vault sizes shift by orders of magnitude.
  */
 export function getMaterialityThresholdUsd(totalAssetsUsd) {
@@ -116,10 +117,7 @@ export function isMarketClean(market) {
   };
 }
 
-/**
- * The vault as the concentration and exit engines should see it: unexpanded capital below the materiality
- * threshold is dust there too, so all three metrics agree on what is unverified.
- */
+/** The vault as the concentration and exit engines should see it: all three metrics agree on what is unresolved. */
 export function withMaterialUnresolved(vault, mqi) {
   return { ...vault, unresolved_exposure_usd: mqi.unresolvedAssetsUsd };
 }
@@ -160,13 +158,11 @@ export function calculateMQI(vault, allocations = []) {
   let compromisedSupplyUsd = 0;
   let unverifiedMarketsUsd = 0;
   let cleanMarketsCount = 0;
+  let hasUnreadableSupply = false;
   const compromisedMarkets = [];
   const unverifiedMarkets = [];
-  const minMaterialThresholdUsd = getMaterialityThresholdUsd(totalAssetsUsd);
-  const rawCompromisedItems = [];
-  let totalCompromisedRawUsd = 0;
 
-  let hasUnreadableSupply = false;
+  // Every position counts at its exact size: the score is a plain proportion, with no size cut-offs
   for (const alloc of allocations) {
     // A position whose size is missing or not a non-negative number is unknown, not zero
     if (alloc.supply_assets_usd == null || !(Number(alloc.supply_assets_usd) >= 0)) hasUnreadableSupply = true;
@@ -176,50 +172,23 @@ export function calculateMQI(vault, allocations = []) {
     if (test.isClean) {
       cleanSupplyUsd += supplyUsd;
       if (supplyUsd >= 1) cleanMarketsCount++;
-    } else {
-      rawCompromisedItems.push({ alloc, supplyUsd, test });
-      totalCompromisedRawUsd += supplyUsd;
+      continue;
     }
+    // Below one cent is share-accounting residue (it rounds to $0 in every report), not a position
+    if (supplyUsd < 0.01) continue;
+    const isCompromised = test.reasons.length > 0;
+    if (isCompromised) compromisedSupplyUsd += supplyUsd; else unverifiedMarketsUsd += supplyUsd;
+    (isCompromised ? compromisedMarkets : unverifiedMarkets).push({
+      marketUniqueKey: alloc.market_unique_key,
+      collateralSymbol: alloc.collateral_asset_symbol || 'None',
+      loanSymbol: alloc.loan_asset_symbol || '',
+      supplyAssetsUsd: Math.round(supplyUsd * 100) / 100,
+      reasons: isCompromised ? [...test.reasons, ...test.unverifiedReasons] : test.unverifiedReasons
+    });
   }
 
   // Capital behind V2 adapters we could not look through is unknown, not clean cash
-  const unresolvedRawUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
-
-  // Materiality evaluation: a defective or unresolved position counts on its own above 1% TVL (capped), and
-  // all of them count once their combined size passes that threshold. Isolated sub-threshold dust stays clean.
-  const isCumulativeMaterial = totalCompromisedRawUsd + unresolvedRawUsd >= minMaterialThresholdUsd;
-  // Even then, a position under a tenth of the threshold (at least $1) is dust: it adds a flag, not information.
-  // Unless that would leave the flagged positions below the threshold they were flagged for (many small ones):
-  // then every position from $1 counts.
-  const individuallyMaterialUsd = rawCompromisedItems.filter(i => i.supplyUsd >= minMaterialThresholdUsd).reduce((acc, i) => acc + i.supplyUsd, 0)
-    + (unresolvedRawUsd >= minMaterialThresholdUsd ? unresolvedRawUsd : 0);
-  const countedAboveFloor = floor => rawCompromisedItems.filter(i => i.supplyUsd < minMaterialThresholdUsd && i.supplyUsd >= floor).reduce((acc, i) => acc + i.supplyUsd, 0)
-    + (unresolvedRawUsd < minMaterialThresholdUsd && unresolvedRawUsd >= floor ? unresolvedRawUsd : 0);
-  let dustFloorUsd = Math.max(1, minMaterialThresholdUsd * 0.1);
-  // Also when the positions dropped as dust add up to the threshold themselves: dust must not hide a material total.
-  const droppedAsDustUsd = countedAboveFloor(1) - countedAboveFloor(dustFloorUsd);
-  if (individuallyMaterialUsd + countedAboveFloor(dustFloorUsd) < minMaterialThresholdUsd || droppedAsDustUsd >= minMaterialThresholdUsd) dustFloorUsd = 1;
-
-  for (const item of rawCompromisedItems) {
-    const isMaterial = item.supplyUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && item.supplyUsd >= dustFloorUsd);
-    if (isMaterial) {
-      const isCompromised = item.test.reasons.length > 0;
-      if (isCompromised) compromisedSupplyUsd += item.supplyUsd; else unverifiedMarketsUsd += item.supplyUsd;
-      (isCompromised ? compromisedMarkets : unverifiedMarkets).push({
-        marketUniqueKey: item.alloc.market_unique_key,
-        collateralSymbol: item.alloc.collateral_asset_symbol || 'None',
-        loanSymbol: item.alloc.loan_asset_symbol || '',
-        supplyAssetsUsd: Math.round(item.supplyUsd * 100) / 100,
-        reasons: isCompromised ? [...item.test.reasons, ...item.test.unverifiedReasons] : item.test.unverifiedReasons
-      });
-    } else {
-      cleanSupplyUsd += item.supplyUsd;
-      if (item.supplyUsd >= 1) cleanMarketsCount++;
-    }
-  }
-
-  let unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && unresolvedRawUsd >= dustFloorUsd)
-    ? unresolvedRawUsd : 0;
+  let unresolvedUsd = Math.max(0, Number(vault.unresolved_exposure_usd) || 0);
 
   // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean),
   // unless a position of unknown size could be hiding in it: then the remainder is unknown too
@@ -235,11 +204,13 @@ export function calculateMQI(vault, allocations = []) {
   const unverifiedUsd = unverifiedMarketsUsd + unresolvedUsd;
   const effectiveTotalUsd = verifiedTotalUsd + unverifiedUsd;
 
-  // null = nothing could be verified, so there is nothing to score
-  // A verified remainder below the materiality threshold next to unverified capital is residue, not a basis for a score.
-  const mqiPercent = verifiedTotalUsd > 0 && Number.isFinite(verifiedTotalUsd) && (unverifiedUsd === 0 || verifiedTotalUsd >= minMaterialThresholdUsd)
-    ? Math.min(100, Math.max(0, Math.round((totalCleanAssetsUsd / verifiedTotalUsd) * 1000) / 10))
-    : null;
+  // null = nothing could be verified, so there is nothing to score.
+  // A known defect never rounds up to 100: 100 means no compromised capital at all.
+  const cleanShare = verifiedTotalUsd > 0 && Number.isFinite(verifiedTotalUsd) ? totalCleanAssetsUsd / verifiedTotalUsd : null;
+  // Scored only while the verified capital is at least the unverified one: a score from a sliver of the vault is no score.
+  const mqiPercent = cleanShare === null || verifiedTotalUsd < unverifiedUsd ? null
+    : compromisedSupplyUsd > 0 ? Math.min(99.9, Math.max(0, Math.round(cleanShare * 1000) / 10))
+    : 100;
 
   // One denominator for every share reported below: the capital the verdict is measured against
   // A positive amount never rounds to 0%: the smallest share reported is one unit of the last digit

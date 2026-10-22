@@ -832,7 +832,7 @@ export default {
       seedQuality(db);
       const [f, g] = [list(mod, '?search=' + addr(0x20).slice(-4)).vaults[0], list(mod, '?search=' + addr(0x21).slice(-4)).vaults[0]];
       assert.equal(f.mqiPercent, 60); assert.equal(f.compromisedCount, 2); assert.equal(f.isAllClean, false);
-      assert.equal(g.mqiPercent, 100); assert.equal(g.compromisedCount, 0);
+      assert.equal(g.mqiPercent, 99.5); assert.equal(g.compromisedCount, 1); assert.equal(g.isAllClean, false);
     })],
     ['нульовий TVL з алокаціями не дає 100% виходу (ефективний TVL = сума алокацій)', async mod => sandbox(async db => {
       ins(db, 'markets', M('full', { total_supply_assets_usd: 1000, total_borrow_assets_usd: 1000 }));
@@ -932,12 +932,12 @@ export default {
       assert.equal(body.verdict.mqi.mqiPercent, 60);
       assert.ok(body.allocations[1].warnings.some(w => /Unlisted/.test(w)));
     })],
-    ['пил (<1% TVL) у нелістингованому ринку не позначається, але попередження лишається', async mod => sandbox(async db => {
+    ['дрібний (0.5% TVL) нелістингований ринок позначається і знижує MQI до 99.5, попередження лишається', async mod => sandbox(async db => {
       seedQuality(db);
       const { body } = getJson(mod, '/api/vaults/' + addr(0x21));
       const dust = body.allocations.find(a => a.marketUniqueKey === 'unl2');
-      assert.equal(dust.isFlagged, false); assert.equal(dust.isClean, true); assert.ok(dust.warnings.length > 0);
-      assert.equal(body.verdict.mqi.mqiPercent, 100);
+      assert.equal(dust.isFlagged, true); assert.equal(dust.isClean, false); assert.ok(dust.warnings.length > 0);
+      assert.equal(body.verdict.mqi.mqiPercent, 99.5);
     })],
     ['піри з інших vaults формують stressed exit і переповнений ринок', async mod => sandbox(async db => {
       seedCrowded(db);

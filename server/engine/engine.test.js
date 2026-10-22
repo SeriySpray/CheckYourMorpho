@@ -75,7 +75,7 @@ test('a small but material compromised position still raises the CRITICAL flag',
   const vault = { version: 'v1', address: '0x1', name: 'Big', total_assets_usd: 10e9, liquidity_usd: 0 };
   const bad = market({ supply_assets_usd: 300000, bad_debt_usd: 100000 });
   const verdict = generateVaultVerdict(vault, [bad]);
-  assert.equal(verdict.mqi.mqiPercent, 100); // rounded to 0.1, hides a 0.003% share
+  assert.equal(verdict.mqi.mqiPercent, 99.9); // a known defect never rounds up to 100
   assert.ok(verdict.redFlags.some(f => f.level === 'CRITICAL' && /Compromised/.test(f.title)));
 });
 
