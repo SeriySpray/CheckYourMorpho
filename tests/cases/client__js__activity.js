@@ -289,6 +289,7 @@ export default {
 
       // 28. bad_debt_appeared
       assert.equal(formatEventDetails({ badDebtUsd: 12500, marketKey: '0xaa80145be93ccfb0ebc25d8b7ea87588b3f78281' }, 'bad_debt_appeared'), '$12.5K bad debt (0xaa80...8281)');
+      assert.equal(formatEventDetails({ badDebtUsd: 12500, marketLabel: 'wstETH/USDC', afterDataGap: true }, 'bad_debt_appeared'), '$12.5K bad debt (wstETH/USDC) (after a data gap)');
 
       // 29. flagged_collateral_added
       assert.equal(formatEventDetails({ collateralSymbol: 'USDe', supplyUsd: 1500000 }, 'flagged_collateral_added'), 'USDe ($1.5M supply)');

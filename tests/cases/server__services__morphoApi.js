@@ -236,6 +236,13 @@ export default {
       }
       assert.equal((await noRetries(() => withFetch(async () => page('vaultV2s', [ok]), () => f()))).length, 1);
     }],
+    ['V2 з caps або adapters без списку items -> помилка Incomplete, а не мовчазний idle', async ({ fetchAllVaultV2s: f }) => {
+      const ok = { address: '0xok', asset: {}, chain: { id: 1 }, totalAssets: '5', caps: { items: [] }, adapters: { items: [] } };
+      for (const miss of ['caps', 'adapters']) {
+        const item = { ...ok, address: `0x${miss}`, [miss]: { items: null } };
+        await assert.rejects(noRetries(() => withFetch(async () => page('vaultV2s', [item]), () => f())), new RegExp(`Incomplete vaultV2s item 0x${miss}`));
+      }
+    }],
     ['запит GetVaultV2s включає managementFee, timelocks та pendingConfigs', async ({ fetchAllVaultV2s: f }) => {
       let queryStr = '';
       await noRetries(() => withFetch(async (_u, init) => {

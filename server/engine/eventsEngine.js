@@ -832,15 +832,16 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   const nextBadDebt = nextState.bad_debt_markets ?? nextState.badDebtMarkets ?? {};
   const prevUnverifiedBd = new Set(prevState.unverified_bad_debt_markets ?? prevState.unverifiedBadDebtMarkets ?? []);
   for (const [mKey, info] of Object.entries(nextBadDebt)) {
-    if (!prevBadDebt[mKey] && !prevUnverifiedBd.has(mKey)) {
-      pushDerived(
-        'bad_debt_appeared',
-        'critical',
-        `Bad debt detected in ${info.label || mKey} ($${info.badDebtUsd})`,
-        { marketKey: mKey, marketLabel: info.label || mKey, badDebtUsd: info.badDebtUsd, supplyUsd: info.supplyUsd },
-        mKey
-      );
-    }
+    if (prevBadDebt[mKey]) continue;
+    // The market had no bad debt data last time: the debt may be old, but it must still be reported once
+    const afterDataGap = prevUnverifiedBd.has(mKey);
+    pushDerived(
+      'bad_debt_appeared',
+      'critical',
+      `Bad debt detected in ${info.label || mKey} ($${info.badDebtUsd})${afterDataGap ? ', first seen after a gap in data' : ''}`,
+      { marketKey: mKey, marketLabel: info.label || mKey, badDebtUsd: info.badDebtUsd, supplyUsd: info.supplyUsd, ...(afterDataGap ? { afterDataGap: true } : {}) },
+      mKey
+    );
   }
 
   // Vault delisted

@@ -64,7 +64,7 @@ function detailLine(event, d) {
     return `Cap: ${fmt(d.oldCap)} to ${fmt(d.newCap)}${isNum(d.tvlShareAdded) ? `, adds ${percent(d.tvlShareAdded)} of vault assets` : ''}`;
   }
   if (event.kind === 'pending_timelock_change') return `Timelock: ${duration(d.oldTimelock)} to ${duration(d.newTimelock)}`;
-  if (event.kind === 'bad_debt_appeared') return `Bad debt: $${compact(d.badDebtUsd)} in a market holding $${compact(d.supplyUsd)} of the vault`;
+  if (event.kind === 'bad_debt_appeared') return `Bad debt: $${compact(d.badDebtUsd)} in a market holding $${compact(d.supplyUsd)} of the vault${d.afterDataGap ? ' (first seen after a gap in data, may be older)' : ''}`;
   if (event.kind === 'tvl_drop') return `TVL: $${compact(d.previousTvlUsd)} to $${compact(d.currentTvlUsd)}${isNum(d.dropPercent) ? ` (-${Math.round(d.dropPercent * 10) / 10}%)` : ''}`;
   return '';
 }

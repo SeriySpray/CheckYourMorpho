@@ -371,6 +371,25 @@ export default {
       const again = diffDerivedState(prev, next, baseCtx(), NOW + 3 * 3600);
       assert.deepEqual(again.map(e => e.dedupe_key), evs.map(e => e.dedupe_key));
     }],
+    ['bad debt після пропуску даних: подія виходить один раз з afterDataGap, далі тиша', ({ diffDerivedState }) => {
+      const debt = { '0xm1': { label: 'wstETH/USDC', badDebtUsd: 5e6, supplyUsd: 200000 } };
+      const s1 = { ...M, bad_debt_markets: {}, unverified_bad_debt_markets: ['0xm1'], flagged_markets: {}, is_listed: 1 };
+      const s2 = { ...M, bad_debt_markets: debt, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 };
+      const evs = diffDerivedState(s1, s2, baseCtx(), NOW);
+      assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical']]);
+      assert.equal(JSON.parse(evs[0].details_json).afterDataGap, true); assert.match(evs[0].title, /after a gap in data/);
+      assert.deepEqual(diffDerivedState(s2, s2, baseCtx(), NOW + 3 * 3600), []);
+    }],
+    ['звичайна поява bad debt (маркет був перевірений) іде без afterDataGap', ({ diffDerivedState }) => {
+      const s1 = { ...M, bad_debt_markets: {}, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 };
+      const s2 = { ...s1, bad_debt_markets: { '0xm1': { label: 'x', badDebtUsd: 1e4, supplyUsd: 1e5 } } };
+      const d = JSON.parse(diffDerivedState(s1, s2, baseCtx(), NOW)[0].details_json);
+      assert.equal('afterDataGap' in d, false);
+    }],
+    ['маркет лишається непідтвердженим -> події немає', ({ diffDerivedState }) => {
+      const s = { ...M, bad_debt_markets: {}, unverified_bad_debt_markets: ['0xm1'], flagged_markets: {}, is_listed: 1 };
+      assert.deepEqual(diffDerivedState(s, s, baseCtx(), NOW), []);
+    }],
   ],
   detectTvlOutflow: [
     ['падіння 20% у токенах і >= $500k -> warning з деталями для клієнта', ({ detectTvlOutflow }) => {

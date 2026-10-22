@@ -396,7 +396,8 @@ function formatEventDetails(details, kind = '') {
   if (k === 'bad_debt_appeared') {
     const bd = formatCompactNumber(details.badDebtUsd);
     const m = details.marketLabel || (details.marketKey ? formatAddress(details.marketKey) : '');
-    return bd ? `$${bd} bad debt${m ? ` (${m})` : ''}` : m;
+    const gap = details.afterDataGap ? ' (after a data gap)' : '';
+    return (bd ? `$${bd} bad debt${m ? ` (${m})` : ''}` : m) + gap;
   }
 
   // 20. Flagged collateral
