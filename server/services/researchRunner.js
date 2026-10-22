@@ -12,12 +12,12 @@ export const RUNNER_DEFAULTS = {
   maxMinutes: 240,
   minFreeBytes: 1400 * 1024 ** 2,
   concurrency: 1,
-  maxConcurrency: 3,
+  maxConcurrency: 8,
   // Free memory is rechecked before every agy call: wait this long between checks, give up on the token after memMaxWaitMs
   memWaitStepMs: 60e3,
   memMaxWaitMs: 10 * 60e3,
   // Delay between the first calls of the workers, so the first agy has taken its memory before the next check
-  staggerMs: 30e3,
+  staggerMs: 10e3,
   lockMaxAgeMs: 8 * 3600e3,
   agyTimeoutMs: 12 * 60e3,
   pauseMs: 5000,

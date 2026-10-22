@@ -61,7 +61,7 @@ function fakeSpawn({ pid = 4242, run }) {
 export default {
   RUNNER_DEFAULTS: [['values from the plan', ({ RUNNER_DEFAULTS: d }) => {
     assert.equal(d.model, 'gemini-3.8-flash-low'); assert.equal(d.limit, 40); assert.equal(d.maxMinutes, 240);
-    assert.equal(d.minFreeBytes, 1400 * 1024 ** 2); assert.deepEqual([d.concurrency, d.maxConcurrency, d.memWaitStepMs, d.memMaxWaitMs], [1, 3, 60e3, 600e3]); assert.equal(d.lockMaxAgeMs, 8 * 3600e3); assert.equal(d.agyTimeoutMs, 12 * 60e3); assert.equal(d.pauseMs, 5000);
+    assert.equal(d.minFreeBytes, 1400 * 1024 ** 2); assert.deepEqual([d.concurrency, d.maxConcurrency, d.memWaitStepMs, d.memMaxWaitMs], [1, 8, 60e3, 600e3]); assert.equal(d.lockMaxAgeMs, 8 * 3600e3); assert.equal(d.agyTimeoutMs, 12 * 60e3); assert.equal(d.pauseMs, 5000);
     assert.deepEqual(d.mcpToDisable, ['playwright', 'context7', 'pencil']);
   }]],
 
@@ -85,7 +85,7 @@ export default {
       assert.throws(() => f(['--api', 'not a url']), /must be a URL/);
     }],
     ['limit and max-minutes ranges, token format', ({ parseArgs: f }) => {
-      for (const [flag, v] of [['--limit', '0'], ['--limit', '201'], ['--limit', 'abc'], ['--limit', '1.5'], ['--max-minutes', '0'], ['--max-minutes', '1441'], ['--concurrency', '0'], ['--concurrency', '4'], ['--min-free-mb', '-1'], ['--min-free-mb', 'x']]) {
+      for (const [flag, v] of [['--limit', '0'], ['--limit', '201'], ['--limit', 'abc'], ['--limit', '1.5'], ['--max-minutes', '0'], ['--max-minutes', '1441'], ['--concurrency', '0'], ['--concurrency', '9'], ['--min-free-mb', '-1'], ['--min-free-mb', 'x']]) {
         assert.throws(() => f(['--api', 'https://h', flag, v]), /must be an integer/, `${flag} ${v}`);
       }
       assert.equal(f(['--api', 'https://h', '--limit', '200']).limit, 200);
@@ -366,7 +366,7 @@ export default {
       assert.deepEqual([r.exitCode, r.summary.accepted, r.summary.skipped], [0, 7, 0]);
       assert.deepEqual([...new Set(seen.map(x => x[1]))].sort(), [1, 2, 3]);
       assert.ok(calls.logs.filter(l => /\/7\]/.test(l)).every(l => /^\[w[123]\] /.test(l)));
-      assert.ok(calls.slept.includes(30e3) && calls.slept.includes(60e3), 'workers 2 and 3 start staggered');
+      assert.ok(calls.slept.includes(10e3) && calls.slept.includes(20e3), 'workers 2 and 3 start staggered');
     }],
     ['agy is not started while memory is short: the worker waits, and a token that waits 10 minutes is skipped', async ({ runResearch: f }) => {
       const events = [];
