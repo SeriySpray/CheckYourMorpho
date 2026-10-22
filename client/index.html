@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
-  <link rel="stylesheet" href="css/main.css?v=20261016_a11y">
-  <link rel="stylesheet" href="css/components.css?v=20261022_categories">
+  <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/main.css?v=20261023_ledger">
+  <link rel="stylesheet" href="css/components.css?v=20261023_ledger">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -14,248 +16,229 @@
     <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
   </div>
 
-  <!-- Header & Top Navigation -->
-  <header class="app-header">
-    <div class="header-left">
-      <span id="header-status-text" class="status-indicator"></span>
-    </div>
-  </header>
-
-  <!-- Left-side Pinned Vaults Rich Pills Container -->
-  <aside id="pinned-rich-pills" class="pinned-rich-pills-container hidden" aria-label="Pinned Vaults Watchlist">
-    <!-- Rich informational pills populated dynamically by app.js -->
-  </aside>
-
-  <!-- Right-side Master Vault Explorer & Filter Terminal (Morpho Design) -->
-  <aside id="vault-explorer-widget" class="vault-explorer-widget">
-    <!-- Terminal Header -->
-    <div class="explorer-header">
-      <div class="explorer-tag-row">
-        <span class="explorer-tag">MORPHO VAULTS</span>
-        <div class="explorer-header-actions">
-          <button type="button" id="explorer-activity-btn" class="explorer-activity-btn" title="Vault activity" aria-label="Vault activity" aria-expanded="false" aria-controls="activity-panel">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-            <span id="explorer-activity-badge" class="activity-badge hidden" aria-live="polite">0</span>
-          </button>
-          <button type="button" id="explorer-fav-filter-btn" class="explorer-fav-filter-btn" title="Filter Pinned Favorites" aria-label="Filter Pinned Favorites">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-            </svg>
-            <span id="explorer-fav-count" class="fav-filter-count">0</span>
-          </button>
-          <span id="explorer-count" class="explorer-count">311 Vaults</span>
-        </div>
+  <!-- Ledger: vault table, filters, pinned strip and activity (left of the sphere) -->
+  <aside id="vault-explorer-widget" class="vault-explorer-widget" aria-label="Vaults">
+    <div class="ledger-top">
+      <span class="brand"><i class="brand-mark" aria-hidden="true"></i><span class="brand-name">CheckYourMorpho</span></span>
+      <div class="explorer-header-actions">
+        <span id="header-status-text" class="status-indicator" role="status"></span>
+        <button type="button" id="explorer-fav-filter-btn" class="explorer-fav-filter-btn" title="Filter Pinned Favorites" aria-label="Filter Pinned Favorites">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+          <span id="explorer-fav-count" class="fav-filter-count">0</span>
+        </button>
+        <button type="button" id="explorer-activity-btn" class="explorer-activity-btn" title="Vault activity" aria-label="Vault activity" aria-expanded="false" aria-controls="activity-panel">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span id="explorer-activity-badge" class="activity-badge hidden" aria-live="polite">0</span>
+        </button>
       </div>
-      <h3 class="explorer-heading">Vaults Explorer</h3>
+    </div>
+
+    <div class="explorer-header">
+      <h1 class="explorer-heading">Vaults Explorer</h1>
+      <span id="explorer-count" class="explorer-count">311 Vaults</span>
       <span class="stale-indicator hidden" role="status"><span class="stale-dot" aria-hidden="true"></span><span class="stale-text"></span></span>
     </div>
 
-    <!-- Search Box -->
+    <!-- Pinned vaults strip (populated dynamically by app.js; hidden while an audit is open) -->
+    <div class="pinned-viewport">
+      <section id="pinned-rich-pills" class="pinned-rich-pills-container hidden" aria-label="Pinned Vaults Watchlist"></section>
+    </div>
+
+    <!-- Search -->
     <div class="explorer-search-box">
-      <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75">
+      <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <circle cx="8.5" cy="8.5" r="5.5"></circle>
         <path d="M12.5 12.5L17 17"></path>
       </svg>
-      <input type="text" id="vault-search-input" placeholder="Search by name, symbol, curator, address..." autocomplete="off" spellcheck="false">
+      <input type="text" id="vault-search-input" placeholder="Search name, symbol, curator, address" aria-label="Search vaults" autocomplete="off" spellcheck="false">
       <button type="button" id="search-clear-btn" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search">
-        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" stroke-linejoin="round"></path>
         </svg>
       </button>
       <kbd class="search-shortcut" id="search-shortcut-esc">ESC</kbd>
     </div>
 
-    <!-- Morpho Custom Filter Grid (Network, Asset, Curator, Sort By) -->
+    <!-- Filters (Network, Asset, Curator, Sort By) -->
     <div class="explorer-filters-grid">
-      <!-- 1. Network Filter Dropdown -->
       <div class="custom-dropdown" id="dropdown-network" data-filter="network">
         <button type="button" class="dropdown-trigger" id="trigger-network" aria-haspopup="listbox" aria-expanded="false">
-          <div class="trigger-meta">
+          <span class="trigger-meta">
             <span class="trigger-label">Network</span>
             <span class="trigger-value" id="val-network">All Networks</span>
-          </div>
-          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
+          </span>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </button>
         <div class="dropdown-menu" id="menu-network" role="listbox">
           <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
             <span class="item-text">All Networks</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="1" role="option" aria-selected="false">
             <span class="item-text"><span class="chain-dot ethereum"></span>Ethereum</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="8453" role="option" aria-selected="false">
             <span class="item-text"><span class="chain-dot base"></span>Base</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="4663" role="option" aria-selected="false">
             <span class="item-text"><span class="chain-dot robinhood"></span>Robinhood</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="42161" role="option" aria-selected="false">
             <span class="item-text"><span class="chain-dot arbitrum"></span>Arbitrum</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="10" role="option" aria-selected="false">
             <span class="item-text"><span class="chain-dot optimism"></span>Optimism</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="137" role="option" aria-selected="false">
             <span class="item-text"><span class="chain-dot polygon"></span>Polygon</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
         </div>
       </div>
 
-      <!-- 2. Asset Filter Dropdown -->
       <div class="custom-dropdown" id="dropdown-asset" data-filter="asset">
         <button type="button" class="dropdown-trigger" id="trigger-asset" aria-haspopup="listbox" aria-expanded="false">
-          <div class="trigger-meta">
+          <span class="trigger-meta">
             <span class="trigger-label">Asset</span>
             <span class="trigger-value" id="val-asset">All Assets</span>
-          </div>
-          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
+          </span>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </button>
         <div class="dropdown-menu" id="menu-asset" role="listbox">
           <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
             <span class="item-text">All Assets</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="USDC" role="option" aria-selected="false">
             <span class="item-text">USDC</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="USDG" role="option" aria-selected="false">
             <span class="item-text">USDG</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="ETH" role="option" aria-selected="false">
             <span class="item-text">ETH / WETH</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="PYUSD" role="option" aria-selected="false">
             <span class="item-text">PYUSD</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="USDT" role="option" aria-selected="false">
             <span class="item-text">USDT</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="USDE" role="option" aria-selected="false">
             <span class="item-text">USDe / sUSDe</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="EURC" role="option" aria-selected="false">
             <span class="item-text">EURC / EURCV</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
         </div>
       </div>
 
-      <!-- 3. Curator Filter Dropdown -->
       <div class="custom-dropdown" id="dropdown-curator" data-filter="curator">
         <button type="button" class="dropdown-trigger" id="trigger-curator" aria-haspopup="listbox" aria-expanded="false">
-          <div class="trigger-meta">
+          <span class="trigger-meta">
             <span class="trigger-label">Curator</span>
             <span class="trigger-value" id="val-curator">All Curators</span>
-          </div>
-          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
+          </span>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </button>
         <div class="dropdown-menu" id="menu-curator" role="listbox">
           <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
             <span class="item-text">All Curators</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="steakhouse" role="option" aria-selected="false">
             <span class="item-text">Steakhouse Financial</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="gauntlet" role="option" aria-selected="false">
             <span class="item-text">Gauntlet</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="re7" role="option" aria-selected="false">
             <span class="item-text">Re7 Labs</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="flagship" role="option" aria-selected="false">
             <span class="item-text">Morpho Flagship</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="bprotocol" role="option" aria-selected="false">
             <span class="item-text">B.Protocol</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
         </div>
       </div>
 
-      <!-- 4. Sort By Filter Dropdown -->
       <div class="custom-dropdown" id="dropdown-sort" data-filter="sort">
         <button type="button" class="dropdown-trigger" id="trigger-sort" aria-haspopup="listbox" aria-expanded="false">
-          <div class="trigger-meta">
-            <span class="trigger-label">Sort By</span>
+          <span class="trigger-meta">
+            <span class="trigger-label">Sort</span>
             <span class="trigger-value" id="val-sort">Total Deposits</span>
-          </div>
-          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
+          </span>
+          <svg class="dropdown-chevron" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </button>
-        <div class="dropdown-menu" id="menu-sort" role="listbox">
+        <div class="dropdown-menu align-right" id="menu-sort" role="listbox">
           <div class="dropdown-item selected" data-value="tvl_desc" role="option" aria-selected="true">
             <span class="item-text">Total Deposits (TVL)</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="apy_desc" role="option" aria-selected="false">
             <span class="item-text">Net APY: High to Low</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="liq_desc" role="option" aria-selected="false">
             <span class="item-text">Free Liquidity: High to Low</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="mqi_asc" role="option" aria-selected="false">
             <span class="item-text">Market Quality: Flagged First</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
           <div class="dropdown-item" data-value="mqi_desc" role="option" aria-selected="false">
             <span class="item-text">Market Quality: Clean First</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Active Filter Chips / Clear Toolbar (visible only when filters or search query are active) -->
+    <!-- Active filter chips (visible only when a filter is active) -->
     <div id="active-filter-chips" class="active-filter-chips hidden">
       <div class="chips-container" id="chips-container"></div>
-      <button type="button" id="explorer-reset-btn" class="filter-reset-action" title="Clear all active filters">
-        Clear all
-      </button>
+      <button type="button" id="explorer-reset-btn" class="filter-reset-action" title="Clear all active filters">Clear all</button>
     </div>
 
-    <!-- Vaults List -->
-    <ul id="explorer-vaults-list" class="explorer-vaults-list">
-      <!-- Populated dynamically by app.js -->
-    </ul>
+    <!-- Vault table -->
+    <div class="vault-table">
+      <div class="vault-table-head" aria-hidden="true">
+        <span></span><span>Vault</span><span class="col-network">Network</span><span class="col-curator">Curator</span><span class="num">TVL</span><span class="num">APY</span>
+      </div>
+      <ul id="explorer-vaults-list" class="explorer-vaults-list">
+        <!-- Populated dynamically by app.js -->
+      </ul>
+    </div>
 
-    <!-- Activity Panel (replaces search, filters and vaults list when active) -->
+    <!-- Activity panel (replaces search, filters and the table while open) -->
     <div id="activity-panel" class="activity-panel hidden" role="region" aria-label="Vault Activity">
       <div class="activity-toolbar">
         <div class="activity-nav-left">
-          <div class="activity-scope-selector" role="group" aria-label="Activity scope">
-            <button type="button" id="activity-scope-fav" class="activity-scope-btn active" aria-pressed="true">Favorites</button>
-            <button type="button" id="activity-scope-all" class="activity-scope-btn" aria-pressed="false">All</button>
-          </div>
           <div class="activity-tabs" role="tablist" aria-label="Activity sections">
             <button type="button" id="activity-tab-upcoming" class="activity-tab-btn active" role="tab" aria-selected="true" aria-controls="activity-list-container">
               Upcoming <span id="activity-upcoming-count" class="activity-tab-count">(0)</span>
@@ -264,9 +247,13 @@
               History
             </button>
           </div>
+          <div class="activity-scope-selector" role="group" aria-label="Activity scope">
+            <button type="button" id="activity-scope-fav" class="activity-scope-btn active" aria-pressed="true">Favorites</button>
+            <button type="button" id="activity-scope-all" class="activity-scope-btn" aria-pressed="false">All</button>
+          </div>
         </div>
         <button type="button" id="activity-close-btn" class="activity-close-btn" title="Close activity panel (Esc)" aria-label="Close activity panel">
-          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </button>
@@ -279,10 +266,7 @@
       </div>
 
       <div class="activity-footer">
-        <label class="activity-realloc-toggle">
-          <input type="checkbox" id="activity-show-realloc-cb">
-          <span>Show reallocations</span>
-        </label>
+        <span></span>
         <div class="activity-footer-meta">
           <span id="activity-updated-at" class="activity-updated-at"></span>
           <a id="activity-tg-link" class="activity-atom-link hidden" href="#" target="_blank" rel="noopener">Connect Telegram</a>
@@ -305,14 +289,13 @@
     <div class="tooltip-action">Click particle to audit</div>
   </div>
 
-  <!-- Dual Morphing Flying Proxies for Simultaneous Transitions -->
+  <!-- Dual morphing flying proxies for simultaneous transitions -->
   <div id="morph-proxy-retract" class="morph-proxy hidden"></div>
   <div id="morph-proxy" class="morph-proxy hidden"></div>
 
-  <!-- Floating Left Audit Terminal (Morphs from the 3D particle) -->
+  <!-- Audit panel (unfolds from the 3D particle, docks next to the narrowed ledger) -->
   <aside id="audit-modal" class="audit-panel-widget hidden" role="dialog" aria-labelledby="modal-vault-name">
-    
-    <!-- Panel Header: Badges, Close Button, Vault Title, Curator, Safety Score, Mini-Tabs -->
+
     <header class="audit-panel-header">
       <div class="audit-header-top-row">
         <div class="vault-badges">
@@ -322,12 +305,12 @@
         </div>
         <div class="audit-header-actions">
           <button type="button" class="audit-fav-btn" id="modal-fav-btn" aria-label="Pin to Favorites" title="Pin to Home">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
             </svg>
           </button>
           <button type="button" class="audit-close-btn" id="modal-close-btn" aria-label="Close Audit View">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
               <path d="M18 6L6 18M6 6l12 12"></path>
             </svg>
           </button>
@@ -341,50 +324,47 @@
         </div>
 
         <div class="safety-score-pill" id="modal-score-pill">
-          <div class="score-label">MARKET QUALITY (MQI)</div>
-          <div class="score-value-row">
-            <span class="score-grade" id="modal-grade">100%</span>
+          <span class="score-grade" id="modal-grade">100%</span>
+          <span class="score-meta">
+            <span class="score-label">Market quality</span>
             <span class="score-number" id="modal-score">Clean Capital</span>
-          </div>
+          </span>
         </div>
       </div>
 
-      <!-- Mini-Tabs Segmented Bar -->
+      <!-- Key figures in one row -->
+      <div class="compact-financials-grid">
+        <div class="fin-card">
+          <span class="fin-label">Total deposits</span>
+          <span class="fin-value" id="modal-tvl">$0.00</span>
+          <span class="fin-sub" id="modal-assets-human">0.00 USDC</span>
+        </div>
+        <div class="fin-card">
+          <span class="fin-label">Free liquidity</span>
+          <span class="fin-value" id="modal-liq">$0.00</span>
+          <span class="fin-sub highlight" id="modal-exit-cap-pct">0% Exit Cap</span>
+        </div>
+        <div class="fin-card">
+          <span class="fin-label">Net APY</span>
+          <span class="fin-value green" id="modal-net-apy">0.00%</span>
+          <span class="fin-sub" id="modal-fee">Fee: 0%</span>
+        </div>
+      </div>
+
       <nav class="audit-nav-tabs" role="tablist">
         <button type="button" class="audit-nav-tab active" data-tab="tab-overview" role="tab" aria-selected="true">Overview</button>
-        <button type="button" class="audit-nav-tab" data-tab="tab-risk" role="tab" aria-selected="false">Risk & Exit</button>
+        <button type="button" class="audit-nav-tab" data-tab="tab-risk" role="tab" aria-selected="false">Risk &amp; Exit</button>
       </nav>
     </header>
 
-    <!-- Scrollable Panel Body -->
     <div class="audit-panel-body" id="audit-panel-body">
 
       <!-- TAB 1: OVERVIEW -->
       <div class="audit-tab-panel active" id="tab-overview" role="tabpanel">
-        <!-- Key Financial Highlights Grid -->
-        <div class="compact-financials-grid">
-          <div class="fin-card">
-            <span class="fin-label">TOTAL DEPOSITS</span>
-            <span class="fin-value" id="modal-tvl">$0.00</span>
-            <span class="fin-sub" id="modal-assets-human">0.00 USDC</span>
-          </div>
-          <div class="fin-card">
-            <span class="fin-label">FREE LIQUIDITY</span>
-            <span class="fin-value" id="modal-liq">$0.00</span>
-            <span class="fin-sub highlight" id="modal-exit-cap-pct">0% Exit Cap</span>
-          </div>
-          <div class="fin-card">
-            <span class="fin-label">NET APY</span>
-            <span class="fin-value green" id="modal-net-apy">0.00%</span>
-            <span class="fin-sub" id="modal-fee">Fee: 0%</span>
-          </div>
-        </div>
-
-        <!-- Underlying Markets Section (Replaces redundant specifications) -->
         <div class="overview-markets-section">
-          <div class="overview-markets-header" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; margin-bottom: 8px;">
-            <span class="specs-title" style="font-size: 11px; font-family: var(--font-mono); font-weight: 600; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase;">UNDERLYING MARKETS</span>
-            <span class="badge badge-version" id="overview-markets-count" style="font-size: 10px;">0 MARKETS</span>
+          <div class="overview-markets-header">
+            <span class="section-label">Underlying markets</span>
+            <span class="section-count" id="overview-markets-count">0 MARKETS</span>
           </div>
           <div class="table-wrapper">
             <table class="data-table" id="allocations-table">
@@ -405,11 +385,8 @@
         </div>
       </div>
 
-      <!-- TAB 2: RISK & CONCENTRATION -->
+      <!-- TAB 2: RISK & EXIT -->
       <div class="audit-tab-panel" id="tab-risk" role="tabpanel">
-        <div class="panel-section-title">PORTFOLIO AUDIT: MQI & COLLATERAL</div>
-
-        <!-- 1. Market Quality Index (MQI) Meter -->
         <div class="meter-box">
           <div class="meter-header">
             <span class="meter-label">Market Quality Index (MQI)</span>
@@ -421,7 +398,6 @@
           <div class="meter-desc" id="risk-mqi-desc">Capital deployed in verified, non-defaulted markets</div>
         </div>
 
-        <!-- 2. Instant Exit Capacity Meter -->
         <div class="meter-box" id="risk-exit-meter-box">
           <div class="meter-header">
             <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>
@@ -429,7 +405,7 @@
               <span class="meter-value" id="risk-exit-pct">0%</span>
               <span class="info-circle-wrap">
                 <button type="button" class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" aria-expanded="false" aria-describedby="risk-exit-popover">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"></circle>
                     <line x1="12" y1="16" x2="12" y2="12"></line>
                     <line x1="12" y1="8" x2="12.01" y2="8"></line>
@@ -450,20 +426,18 @@
           <div class="meter-desc" id="risk-exit-desc">Available to withdraw without liquidity lockup</div>
         </div>
 
-        <!-- 4. Collateral Concentration Breakdown Table / List -->
         <div class="curator-audit-box">
           <div class="curator-audit-header">
-            <span class="curator-audit-title">Collateral Allocation Breakdown</span>
+            <span class="curator-audit-title">Collateral</span>
             <span class="discipline-badge" id="risk-effective-assets">0 tokens</span>
           </div>
-          <div class="collateral-breakdown-list" id="risk-collateral-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div class="collateral-breakdown-list" id="risk-collateral-list">
             <!-- Rendered dynamically -->
           </div>
         </div>
 
-        <!-- 5. Audit Flags -->
         <div class="red-flags-section">
-          <div class="red-flags-header">AUDIT FLAGS</div>
+          <div class="red-flags-header">Audit flags</div>
           <div class="flags-container" id="risk-flags-list">
             <div class="flag-item clear">No critical risk flags detected for this vault.</div>
           </div>
@@ -474,8 +448,6 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261022_categories"></script>
+  <script type="module" src="js/app.js?v=20261023_ledger"></script>
 </body>
-
-
 </html>

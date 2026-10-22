@@ -9,7 +9,7 @@ const tick = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise(r 
 
 const DEFAULT_FILTERS = { query: '', network: 'all', asset: 'all', curator: 'all', sort: 'tvl_desc', pinnedOnly: false };
 const EXIT_STATE = { normalExitPct: 0, normalExitUsd: 0, stressedExitPct: 0, stressedExitUsd: 0, dropPct: 0, topPeer: '' };
-const OVERRIDES = ['addEventListener', 'appendChild', 'querySelector', 'querySelectorAll', 'focus', 'blur', 'click', 'getContext'];
+const OVERRIDES = ['addEventListener', 'appendChild', 'querySelector', 'querySelectorAll', 'focus', 'blur', 'click', 'getContext', 'parentElement', 'scrollWidth'];
 
 /** Заглушка сфери: записує виклики, щоб перевіряти підсвічування і вибір. */
 function sphereStub() {
@@ -47,7 +47,7 @@ function reset(m) {
   Object.assign(s.explorerFilters, DEFAULT_FILTERS);
   s.allVaults = []; s.selectedVaultAddress = null; s.activeAuditData = null; s.focusBeforeAudit = null;
   s.auditAbort = null; s.pinnedMemoryFallback = null; s.isTransitioningVault = false; s.isClosingAudit = false;
-  s.isPollingActive = false; s.currentModalExitState = { ...EXIT_STATE }; s.sphere = sphereStub();
+  s.isPollingActive = false; s.currentModalExitState = { ...EXIT_STATE }; s.sphere = sphereStub(); s.pinnedSource = [];
   s.REDUCED_MOTION.matches = false;
   for (const el of globalThis.__cymClientEnv.elements.values()) {
     for (const k of OVERRIDES) delete el[k];
@@ -361,12 +361,12 @@ const base = {
       s.allVaults = [cv()];
       env.fetch(url => (url.startsWith('/api/vaults?') ? jsonResponse({ vaults: [cv(), cv({ address: '0xB' }), cv({ address: '0xC' })] }) : jsonResponse({})));
       f();
-      s.DOM.explorerVaultsList.scrollTop = 123;
+      s.DOM.vaultExplorerWidget.scrollTop = 123;
       await env.timers[0].fn();
       assert.equal(s.allVaults.length, 3);
       assert.equal(s.DOM.headerStatusText.textContent, 'Live: 3 Vaults');
       assert.deepEqual(lastCall(s.sphere, 'setVaults'), ['setVaults', 3]);
-      assert.equal(s.DOM.explorerVaultsList.scrollTop, 123);
+      assert.equal(s.DOM.vaultExplorerWidget.scrollTop, 123);
       assert.equal(s.isPollingActive, false);
     }),
     T('HTTP-помилка або виняток -> "Reconnecting...", старі дані лишаються', async ({ startLivePolling: f, __state: s }, env) => {
@@ -981,21 +981,67 @@ const base = {
       assert.equal(s.clientAuditCache.get('0xaaa1').vault.name, 'Prefetched');
       assert.equal(s.allVaults[0].name, 'Prefetched');
     }),
-    T('анімація: картки стартують прозорими і ставлять таймери; reduced motion вимикає її', ({ renderPinnedRichPills: f, __state: s }, env) => {
+    T('без анімації: картки одразу видимі, таймерів немає', ({ renderPinnedRichPills: f, __state: s }, env) => {
       env.fetch(() => jsonResponse({}, 404));
       s.allVaults = [cv({ address: '0xa' }), cv({ address: '0xb' })];
       pin('0xa', '0xb');
-      let cards = collect(s.DOM.pinnedRichPills);
-      f(true);
-      assert.deepEqual(cards.map(c => c.style.opacity), ['0', '0']);
-      assert.deepEqual(env.timers.map(t => t.ms), [0, 80]);
-      env.flush(); // політ кульки: не має кидати
-      env.timers.length = 0;
-      s.REDUCED_MOTION.matches = true;
-      cards = collect(s.DOM.pinnedRichPills);
-      f(true);
+      const cards = collect(s.DOM.pinnedRichPills);
+      f();
       assert.deepEqual(cards.map(c => c.style.opacity), [undefined, undefined]);
       assert.equal(env.timers.length, 0);
+    }),
+  ],
+  bindPinnedCard: [
+    T('картка отримує клік, наведення і вихід курсора', ({ bindPinnedCard: f }) => {
+      const seen = [];
+      f({ addEventListener: (t) => seen.push(t) }, cv({ address: '0xa' }));
+      assert.deepEqual(seen, ['click', 'mouseenter', 'mouseleave']);
+    }),
+  ],
+  updatePinnedCarousel: [
+    T('без батьківського елемента або без переповнення копій немає', ({ updatePinnedCarousel: f, __state: s }) => {
+      f(); // у фейковому DOM немає батька: не кидає
+      const box = s.DOM.pinnedRichPills;
+      box.parentElement = { clientWidth: 600 };
+      box.scrollWidth = 400;
+      s.pinnedSource = [{ card: makeElement(), v: cv({ address: '0xa' }) }];
+      f();
+      assert.equal(box.classList.contains('is-scrolling'), false);
+    }),
+    T('переповнення: додає копії, ставить петлю та тривалість і вмикає прокрутку', ({ updatePinnedCarousel: f, __state: s }) => {
+      const box = s.DOM.pinnedRichPills;
+      const props = {};
+      box.style = { setProperty: (k, v) => { props[k] = v; } };
+      box.parentElement = { clientWidth: 300 };
+      box.scrollWidth = 440;
+      const added = collect(box);
+      s.pinnedSource = [{ card: makeElement(), v: cv({ address: '0xa' }) }, { card: makeElement(), v: cv({ address: '0xb' }) }];
+      f();
+      assert.equal(added.length, 2);
+      assert.equal(box.classList.contains('is-scrolling'), true);
+      assert.equal(props['--pin-loop'], '440px');
+      assert.equal(props['--pin-dur'], '20s');
+      s.REDUCED_MOTION.matches = true;
+      f();
+      assert.equal(box.classList.contains('is-scrolling'), false);
+    }),
+  ],
+  nudgePinnedCarousel: [
+    T('без працюючої каруселі нічого не робить; з нею зсуває годинник анімації з обгортанням', ({ nudgePinnedCarousel: f, __state: s }) => {
+      assert.equal(f(10), false);
+      const anim = { currentTime: 1000, effect: { getComputedTiming: () => ({ duration: 60000 }) } };
+      s.DOM.pinnedRichPills.getAnimations = () => [anim];
+      assert.equal(f(22), true);
+      assert.equal(anim.currentTime, 2000);
+      f(-100);
+      assert.equal(anim.currentTime, 60000 - 2545.4545454545455);
+      delete s.DOM.pinnedRichPills.getAnimations;
+    }),
+  ],
+  syncPinnedClones: [
+    T('без прокрутки нічого не робить', ({ syncPinnedClones: f, __state: s }) => {
+      s.pinnedSource = [{ card: { innerHTML: 'x' } }];
+      f();
     }),
   ],
   renderVaultExplorer: [
@@ -1003,14 +1049,14 @@ const base = {
       s.allVaults = [cv({ address: '0xs', totalAssetsUsd: 1 }), cv({ address: '0xl', totalAssetsUsd: 9e9 }), cv({ address: '0xm', totalAssetsUsd: 5e6 })];
       pin('0xm');
       const rows = collectRows();
-      s.DOM.explorerVaultsList.scrollTop = 77;
+      s.DOM.vaultExplorerWidget.scrollTop = 77;
       f();
       assert.deepEqual(rows.map(r => r.getAttribute('data-address')), ['0xl', '0xm', '0xs']);
       assert.equal(s.DOM.explorerCount.textContent, '3 Vaults');
       assert.equal(s.DOM.explorerFavCount.textContent, 1);
       assert.equal(s.DOM.explorerFavFilterBtn.getAttribute('aria-pressed'), 'false');
       assert.deepEqual(s.sphere.calls.at(-1), ['highlight', null]);
-      assert.equal(s.DOM.explorerVaultsList.scrollTop, 77);
+      assert.equal(s.DOM.vaultExplorerWidget.scrollTop, 77);
       assert.ok(rows[1].innerHTML.includes('aria-pressed="true"'));
       assert.ok(rows[0].innerHTML.includes('aria-pressed="false"'));
     }),
@@ -1340,7 +1386,7 @@ const base = {
       assert.equal(s.isTransitioningVault, true);
       env.flush();
       assert.equal(P.style.width, '480px');
-      assert.equal(P.style.height, '764px');
+      assert.equal(P.style.height, '400px');
       assert.equal(s.DOM.auditModal.classList.contains('hidden'), false);
       assert.equal(P.classList.contains('hidden'), true);
       assert.equal(s.isTransitioningVault, false);
@@ -1361,7 +1407,7 @@ const base = {
       const R = s.DOM.morphProxyRetract;
       assert.equal(R.classList.contains('hidden'), false);
       assert.equal(R.style.width, '480px');
-      assert.equal(R.style.left, `${20 + 240}px`);
+      assert.equal(R.style.left, `${240}px`);
       env.flush();
       assert.equal(R.classList.contains('hidden'), true);
       assert.equal(R.style.left, '100px'); // повернулась до частинки попереднього vault
@@ -1374,16 +1420,35 @@ const base = {
       assert.equal(s.DOM.auditModal.classList.contains('hidden'), true);
     }),
   ],
-  getAuditPanelWidth: [
-    T('десктоп 480, планшет 440, обидва обмежені половиною екрана', ({ getAuditPanelWidth: f }) => {
-      const at = w => { globalThis.innerWidth = w; return f(); };
-      assert.equal(at(2000), 480);
-      assert.equal(at(1280), 480);
-      assert.equal(at(1025), 480);
-      assert.equal(at(1024), 440);
-      assert.equal(at(800), 380);
-      assert.equal(at(769), 364);
-      assert.equal(at(768), 354);
+  getAuditPanelRect: [
+    T('повертає виміряний прямокутник панелі з центром і радіусом', ({ getAuditPanelRect: f }) => {
+      const r = f();
+      assert.equal(r.width, 480);
+      assert.equal(r.height, 400);
+      assert.equal(r.cx, 240);
+      assert.equal(r.cy, 200);
+      assert.equal(r.radius, '16px');
+    }),
+  ],
+  setLedgerCompact: [
+    T('вмикає і вимикає клас audit-open на body', ({ setLedgerCompact: f }) => {
+      f(true);
+      assert.equal(document.body.classList.contains('audit-open'), true);
+      f(false);
+      assert.equal(document.body.classList.contains('audit-open'), false);
+    }),
+  ],
+  setAuditLayout: [
+    T('звужує таблицю і переставляє сферу в положення аудиту', ({ setAuditLayout: f, __state: s }) => {
+      const calls = [];
+      s.sphere.setLayout = (...a) => calls.push(a);
+      f(true);
+      assert.equal(document.body.classList.contains('audit-open'), true);
+      assert.equal(calls.length, 1);
+      f(false);
+      assert.equal(document.body.classList.contains('audit-open'), false);
+      assert.equal(calls.length, 2);
+      assert.notDeepEqual(calls[0].slice(0, 3), calls[1].slice(0, 3));
     }),
   ],
   closeVaultAudit: [
@@ -1416,22 +1481,18 @@ const base = {
       assert.equal(s.DOM.auditModal.classList.contains('hidden'), true);
       assert.deepEqual(s.sphere.calls, []);
     }),
-    T('анімоване закриття: блокує нові відкриття до кінця, потім скидає все', ({ closeVaultAudit: f, __state: s }, env) => {
+    T('закриття на десктопі: вікно зникає одразу, кулька не летить, таблиця розширюється', ({ closeVaultAudit: f, __state: s }, env) => {
       s.selectedVaultAddress = '0xA';
       s.DOM.auditModal.classList.remove('hidden');
+      document.body.classList.add('audit-open');
       f();
-      const P = s.DOM.morphProxy;
-      assert.equal(s.isClosingAudit, true); assert.equal(s.isTransitioningVault, true);
       assert.equal(s.DOM.auditModal.classList.contains('hidden'), true);
-      assert.equal(P.classList.contains('hidden'), false);
-      assert.equal(P.style.width, '480px');
-      assert.equal(P.style.left, '260px');
-      env.flush();
-      assert.equal(P.classList.contains('hidden'), true);
-      assert.equal(P.style.left, '100px');
+      assert.equal(s.DOM.morphProxy.style.left, undefined); // the proxy ball is never positioned
+      assert.equal(document.body.classList.contains('audit-open'), false);
       assert.equal(s.selectedVaultAddress, null);
       assert.equal(s.isClosingAudit, false); assert.equal(s.isTransitioningVault, false);
       assert.deepEqual(s.sphere.calls.slice(0, 2), [['select', null], ['highlight', null]]);
+      assert.equal(env.timers.length, 0);
     }),
   ],
 
@@ -1599,8 +1660,7 @@ const base = {
       const status = r => r.innerHTML.match(/badge-status[^>]*>(\w+)</)[1];
       assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'CLEAN', 'FLAGGED', 'CLEAN']);
       assert.match(rows[0].innerHTML, /<td>86%<\/td>[\s\S]*<td>50\.0%<\/td>[\s\S]*\$500\.0K[\s\S]*\$100\.0K[\s\S]*4\.12%/);
-      assert.match(rows[0].innerHTML, /eth, lst/); assert.match(rows[1].innerHTML, /no tags/);
-      assert.match(rows[0].innerHTML, /class="token-facts" data-chain="1" data-address="0xa{40}"/); assert.doesNotMatch(rows[1].innerHTML, /token-facts/);
+      assert.doesNotMatch(rows[0].innerHTML, /eth, lst|no tags|token-facts/); assert.doesNotMatch(rows[1].innerHTML, /no tags|token-facts/);
       assert.match(rows[1].innerHTML, /<td>n\/a<\/td>/);
       assert.match(rows[1].innerHTML, /<td>—<\/td>/); // невідома вільна ліквідність
       assert.ok(rows[2].innerHTML.includes('&lt;img src=x&gt;'));

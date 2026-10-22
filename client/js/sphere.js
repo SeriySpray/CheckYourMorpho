@@ -302,16 +302,20 @@ export class ParticleSphere {
     this.animFrameId = null;
     this.isMobile = window.innerWidth <= 768;
 
+    // Where the sphere sits on screen: view is the live value, layoutTarget the one it eases toward
+    this.view = null;
+    this.layoutTarget = null;
+
     this.initWebGL();
     this.initEvents();
     this.resize();
     this.generateParticles();
 
+    // Phones get the plain interface: no sphere, no render loop
     if (!this.isMobile) {
       this.animate();
     }
 
-    // Unified responsive breakpoint listener
     window.addEventListener('resize', () => {
       const wasMobile = this.isMobile;
       this.isMobile = window.innerWidth <= 768;
@@ -436,7 +440,7 @@ export class ParticleSphere {
   }
 
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     this.dpr = dpr;
     this.width = window.innerWidth;
     this.height = window.innerHeight;
@@ -461,8 +465,54 @@ export class ParticleSphere {
     this.cy = this.height / 2;
     this.aspect = this.width / this.height;
 
-    // Projection matrix
+    // Projection matrix (render() rebuilds it every frame to apply the layout)
     this.projectionMatrix = makePerspective(this.fov, this.aspect, 0.1, 200.0);
+    if (!this.layoutTarget) {
+      this.view = { x: this.cx, y: this.cy, r: this.baseRadius() };
+    }
+  }
+
+  /** On-screen radius in px of the sphere when it is not scaled by a layout. */
+  baseRadius() {
+    return (1.0 / Math.tan(this.fov / 2.0)) / this.camZ * (this.height / 2.0);
+  }
+
+  /**
+   * Places the sphere: center in viewport px and radius in px. The sphere eases there,
+   * or jumps when immediate (resize) or when reduced motion is on.
+   */
+  setLayout(x, y, radius, immediate = false, ms = 440) {
+    this.layoutTarget = { x, y, r: Math.max(24, radius) };
+    if (immediate || REDUCED_MOTION.matches || !this.view) {
+      this.view = { ...this.layoutTarget };
+      this.layoutTween = null;
+      return;
+    }
+    // Fixed-length tween (same curve as the flying ball) instead of a frame-rate dependent chase
+    this.layoutTween = { from: { ...this.view }, start: performance.now(), ms };
+  }
+
+  /** Scale factor of the current view relative to the unscaled sphere. */
+  viewScale() {
+    return this.view ? this.view.r / this.baseRadius() : 1;
+  }
+
+  stepLayout() {
+    const t = this.layoutTarget;
+    const v = this.view;
+    const tw = this.layoutTween;
+    if (!t || !v || !tw) return;
+    const p = Math.min(1, (performance.now() - tw.start) / tw.ms);
+    const e = 1 - Math.pow(1 - p, 4); // ease-out quart
+    v.x = tw.from.x + (t.x - tw.from.x) * e;
+    v.y = tw.from.y + (t.y - tw.from.y) * e;
+    v.r = tw.from.r + (t.r - tw.from.r) * e;
+    if (p >= 1) this.layoutTween = null;
+  }
+
+  /** Size in px of the central logo for the current view. */
+  logoSize() {
+    return Math.min(72, Math.min(this.width, this.height) * 0.10) * Math.min(1, this.viewScale());
   }
 
   setVaults(vaultsList) {
@@ -652,7 +702,7 @@ export class ParticleSphere {
       if (!this.gl) return;
       this.generateParticles();
       this.resize();
-      // No render loop on mobile (canvas hidden) or in a background tab; the visibility handler restarts it
+      // No render loop in a background tab; the visibility handler restarts it
       if (!this.isMobile && !document.hidden && !this.animFrameId) {
         this.animate();
       }
@@ -750,8 +800,7 @@ export class ParticleSphere {
 
       // Check click on central Morpho logo
       const distToCenter = Math.hypot(clickX - this.cx, clickY - this.cy);
-      const baseLogoSize = Math.min(72, Math.min(this.width, this.height) * 0.10);
-      const logoHitRadius = Math.max(36, baseLogoSize * 0.85);
+      const logoHitRadius = Math.max(36 * Math.min(1, this.viewScale()), this.logoSize() * 0.85);
 
       if (distToCenter <= logoHitRadius) {
         if (this.onLogoClick) {
@@ -850,9 +899,22 @@ export class ParticleSphere {
     const cosY = Math.cos(this.rotY), sinY = Math.sin(this.rotY);
     const cosX = Math.cos(this.rotX), sinX = Math.sin(this.rotX);
 
+    // Layout: scale the cloud and shift its center in clip space
+    this.stepLayout();
+    const k = this.viewScale();
+    this.cx = this.view.x;
+    this.cy = this.view.y;
+    const offX = (this.cx - this.width / 2) / (this.width / 2);
+    const offY = -(this.cy - this.height / 2) / (this.height / 2);
+
     const fovFactor = 1.0 / Math.tan(this.fov / 2.0);
-    const p00 = fovFactor / this.aspect;
-    const p11 = fovFactor;
+    const p00 = fovFactor / this.aspect * k;
+    const p11 = fovFactor * k;
+    const proj = this.projectionMatrix;
+    proj[0] = p00;
+    proj[5] = p11;
+    proj[8] = -offX;
+    proj[9] = -offY;
 
     // --- 1. Cursor Wave Deformation (Only when mouse moves) ---
     let needBufferUpload = false;
@@ -875,7 +937,7 @@ export class ParticleSphere {
           const ndcY = (p11 * y2) / clipW;
 
           // Normalized screen distance in viewport space [-0.5, 0.5]
-          const dist = Math.hypot(ndcX - this.normMouseX * 2.0, ndcY - (-this.normMouseY * 2.0));
+          const dist = Math.hypot(ndcX + offX - this.normMouseX * 2.0, ndcY + offY - (-this.normMouseY * 2.0));
 
           if (dist < 0.12) {
             const penetration = 0.12 - dist;
@@ -948,8 +1010,7 @@ export class ParticleSphere {
 
     // Check if mouse is hovering over central Morpho logo
     const distToCenter = Math.hypot(this.mouseX - this.cx, this.mouseY - this.cy);
-    const baseLogoSize = Math.min(72, Math.min(this.width, this.height) * 0.10);
-    const logoHitRadius = Math.max(36, baseLogoSize * 0.85);
+    const logoHitRadius = Math.max(36 * Math.min(1, k), this.logoSize() * 0.85);
     const isHoveringLogo = distToCenter <= logoHitRadius;
 
     this.isHoveringLogo = isHoveringLogo;
@@ -985,7 +1046,7 @@ export class ParticleSphere {
       gl.uniformMatrix4fv(this.uniforms.uProjection, false, this.projectionMatrix);
       gl.uniformMatrix4fv(this.uniforms.uModelView, false, modelView);
       gl.uniform1f(this.uniforms.uTime, this.elapsedFrames * 0.015);
-      gl.uniform1f(this.uniforms.uPointSize, (this.height / 1024.0) * (this.dpr || 1));
+      gl.uniform1f(this.uniforms.uPointSize, (this.height / 1024.0) * (this.dpr || 1) * Math.max(0.6, Math.min(1, k)));
       gl.uniform2f(this.uniforms.uMousePosition, 2.0 * this.normMouseX, -2.0 * this.normMouseY);
       gl.uniform1i(this.uniforms.uHasMouseMoved, this.hasMouseMoved ? 1 : 0);
 
@@ -1018,19 +1079,23 @@ export class ParticleSphere {
 
     // Breathing pulse and soft floating motion
     const breath = 1.0 + Math.sin(time * 1.8) * 0.035;
-    const baseLogoSize = Math.min(72, Math.min(this.width, this.height) * 0.10);
-    const logoSize = baseLogoSize * breath;
+    const logoSize = this.logoSize() * breath;
 
-    // Ambient radial glow behind the butterfly (subtle white/silver fading to pure black)
-    const coreGlow = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, logoSize * 1.4);
-    coreGlow.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
-    coreGlow.addColorStop(0.4, 'rgba(255, 255, 255, 0.06)');
-    coreGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-    ctx.fillStyle = coreGlow;
-    ctx.beginPath();
-    ctx.arc(this.cx, this.cy, logoSize * 1.4, 0, Math.PI * 2);
-    ctx.fill();
+    // Ambient radial glow behind the butterfly: a prebuilt sprite, scaled, instead of a new gradient per frame
+    if (!this.glowSprite) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const g = c.getContext('2d');
+      const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+      grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.06)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 256, 256);
+      this.glowSprite = c;
+    }
+    const glowSize = logoSize * 2.8;
+    ctx.drawImage(this.glowSprite, this.cx - glowSize / 2, this.cy - glowSize / 2, glowSize, glowSize);
 
     // Draw central Morpho logo image
     ctx.drawImage(

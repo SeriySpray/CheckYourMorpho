@@ -3,8 +3,8 @@
  * Connects 3D Particle Sphere, search autocomplete, filters, and audit modal.
  */
 
-import { ParticleSphere } from './sphere.js?v=20261016_a11y';
-import { initActivity, onFavoritesChanged } from './activity.js?v=20261022_tg3';
+import { ParticleSphere } from './sphere.js?v=20261023_ledger';
+import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261022_tg3';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -118,6 +118,16 @@ async function initApp() {
     }
   });
   window.sphere = sphere;
+  applySphereLayout(true);
+  window.addEventListener('resize', () => applySphereLayout(true));
+  // The strip's width changes with the ledger (animated): re-measure once it settles
+  if (DOM.pinnedRichPills?.parentElement) {
+    bindPinnedScroll(DOM.pinnedRichPills.parentElement);
+    new ResizeObserver(() => {
+      clearTimeout(pinnedCarouselTimer);
+      pinnedCarouselTimer = setTimeout(updatePinnedCarousel, 250);
+    }).observe(DOM.pinnedRichPills.parentElement);
+  }
 
   // 2. Bind UI Events
   setupVaultExplorerEvents();
@@ -134,7 +144,7 @@ async function initApp() {
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
     sphere.setVaults(allVaults);
     renderVaultExplorer();
-    renderPinnedRichPills(true);
+    renderPinnedRichPills();
   } catch (err) {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
@@ -262,12 +272,12 @@ function startLivePolling() {
           }
 
           // Preserve scroll position in vault explorer
-          const savedScrollTop = DOM.explorerVaultsList ? DOM.explorerVaultsList.scrollTop : 0;
+          const savedScrollTop = DOM.vaultExplorerWidget ? DOM.vaultExplorerWidget.scrollTop : 0;
           renderVaultExplorer();
           if (DOM.explorerVaultsList) {
-            DOM.explorerVaultsList.scrollTop = savedScrollTop;
+            if (DOM.vaultExplorerWidget) DOM.vaultExplorerWidget.scrollTop = savedScrollTop;
           }
-          renderPinnedRichPills(false);
+          renderPinnedRichPills();
         }
       } else if (DOM.headerStatusText) {
         DOM.headerStatusText.textContent = 'Reconnecting...';
@@ -650,9 +660,19 @@ function setupVaultExplorerEvents() {
 
   if (DOM.explorerFavFilterBtn) {
     DOM.explorerFavFilterBtn.addEventListener('click', () => {
-      explorerFilters.pinnedOnly = !explorerFilters.pinnedOnly;
+      // From the activity view the star means "show my saved vaults": go back to the table with that filter on
+      const fromActivity = DOM.activityPanel && !DOM.activityPanel.classList.contains('hidden');
+      if (fromActivity) closeActivityPanel();
+      explorerFilters.pinnedOnly = fromActivity ? true : !explorerFilters.pinnedOnly;
       DOM.explorerFavFilterBtn.classList.toggle('active', explorerFilters.pinnedOnly);
       renderVaultExplorer();
+    });
+  }
+
+  // Opening the activity view first closes an open audit, so the ledger regains its width before the switch
+  if (DOM.explorerActivityBtn) {
+    DOM.explorerActivityBtn.addEventListener('click', () => {
+      if (!DOM.auditModal.classList.contains('hidden')) closeVaultAudit();
     });
   }
 
@@ -773,7 +793,7 @@ function togglePinVault(address) {
   }
   savePinnedAddresses(pinned);
   updateFavBtnUI(addr);
-  renderPinnedRichPills(true);
+  renderPinnedRichPills();
   renderVaultExplorer();
   onFavoritesChanged();
 }
@@ -899,6 +919,8 @@ function applyVaultAuditData(vaultAddress, auditData) {
     }
   }
 
+  syncPinnedClones();
+
   // 4. Synchronize Vault Explorer list item if present
   const expItem = DOM.explorerVaultsList?.querySelector(`[data-address="${v?.address || vaultAddress}"]`)
     || DOM.explorerVaultsList?.querySelector(`[data-address="${lowerAddr}"]`);
@@ -910,13 +932,122 @@ function applyVaultAuditData(vaultAddress, auditData) {
   }
 }
 
+/** Click and hover behaviour of a pinned pill (shared by the cards and the carousel's looped copies). */
+function bindPinnedCard(card, v) {
+  // Click on unpin white star removes vault; click anywhere else opens full audit
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('.rich-pill-star-btn')) {
+      e.stopPropagation();
+      togglePinVault(v.address);
+      return;
+    }
+    openVaultAudit(v);
+  });
+
+  // Highlight sphere particle on hover
+  card.addEventListener('mouseenter', () => {
+    sphere.highlightVault(v.address);
+  });
+
+  card.addEventListener('mouseleave', () => {
+    if (!selectedVaultAddress) {
+      sphere.highlightVault(null);
+    }
+  });
+}
+
 /**
  * Renders the Pinned Vaults as rich informational cards/pills docked on the left.
- * If animate is true, flies white ball proxies from 3D sphere particles to the left dock.
  */
-function renderPinnedRichPills(animate = false) {
+/** Slow px per second of the pinned carousel. */
+const PINNED_SPEED = 22;
+
+/**
+ * Loops the pinned pills endlessly when they overflow the strip: a second copy follows the first and the
+ * track slides by one copy's width. The slide is a CSS transform (no layout, no JS per frame).
+ */
+function updatePinnedCarousel() {
+  const box = DOM.pinnedRichPills;
+  const view = box?.parentElement;
+  if (!box || !view) return;
+  box.querySelectorAll('.is-clone').forEach(c => c.remove());
+  box.classList.remove('is-scrolling');
+  const setWidth = box.scrollWidth;
+  if (REDUCED_MOTION.matches || pinnedSource.length === 0 || !(setWidth > view.clientWidth + 1)) return;
+  pinnedSource.forEach(({ card, v }) => {
+    const clone = card.cloneNode(true);
+    clone.classList.add('is-clone');
+    clone.setAttribute('aria-hidden', 'true');
+    clone.tabIndex = -1;
+    bindPinnedCard(clone, v);
+    box.appendChild(clone);
+  });
+  box.style.setProperty('--pin-loop', `${setWidth}px`);
+  box.style.setProperty('--pin-dur', `${Math.round(setWidth / PINNED_SPEED)}s`);
+  box.classList.add('is-scrolling');
+}
+
+/** Moves the running carousel by dx px (positive = forward) by shifting its animation clock; wraps by itself. */
+function nudgePinnedCarousel(dx) {
+  const anim = DOM.pinnedRichPills?.getAnimations?.()[0];
+  if (!anim) return false;
+  const total = anim.effect.getComputedTiming().duration;
+  const t = ((Number(anim.currentTime) || 0) + (dx / PINNED_SPEED) * 1000) % total;
+  anim.currentTime = t < 0 ? t + total : t;
+  return true;
+}
+
+/** Wheel and drag scroll the saved pills while the carousel runs (it is paused under the cursor, not frozen). */
+function bindPinnedScroll(view) {
+  view.addEventListener('wheel', (e) => {
+    const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (nudgePinnedCarousel(dx)) e.preventDefault();
+  }, { passive: false });
+
+  let startX = null;
+  let moved = 0;
+  view.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    startX = e.clientX;
+    moved = 0;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (startX === null) return;
+    const dx = e.clientX - startX;
+    startX = e.clientX;
+    moved += Math.abs(dx);
+    if (moved > 5) {
+      view.classList.add('is-dragging');
+      DOM.pinnedRichPills.style.animationPlayState = 'paused';
+      nudgePinnedCarousel(-dx);
+    }
+  });
+  window.addEventListener('pointerup', () => {
+    if (startX === null) return;
+    startX = null;
+    view.classList.remove('is-dragging');
+    if (DOM.pinnedRichPills) DOM.pinnedRichPills.style.animationPlayState = '';
+  });
+  // A drag must not open the vault under the finger
+  view.addEventListener('click', (e) => {
+    if (moved > 5) { e.stopPropagation(); e.preventDefault(); moved = 0; }
+  }, true);
+}
+
+/** Copies the live content of the cards into the carousel copies (the audit poll updates only the originals). */
+function syncPinnedClones() {
+  const box = DOM.pinnedRichPills;
+  if (!box?.classList.contains('is-scrolling')) return;
+  const clones = [...box.querySelectorAll('.is-clone')];
+  pinnedSource.forEach(({ card }, i) => { if (clones[i]) clones[i].innerHTML = card.innerHTML; });
+}
+
+let pinnedSource = [];
+let pinnedCarouselTimer = null;
+
+function renderPinnedRichPills() {
   if (!DOM.pinnedRichPills) return;
-  animate = animate && !REDUCED_MOTION.matches;
+  pinnedSource = [];
 
   const pinnedAddresses = getPinnedAddresses();
   const pinnedVaults = [];
@@ -936,7 +1067,7 @@ function renderPinnedRichPills(animate = false) {
   DOM.pinnedRichPills.classList.remove('hidden');
   DOM.pinnedRichPills.innerHTML = '';
 
-  pinnedVaults.forEach((v, index) => {
+  pinnedVaults.forEach(v => {
     const chainClass = getChainClass(v.chainId);
     const chainName = formatChainName(v.chainId);
     const curator = formatCuratorName(v.curatorName, v.name);
@@ -973,11 +1104,6 @@ function renderPinnedRichPills(animate = false) {
     const card = document.createElement('div');
     card.className = 'pinned-rich-pill';
     card.dataset.address = v.address;
-    if (animate) {
-      card.style.opacity = '0';
-      card.style.transform = 'translateX(-20px) scale(0.96)';
-    }
-
     card.innerHTML = `
       <div class="rich-pill-top">
         <div class="rich-pill-meta">
@@ -1015,63 +1141,12 @@ function renderPinnedRichPills(animate = false) {
       </div>
     `;
 
-    // Click on unpin white star removes vault; click anywhere else opens full audit
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.rich-pill-star-btn')) {
-        e.stopPropagation();
-        togglePinVault(v.address);
-        return;
-      }
-      openVaultAudit(v);
-    });
-
-    // Highlight sphere particle on hover
-    card.addEventListener('mouseenter', () => {
-      sphere.highlightVault(v.address);
-    });
-
-    card.addEventListener('mouseleave', () => {
-      if (!selectedVaultAddress) {
-        sphere.highlightVault(null);
-      }
-    });
+    bindPinnedCard(card, v);
+    pinnedSource.push({ card, v });
 
     DOM.pinnedRichPills.appendChild(card);
-
-    // Ball Flight Animation if requested
-    if (animate) {
-      setTimeout(() => {
-        let pPos = sphere.getParticleScreenPos(v.address);
-        if (!pPos) {
-          pPos = { x: window.innerWidth * 0.45, y: window.innerHeight * 0.5 };
-        }
-        const orb = document.createElement('div');
-        orb.className = 'rich-pill-fly-orb';
-        orb.style.left = `${pPos.x}px`;
-        orb.style.top = `${pPos.y}px`;
-        document.body.appendChild(orb);
-
-        const cardRect = card.getBoundingClientRect();
-        const targetX = cardRect.left + 24;
-        const targetY = cardRect.top + cardRect.height / 2;
-
-        requestAnimationFrame(() => {
-          orb.style.left = `${targetX}px`;
-          orb.style.top = `${targetY}px`;
-
-          setTimeout(() => {
-            orb.style.opacity = '0';
-            card.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-            card.style.opacity = '1';
-            card.style.transform = 'none';
-            setTimeout(() => {
-              orb.remove();
-            }, 300);
-          }, 420);
-        });
-      }, index * 80);
-    }
   });
+  updatePinnedCarousel();
 
   // Background pre-fetch full audits for pinned vaults to warm cache and ensure exact data
   pinnedAddresses.forEach(addr => {
@@ -1090,10 +1165,16 @@ function renderPinnedRichPills(animate = false) {
 /**
  * Renders the filtered and sorted Vaults Explorer list.
  */
+/** Rows rendered synchronously, rows per idle chunk after that, and the token that cancels a stale chunk loop. */
+const EXPLORER_FIRST_ROWS = 60;
+const EXPLORER_CHUNK = 80;
+let explorerRenderToken = 0;
+
 function renderVaultExplorer() {
   if (!DOM.explorerVaultsList) return;
-  const savedScrollTop = DOM.explorerVaultsList.scrollTop;
+  const savedScrollTop = DOM.vaultExplorerWidget ? DOM.vaultExplorerWidget.scrollTop : 0;
   DOM.explorerVaultsList.innerHTML = '';
+  explorerRenderToken++;
 
   const pinnedList = getPinnedAddresses();
   const pinnedSet = new Set(pinnedList); // built once per render instead of once per row
@@ -1196,18 +1277,19 @@ function renderVaultExplorer() {
     const emptyMsg = explorerFilters.pinnedOnly
       ? 'No pinned vaults yet. Tap the star icon on any vault card or in the audit view to add it to favorites.'
       : 'No vaults match your filter criteria. Try resetting filters.';
+    const [emptyTitle, ...emptyHint] = emptyMsg.split('. ');
     DOM.explorerVaultsList.innerHTML = `
-      <li class="explorer-vault-item" style="color:var(--text-muted); justify-content:center; padding:24px 12px; font-size:12px; text-align:center;">
-        ${emptyMsg}
+      <li class="explorer-empty">
+        <span class="explorer-empty-title">${emptyTitle}</span>
+        <span class="explorer-empty-hint">${emptyHint.join('. ')}</span>
       </li>
     `;
     return;
   }
 
-  // Render all matching vaults into a DocumentFragment for maximum performance
-  const fragment = document.createDocumentFragment();
-  for (let i = 0; i < results.length; i++) {
-    const v = results[i];
+  // Rows are built in chunks: the first screenful at once, the rest while the browser is idle,
+  // so a filter or sort change never blocks a frame for hundreds of rows
+  const buildRow = (v) => {
     const li = document.createElement('li');
     li.className = 'explorer-vault-item';
     li.setAttribute('data-address', v.address);
@@ -1230,26 +1312,25 @@ function renderVaultExplorer() {
         ? (v.compromisedPercent > 0 ? `${v.compromisedPercent}% Flagged` : `${v.compromisedCount} Flagged`)
         : (v.unverifiedPercent > 0 ? `${v.unverifiedPercent}% Unverified` : 'Unverified');
     const flaggedBadgeHtml = !isClean
-      ? ` • <span class="vault-mini-badge flagged">${flaggedLabel}</span>`
+      ? `<span class="vault-mini-badge flagged">${flaggedLabel}</span>`
       : '';
 
     li.innerHTML = `
-      <div class="vault-item-left">
-        <div class="vault-item-title-row">
-          <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${escapeHtml(v.address)}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(v.name)}" aria-pressed="${isPinned}">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="${isPinned ? '#ffffff' : 'none'}" stroke="${isPinned ? '#ffffff' : 'rgba(255,255,255,0.35)'}" stroke-width="1.75">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-            </svg>
-          </button>
-          <span class="vault-chain-badge ${chainClass}">${escapeHtml(chainName)}</span>
-          <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
-        </div>
-        <span class="vault-item-sub">${escapeHtml(curator)} • <strong style="color:#ffffff">${escapeHtml(assetSym)}</strong>${flaggedBadgeHtml}</span>
-      </div>
-      <div class="vault-item-right">
-        <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
-        <span class="vault-item-apy ${apyClass}">${formatPercent(apy)} APY</span>
-      </div>
+      <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${escapeHtml(v.address)}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(v.name)}" aria-pressed="${isPinned}">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="${isPinned ? '#ffffff' : 'none'}" stroke="${isPinned ? '#ffffff' : 'rgba(255,255,255,0.45)'}" stroke-width="1.75">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+      </button>
+      <span class="vault-item-name-cell">
+        <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
+        <span class="vault-item-sub"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span>${flaggedBadgeHtml}</span>
+      </span>
+      <span class="vault-item-meta">
+        <span class="vault-chain-badge ${chainClass}">${escapeHtml(chainName)}</span>
+        <span class="vault-item-curator" title="${escapeHtml(curator)}">${escapeHtml(curator)}</span>
+      </span>
+      <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
+      <span class="vault-item-apy ${apyClass}">${formatPercent(apy)} APY</span>
     `;
 
     const starBtn = li.querySelector('.vault-item-star-btn');
@@ -1284,10 +1365,82 @@ function renderVaultExplorer() {
       }
     });
 
-    fragment.appendChild(li);
-  }
-  DOM.explorerVaultsList.appendChild(fragment);
-  DOM.explorerVaultsList.scrollTop = savedScrollTop;
+    return li;
+  };
+
+  const token = ++explorerRenderToken;
+  const appendRows = (from, to) => {
+    const fragment = document.createDocumentFragment();
+    for (let i = from; i < to; i++) fragment.appendChild(buildRow(results[i]));
+    DOM.explorerVaultsList.appendChild(fragment);
+    // The saved scroll position is restored as soon as enough rows exist for it
+    if (DOM.vaultExplorerWidget && DOM.vaultExplorerWidget.scrollTop < savedScrollTop) DOM.vaultExplorerWidget.scrollTop = savedScrollTop;
+    markSelectedRow(document.body.classList.contains('audit-open') ? selectedVaultAddress : null);
+  };
+  const nextChunk = (from) => {
+    if (token !== explorerRenderToken || from >= results.length) return;
+    appendRows(from, Math.min(from + EXPLORER_CHUNK, results.length));
+    setTimeout(() => nextChunk(from + EXPLORER_CHUNK), 0);
+  };
+  const first = Math.min(EXPLORER_FIRST_ROWS, results.length);
+  appendRows(0, first);
+  nextChunk(first);
+}
+
+/** Marks the table row of the vault whose audit is open. */
+function markSelectedRow(address) {
+  const list = DOM.explorerVaultsList;
+  if (!list?.querySelectorAll) return;
+  list.querySelectorAll('.explorer-vault-item.is-selected').forEach(el => el.classList.remove('is-selected'));
+  if (!address) return;
+  const key = address.toLowerCase();
+  [...list.querySelectorAll('[data-address]')].find(el => (el.getAttribute('data-address') || '').toLowerCase() === key)?.classList.add('is-selected');
+}
+
+/** Width in px a CSS length variable resolves to (media queries and clamp() included). */
+function measureCssWidth(varName, fallback) {
+  const probe = document.createElement('div');
+  probe.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;width:var(${varName})`;
+  document.body.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width > 0 ? width : fallback;
+}
+
+/** Viewport box of the audit panel (it stays measurable while hidden): where the flying ball unfolds to. */
+function getAuditPanelRect() {
+  const r = DOM.auditModal.getBoundingClientRect();
+  const radius = getComputedStyle(DOM.auditModal).borderTopLeftRadius || '16px';
+  return { left: r.left, top: r.top, width: r.width, height: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2, radius };
+}
+
+/**
+ * Puts the sphere in the free area next to the ledger (home) or next to the audit panel (audit open).
+ */
+function applySphereLayout(immediate = false, open = document.body.classList.contains('audit-open'), ms) {
+  if (!sphere?.setLayout || window.innerWidth <= 768) return; // phones have no sphere
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const auditOpen = open;
+
+  const left = auditOpen
+    ? (() => { const r = getAuditPanelRect(); return r.left + r.width + 12; })()
+    : measureCssWidth('--ledger-w', 760);
+  const regionWidth = Math.max(0, vw - left);
+  const radius = Math.max(60, Math.min(regionWidth * 0.43, vh * 0.42));
+  sphere.setLayout(left + Math.max(regionWidth, radius * 2) / 2, vh / 2, radius, immediate, ms);
+}
+
+/** Switches the page between home and audit layout: the ledger narrows, the sphere moves, the row is marked. */
+function setAuditLayout(open, ms) {
+  setLedgerCompact(open);
+  applySphereLayout(false, open, ms);
+}
+
+/** Narrows or widens the ledger (CSS animates the width): the ball always lands on free space. */
+function setLedgerCompact(open) {
+  document.body.classList.toggle('audit-open', open);
+  markSelectedRow(open ? selectedVaultAddress : null);
 }
 
 
@@ -1355,7 +1508,8 @@ function abortFailedAuditOpen() {
   isClosingAudit = false;
   sphere.setSelectedVault(null);
   sphere.highlightVault(null);
-  renderPinnedRichPills(true);
+  renderPinnedRichPills();
+  setAuditLayout(false);
   showStatusNotice('Audit unavailable, try again');
 }
 
@@ -1401,7 +1555,8 @@ function cancelPendingAuditOpen() {
   isTransitioningVault = false;
   sphere.setSelectedVault(null);
   sphere.highlightVault(null);
-  renderPinnedRichPills(true);
+  renderPinnedRichPills();
+  setAuditLayout(false);
   restoreFocusAfterAudit();
 }
 
@@ -1487,6 +1642,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
     if (DOM.pinnedRichPills) {
       DOM.pinnedRichPills.classList.add('hidden');
     }
+    setAuditLayout(true);
 
     const data = await auditDataPromise;
     if (token !== auditOpenToken) return; // cancelled with Escape while loading
@@ -1505,13 +1661,12 @@ async function openVaultAuditFlow(vault, startPos, token) {
   }
 
   // Target coordinates for Left Floating Terminal (Desktop)
-  const targetLeft = 20;
-  const targetTop = 18;
-  const targetWidth = getAuditPanelWidth();
-  const targetHeight = window.innerHeight - 36;
-  const targetCenterX = targetLeft + targetWidth / 2;
-  const targetCenterY = targetTop + targetHeight / 2;
-  const targetRadius = '20px';
+  const panelRect = getAuditPanelRect();
+  const targetWidth = panelRect.width;
+  const targetHeight = panelRect.height;
+  const targetCenterX = panelRect.cx;
+  const targetCenterY = panelRect.cy;
+  const targetRadius = panelRect.radius;
 
   // Check if a vault window is ALREADY open
   const isAlreadyOpen = selectedVaultAddress && !DOM.auditModal.classList.contains('hidden');
@@ -1525,6 +1680,9 @@ async function openVaultAuditFlow(vault, startPos, token) {
   if (DOM.pinnedRichPills) {
     DOM.pinnedRichPills.classList.add('hidden');
   }
+
+  // The ledger narrows and the sphere moves aside while the ball flies, so it lands on free space
+  setAuditLayout(true);
 
   // --- A. RETRACTING ANIMATION (If previous vault was open) ---
   if (isAlreadyOpen && DOM.morphProxyRetract) {
@@ -1547,14 +1705,14 @@ async function openVaultAuditFlow(vault, startPos, token) {
     pRetract.style.height = `${targetHeight}px`;
     pRetract.style.borderRadius = targetRadius;
     pRetract.style.opacity = '0.88';
-    pRetract.style.background = 'rgba(14, 14, 14, 0.88)';
+    pRetract.style.background = 'oklch(0.15 0.004 260 / 0.88)';
     pRetract.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-    pRetract.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.8)';
+    pRetract.style.boxShadow = 'none';
     pRetract.classList.remove('hidden');
 
     // Stage 1: Fold window down into a ball at left dock (220ms)
     requestAnimationFrame(() => {
-      pRetract.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
+      pRetract.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms';
       pRetract.style.width = '12px';
       pRetract.style.height = '12px';
       pRetract.style.borderRadius = '50%';
@@ -1607,7 +1765,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
 
   // Stage 1: Ball flies out across 3D space to the left dock position (440ms)
   requestAnimationFrame(() => {
-    pOpen.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 440ms';
+    pOpen.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1)';
     pOpen.style.left = `${targetCenterX}px`;
     pOpen.style.top = `${targetCenterY}px`;
   });
@@ -1615,13 +1773,13 @@ async function openVaultAuditFlow(vault, startPos, token) {
 
   // Stage 2: Upon arriving at left dock, ball unfolds into the full rectangular window (300ms)
   setTimeout(() => {
-    pOpen.style.transition = 'width 300ms cubic-bezier(0.16, 1, 0.3, 1), height 300ms cubic-bezier(0.16, 1, 0.3, 1), border-radius 300ms cubic-bezier(0.16, 1, 0.3, 1), background 300ms, border-color 300ms, box-shadow 300ms';
+    pOpen.style.transition = 'width 300ms cubic-bezier(0.16, 1, 0.3, 1), height 300ms cubic-bezier(0.16, 1, 0.3, 1), border-radius 300ms cubic-bezier(0.16, 1, 0.3, 1), background 300ms, border-color 300ms';
     pOpen.style.width = `${targetWidth}px`;
     pOpen.style.height = `${targetHeight}px`;
     pOpen.style.borderRadius = targetRadius;
-    pOpen.style.background = 'rgba(14, 14, 14, 0.88)';
+    pOpen.style.background = 'oklch(0.15 0.004 260 / 0.88)';
     pOpen.style.border = '1px solid rgba(255, 255, 255, 0.14)';
-    pOpen.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08)';
+    pOpen.style.boxShadow = 'none';
   }, 420);
 
   const animStartTime = Date.now();
@@ -1655,97 +1813,24 @@ async function openVaultAuditFlow(vault, startPos, token) {
   }, remainingDelay);
 }
 
-/** Width of the left audit panel, mirroring the CSS (desktop 480px, tablet 440px, both capped by the viewport). */
-function getAuditPanelWidth() {
-  const w = window.innerWidth;
-  const tablet = w >= 769 && w <= 1024;
-  return Math.floor(Math.min(tablet ? 440 : 480, w / 2 - (tablet ? 20 : 30)));
-}
 
 /**
- * Reverses the morphing animation: folds left panel into a ball and flies it back into the 3D sphere.
+ * Closes the audit: the panel disappears, the ledger widens back, the sphere returns home.
  */
 function closeVaultAudit() {
   if (DOM.auditModal.classList.contains('hidden') || isClosingAudit) return;
 
-  const isMobile = window.innerWidth <= 768;
-  if (isMobile || REDUCED_MOTION.matches) {
-    DOM.auditModal.classList.add('hidden');
-    selectedVaultAddress = null;
-    isTransitioningVault = false;
-    if (!isMobile) {
-      sphere.setSelectedVault(null);
-      sphere.highlightVault(null);
-      renderPinnedRichPills(false);
-    }
-    restoreFocusAfterAudit();
-    return;
-  }
-
-  const targetWidth = getAuditPanelWidth();
-  const targetHeight = window.innerHeight - 36;
-  const targetCenterX = 20 + targetWidth / 2;
-  const targetCenterY = 18 + targetHeight / 2;
-  const targetRadius = '20px';
-
-  const closingAddress = selectedVaultAddress;
-  // Block new opens until the fold-and-fly animation ends: its timer resets the selection state at the end
-  isTransitioningVault = true;
-  isClosingAudit = true;
-
-  // 1. Hide left audit terminal
+  // The panel disappears first, then the ledger widens (CSS animates the width); no ball flies back
   DOM.auditModal.classList.add('hidden');
-
-  // 2. Spawn morph proxy in left terminal bounds
-  DOM.morphProxy.style.transition = 'none';
-  DOM.morphProxy.style.left = `${targetCenterX}px`;
-  DOM.morphProxy.style.top = `${targetCenterY}px`;
-  DOM.morphProxy.style.width = `${targetWidth}px`;
-  DOM.morphProxy.style.height = `${targetHeight}px`;
-  DOM.morphProxy.style.borderRadius = targetRadius;
-  DOM.morphProxy.style.opacity = '0.88';
-  DOM.morphProxy.style.background = 'rgba(14, 14, 14, 0.88)';
-  DOM.morphProxy.style.border = '1px solid rgba(255, 255, 255, 0.14)';
-  DOM.morphProxy.classList.remove('hidden');
-
-  // 3. Determine return coordinates of the particle on the 3D sphere
-  let particlePos = closingAddress ? sphere.getParticleScreenPos(closingAddress) : null;
-  if (!particlePos) {
-    particlePos = {
-      x: isMobile ? window.innerWidth * 0.5 : window.innerWidth * 0.45,
-      y: isMobile ? window.innerHeight * 0.28 : window.innerHeight * 0.5
-    };
+  selectedVaultAddress = null;
+  isTransitioningVault = false;
+  setAuditLayout(false);
+  if (window.innerWidth > 768) {
+    sphere.setSelectedVault(null);
+    sphere.highlightVault(null);
+    renderPinnedRichPills();
   }
-
-  // Stage 1: Fold window down into a ball at dock position (220ms)
-  requestAnimationFrame(() => {
-    DOM.morphProxy.style.transition = 'width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), height 220ms cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 220ms, background 220ms, box-shadow 220ms';
-    DOM.morphProxy.style.width = '12px';
-    DOM.morphProxy.style.height = '12px';
-    DOM.morphProxy.style.borderRadius = '50%';
-    DOM.morphProxy.style.background = '#ffffff';
-    DOM.morphProxy.style.boxShadow = '0 0 16px rgba(255, 255, 255, 0.6)';
-  });
-
-  // Stage 2: Ball shoots back into particle on the sphere (440ms)
-  setTimeout(() => {
-    const liveParticlePos = closingAddress ? sphere.getParticleScreenPos(closingAddress) : particlePos;
-    DOM.morphProxy.style.transition = 'left 440ms cubic-bezier(0.16, 1, 0.3, 1), top 440ms cubic-bezier(0.16, 1, 0.3, 1), opacity 440ms';
-    DOM.morphProxy.style.left = `${liveParticlePos.x}px`;
-    DOM.morphProxy.style.top = `${liveParticlePos.y}px`;
-    DOM.morphProxy.style.opacity = '0';
-
-    setTimeout(() => {
-      DOM.morphProxy.classList.add('hidden');
-      selectedVaultAddress = null;
-      sphere.setSelectedVault(null);
-      sphere.highlightVault(null);
-      isTransitioningVault = false;
-      isClosingAudit = false;
-      renderPinnedRichPills(true);
-      restoreFocusAfterAudit();
-    }, 450);
-  }, 210);
+  restoreFocusAfterAudit();
 }
 
 /**
@@ -1989,14 +2074,14 @@ function populateAuditModal(data, isQuietRefresh = false) {
       DOM.riskCollateralList.appendChild(box);
     }
     if (breakdown.length === 0) {
-      DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
+      DOM.riskCollateralList.innerHTML = '<span class="collateral-empty">No active collateral backing recorded.</span>';
     } else {
       breakdown.slice(0, 6).forEach(item => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.04);';
+        row.className = 'collateral-row';
         row.innerHTML = `
-          <span style="font-weight:600; color:#fff;">${escapeHtml(item.label)}</span>
-          <span style="color:var(--text-muted);">${formatCurrency(item.usd)} <strong style="color:#fff; margin-left:6px;">${item.sharePercent}%</strong></span>
+          <span class="collateral-token">${escapeHtml(item.label)}</span>
+          <span class="collateral-usd">${formatCurrency(item.usd)} <strong>${item.sharePercent}%</strong></span>
         `;
         DOM.riskCollateralList.appendChild(row);
       });
@@ -2049,7 +2134,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(a.collateralTags?.length ? a.collateralTags.join(', ') : 'no tags')}</div>${tokenFactsPlaceholder(v.chainId, a.collateralAddress)}</td>
+        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong></td>
         <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
         <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>
@@ -2286,7 +2371,7 @@ window.addEventListener('resize', () => {
     wasMobileViewport = isMobileViewport;
     if (!isMobileViewport) {
       if (!selectedVaultAddress || DOM.auditModal?.classList.contains('hidden')) {
-        renderPinnedRichPills(false);
+        renderPinnedRichPills();
       }
     } else if (DOM.pinnedRichPills) {
       DOM.pinnedRichPills.classList.add('hidden');
