@@ -696,7 +696,9 @@ export function diffPendingConfigs(vaultContext, rawPendingConfigs = [], existin
 const deriveVerdictLevel = (vault, verdict) => {
   if (!verdict || !verdict.mqi) return null;
   if (verdict.mqi.unpriced || isUnpricedVault(vault)) return null;
-  if (verdict.mqi.mqiPercent === null && Number(vault?.total_assets_usd || 0) > 0 && Number(verdict.mqi.verifiedAssetsUsd || 0) <= 0) {
+  // No score and nothing verified (clean + compromised): the vault has no level. A vault with a known defect still has one.
+  const verifiedUsd = Number(verdict.mqi.cleanAssetsUsd || 0) + Number(verdict.mqi.compromisedAssetsUsd || 0);
+  if (verdict.mqi.mqiPercent === null && Number(vault?.total_assets_usd || 0) > 0 && verifiedUsd <= 0) {
     return null;
   }
   const flags = Array.isArray(verdict.redFlags) ? verdict.redFlags : [];

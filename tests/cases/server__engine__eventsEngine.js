@@ -328,6 +328,24 @@ export default {
       assert.equal(st.last_admin_event_ts, NOW);
       assert.equal('collateral_level' in st, false); assert.equal('collateral_model' in st, false); assert.equal('collateral_tiers' in st, false);
     }],
+    ['MQI null, але є перевірена частина з красним прапорцем -> рівень red, а не null', ({ buildWatchState }) => {
+      const vault = { address: VAULT_ADDR, chain_id: 1, name: 'V', total_assets_usd: 10e6, is_listed: 1 };
+      const verdict = {
+        redFlags: [{ level: 'CRITICAL', title: 'Compromised Market Exposure' }],
+        mqi: { mqiPercent: null, unpriced: false, cleanAssetsUsd: 3e6, compromisedAssetsUsd: 1e6, unverifiedAssetsUsd: 6e6 },
+        liquidity: { exitUnknown: true }
+      };
+      assert.equal(buildWatchState(vault, [], verdict, {}).verdict_level, 'red');
+    }],
+    ['MQI null і нічого не перевірено (чисте + брудне = 0) -> рівень null, навіть з прапорцем Unresolved', ({ buildWatchState }) => {
+      const vault = { address: VAULT_ADDR, chain_id: 1, name: 'V', total_assets_usd: 10e6, is_listed: 1 };
+      const verdict = {
+        redFlags: [{ level: 'HIGH', title: 'Unresolved Exposure' }],
+        mqi: { mqiPercent: null, unpriced: false, cleanAssetsUsd: 0, compromisedAssetsUsd: 0, unverifiedAssetsUsd: 10e6 },
+        liquidity: { exitUnknown: true }
+      };
+      assert.equal(buildWatchState(vault, [], verdict, {}).verdict_level, null);
+    }],
   ],
   diffDerivedState: [
     ['повертає порожній масив на першому спостереженні (prevState = null)', ({ diffDerivedState }) => {
