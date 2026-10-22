@@ -1,0 +1,165 @@
+{
+ "chainId": 1,
+ "address": "0x238a700ed6165261cf8b2e544ba797bc11e466ba",
+ "symbol": "mF-ONE",
+ "status": "ok",
+ "coverage": 0.904,
+ "data": {
+  "identity": {
+   "name": "Midas mF-ONE",
+   "symbol": "mF-ONE",
+   "decimals": 18,
+   "total_supply": "58328987151035336211260023",
+   "token_type": "ERC-20",
+   "contract_name": "TransparentUpgradeableProxy"
+  },
+  "contract": {
+   "sourcify_match": "exact_match",
+   "blockscout_verified": true,
+   "is_proxy": true,
+   "proxy_type": "EIP1967Proxy",
+   "implementations": [
+    {
+     "address": "0x32fb951ce9be3cd9a0a406ea86647a3c7d6406e2",
+     "name": "mFONE"
+    }
+   ],
+   "deployer": "0xa0819ae43115420beb161193b8d8ba64c9f9facc",
+   "creator": "0xa0819ae43115420beb161193b8d8ba64c9f9facc",
+   "deployed_at": "2025-05-08T09:27:23.000Z",
+   "fn": {
+    "mint": true,
+    "burn": true,
+    "pause": true,
+    "blacklist": true,
+    "freeze": false,
+    "upgrade": false,
+    "owner": true,
+    "roles": false,
+    "erc4626": false,
+    "permit": false
+   }
+  },
+  "control": {
+   "read_values": {
+    "decimals": "18",
+    "symbol": "mF-ONE",
+    "totalSupply": "58328987151035336211260023"
+   },
+   "controllers": []
+  },
+  "holders": {
+   "count": 32,
+   "top1_pct": 47.014,
+   "top10_pct": 97.553,
+   "top10_contracts": 4,
+   "morpho_blue_pct": 47.014,
+   "top": [
+    {
+     "address": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+     "name": "Morpho",
+     "is_contract": true,
+     "pct": 47.014
+    },
+    {
+     "address": "0x9db5b0b081e2202fb588cbd541b01b77f45cfe2d",
+     "name": null,
+     "is_contract": false,
+     "pct": 45.197
+    },
+    {
+     "address": "0xfc4313b59a5bc5ec84a4987e8a18ef1bad666b49",
+     "name": null,
+     "is_contract": true,
+     "pct": 1.321
+    },
+    {
+     "address": "0x9475fff502a9d64c2ad7c61c8f92165cabad5954",
+     "name": null,
+     "is_contract": true,
+     "pct": 1.31
+    },
+    {
+     "address": "0x0e193a20352a7bd5d4058152f0641447f0e5667a",
+     "name": null,
+     "is_contract": false,
+     "pct": 0.723
+    }
+   ],
+   "gecko_count": 32,
+   "gecko_top10_pct": 97.5575
+  },
+  "price": {
+   "usd": 1.1310284721487296,
+   "confidence": 0.99,
+   "price_ts": 1792664579,
+   "chart": {
+    "min": 1.1246454421116157,
+    "max": 1.1310284721487296,
+    "last": 1.1310284721487296,
+    "count": 30,
+    "range_pct": 0.568
+   },
+   "market_cap_usd": 65970270.87649105,
+   "volume_24h_usd": 0
+  },
+  "liquidity": {
+   "pools_count": 0,
+   "total_reserve_usd": 0,
+   "total_volume_24h_usd": 0,
+   "pools": [],
+   "kyber": {
+    "100000": {
+     "status": "ok",
+     "price_impact_pct": 87.386,
+     "out_usd": 2989.53,
+     "gas_usd": 1.3572020716078197,
+     "dexes": [
+      "uniswap-v4",
+      "kyberswap-limit-order-v2/uniswap-v4"
+     ]
+    },
+    "1000000": {
+     "status": "ok",
+     "price_impact_pct": 98.585,
+     "out_usd": 3351.65,
+     "gas_usd": 1.2873997616992268,
+     "dexes": [
+      "uniswap-v4",
+      "kyberswap-limit-order-v2"
+     ]
+    }
+   }
+  },
+  "pendle": null,
+  "rwa": {
+   "ticker": "mF-ONE",
+   "issuer": "Midas",
+   "manager": "Fasanara",
+   "custodian": null,
+   "transfer_agent": null,
+   "administrator": null,
+   "auditor": null,
+   "nav_usd": 1.13135894,
+   "redemption_frequency": "Instant",
+   "redemption_fee_bps": 100,
+   "min_subscription_usd": 150000,
+   "kyc_required": false,
+   "bankruptcy_remote": false,
+   "regulatory_framework": null,
+   "jurisdiction": null,
+   "holders_count": 39
+  },
+  "oracle_feeds": {
+   "feeds": [],
+   "has_por_feed": false
+  },
+  "meta": {
+   "collected_at": 1792665391,
+   "chain_supported": true,
+   "filled": 85,
+   "total": 94,
+   "coverage": 0.904
+  }
+ }
+}

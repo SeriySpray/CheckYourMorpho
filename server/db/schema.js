@@ -177,43 +177,26 @@ CREATE TABLE IF NOT EXISTS token_tags (
   PRIMARY KEY (chain_id, address)
 );
 
--- AI research result per collateral token (one current row) and the audit trail of every received result
-CREATE TABLE IF NOT EXISTS token_research (
+-- Public facts about a collateral token, parsed from fixed sources by services/tokenCollector.js (no judgement, unknown = null)
+CREATE TABLE IF NOT EXISTS token_data (
   chain_id INTEGER NOT NULL,
   address TEXT NOT NULL,
   symbol TEXT,
-  category TEXT NOT NULL,
-  risk_tier INTEGER CHECK (risk_tier BETWEEN 1 AND 5),
-  confidence TEXT NOT NULL,
-  tier_rationale TEXT,               -- reserved for the analyst model
-  summary TEXT,                      -- facts-only summary from the collecting agent
-  facts_json TEXT NOT NULL,
-  signals_json TEXT,
-  sources_json TEXT NOT NULL,
-  checks_json TEXT NOT NULL,
-  as_of TEXT NOT NULL,
-  researched_at INTEGER NOT NULL,
-  run_id TEXT NOT NULL,
-  model TEXT NOT NULL,
-  prompt_version TEXT NOT NULL,
-  status TEXT NOT NULL,              -- 'rated' | 'unrated'
-  pending_tier INTEGER,              -- reserved for the analyst model, unused now
-  raw_json TEXT NOT NULL,
+  collected_at INTEGER NOT NULL,
+  status TEXT NOT NULL,              -- ok | partial | failed
+  coverage REAL,                     -- share of the data fields that hold a value
+  data_json TEXT NOT NULL,
   PRIMARY KEY (chain_id, address)
 );
 
-CREATE TABLE IF NOT EXISTS token_research_history (
+CREATE TABLE IF NOT EXISTS token_data_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   chain_id INTEGER NOT NULL,
   address TEXT NOT NULL,
-  run_id TEXT NOT NULL,
-  received_at INTEGER NOT NULL,
-  outcome TEXT NOT NULL,             -- accepted | rejected (older rows may hold kept_previous | pending_confirmation)
-  risk_tier INTEGER,
-  errors_json TEXT,
-  raw_json TEXT,
-  checks_json TEXT
+  collected_at INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  data_json TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_research_history_token ON token_research_history(chain_id, address, received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_token_data_history_token ON token_data_history(chain_id, address, collected_at DESC);
 `;

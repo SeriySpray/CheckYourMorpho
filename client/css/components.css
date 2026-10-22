@@ -2210,22 +2210,13 @@ button:focus-visible,
   }
 }
 
-#risk-mix-popover {
-  bottom: auto;
-  top: calc(100% + 10px);
-  transform: translateY(-4px) scale(0.97);
-}
-
-#risk-mix-popover::after {
-  top: auto;
-  bottom: 100%;
-  border-color: transparent transparent rgba(255, 255, 255, 0.15) transparent;
-}
-
-.info-circle-wrap:hover #risk-mix-popover,
-.info-circle-btn:focus-visible ~ #risk-mix-popover,
-.info-circle-btn.active ~ #risk-mix-popover {
-  transform: translateY(0) scale(1);
+/* Facts under a collateral token in the allocation table */
+.token-facts {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Vault Activity Panel & Bell Button --- */

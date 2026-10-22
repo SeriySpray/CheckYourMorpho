@@ -1,0 +1,208 @@
+{
+ "chainId": 1,
+ "address": "0x4c9edd5852cd905f086c759e8383e09bff1e68b3",
+ "symbol": "USDe",
+ "status": "ok",
+ "coverage": 0.88,
+ "ms": 115394,
+ "data": {
+  "identity": {
+   "name": "Ethena USDe",
+   "symbol": "USDe",
+   "decimals": 18,
+   "total_supply": "4656233547375788992523503861",
+   "token_type": "ERC-20",
+   "contract_name": "USDe"
+  },
+  "contract": {
+   "sourcify_match": "exact_match",
+   "blockscout_verified": true,
+   "is_proxy": false,
+   "proxy_type": null,
+   "implementations": [],
+   "deployer": "0x8de54b1cefedeab1766b947c7d9a9963436e8fae",
+   "creator": "0x8de54b1cefedeab1766b947c7d9a9963436e8fae",
+   "deployed_at": "2023-11-14T16:32:35.000Z",
+   "fn": {
+    "mint": true,
+    "burn": true,
+    "pause": false,
+    "blacklist": false,
+    "freeze": false,
+    "upgrade": false,
+    "owner": true,
+    "roles": false,
+    "erc4626": false,
+    "permit": true
+   }
+  },
+  "control": {
+   "read_values": {
+    "DOMAIN_SEPARATOR": "0x74fbd8ad78eb7732edc209f83d2dc23f7472a05cdbfd5dfc0f210dad2f967cb3",
+    "decimals": "18",
+    "minter": "0xe3490297a08d6fC8Da46Edb7B6142E4F461b62D3",
+    "name": "USDe",
+    "owner": "0xE8Dc0Fab349EA169283C48Ccfd09d797E6DB7c94",
+    "pendingOwner": "0x0000000000000000000000000000000000000000",
+    "symbol": "USDe",
+    "totalSupply": "4656233547375788992523503861"
+   },
+   "controllers": [
+    {
+     "address": "0xE8Dc0Fab349EA169283C48Ccfd09d797E6DB7c94",
+     "role": "owner",
+     "name": "EthenaTimelockController",
+     "is_contract": true,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0xe3490297a08d6fC8Da46Edb7B6142E4F461b62D3",
+     "role": "minter",
+     "name": "EthenaMinting",
+     "is_contract": true,
+     "implementation_names": [],
+     "safe": null
+    }
+   ]
+  },
+  "holders": {
+   "count": 47785,
+   "top1_pct": 46.944,
+   "top10_pct": 94.184,
+   "top10_contracts": 5,
+   "morpho_blue_pct": 1.321,
+   "top": [
+    {
+     "address": "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34",
+     "name": "USDeOFTAdapter",
+     "is_contract": true,
+     "pct": 46.944
+    },
+    {
+     "address": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+     "name": "Staked USDe",
+     "is_contract": true,
+     "pct": 25.576
+    },
+    {
+     "address": "0x4f5923fc5fd4a93352581b38b7cd26943012decf",
+     "name": "Aave Ethereum USDe",
+     "is_contract": true,
+     "pct": 5.238
+    },
+    {
+     "address": "0xf977814e90da44bfa03b6295a0616a897441acec",
+     "name": "Binance: Hot Wallet 20",
+     "is_contract": false,
+     "pct": 4.37
+    },
+    {
+     "address": "0x33ae83071432116ae892693b45466949a38ac74c",
+     "name": "Bybit: Deposit Address",
+     "is_contract": false,
+     "pct": 3.76
+    }
+   ],
+   "gecko_count": 47775,
+   "gecko_top10_pct": 94.1687
+  },
+  "price": {
+   "usd": 0.999653689801685,
+   "confidence": 0.99,
+   "price_ts": 1792664817,
+   "chart": {
+    "min": 0.9991765485770432,
+    "max": 0.9998193689920856,
+    "last": 0.999615005466648,
+    "count": 30,
+    "range_pct": 0.064
+   },
+   "market_cap_usd": 4654409728.408,
+   "volume_24h_usd": 30222378.673003487
+  },
+  "liquidity": {
+   "pools_count": 20,
+   "total_reserve_usd": 45530518.25,
+   "total_volume_24h_usd": 10288877.71,
+   "pools": [
+    {
+     "dex": "curve",
+     "reserve_usd": 33890861.2974,
+     "volume_24h_usd": 161972.235145124,
+     "created_at": "2024-01-02T14:27:19Z"
+    },
+    {
+     "dex": "uniswap_v3",
+     "reserve_usd": 3450978.1522,
+     "volume_24h_usd": 350997.381246274,
+     "created_at": "2025-02-24T08:40:35Z"
+    }
+   ],
+   "kyber": {
+    "100000": {
+     "status": "ok",
+     "price_impact_pct": 0.015,
+     "out_usd": 100040.04,
+     "gas_usd": 0.30075765282193667,
+     "dexes": [
+      "metric-propamm/uniswap-v4",
+      "uniswap-v4"
+     ]
+    },
+    "1000000": {
+     "status": "ok",
+     "price_impact_pct": 0.028,
+     "out_usd": 999997,
+     "gas_usd": 0.7308032666947681,
+     "dexes": [
+      "uniswap-v4",
+      "fluid-dex-t1",
+      "uniswap-v4-stable-stable",
+      "uniswapv3",
+      "metric-propamm/curve-stable-ng"
+     ]
+    }
+   }
+  },
+  "pendle": null,
+  "rwa": {
+   "ticker": "USDe",
+   "issuer": "Ethena",
+   "manager": null,
+   "custodian": "Anchorage Digital Bank",
+   "transfer_agent": null,
+   "administrator": null,
+   "auditor": null,
+   "nav_usd": 1,
+   "redemption_frequency": null,
+   "redemption_fee_bps": null,
+   "min_subscription_usd": null,
+   "kyc_required": null,
+   "bankruptcy_remote": true,
+   "regulatory_framework": "Non-Regulated",
+   "jurisdiction": "N/A",
+   "holders_count": 72032
+  },
+  "oracle_feeds": {
+   "feeds": [
+    {
+     "name": "USDe / USD",
+     "category": "low",
+     "heartbeat_sec": 82800,
+     "deviation_pct": 0.5,
+     "proxy_address": "0xa569d910839ae8865da8f8e70fffb0cba869f961",
+     "product_type": "Price"
+    }
+   ],
+   "has_por_feed": false
+  },
+  "meta": {
+   "collected_at": 1792665170,
+   "chain_supported": true,
+   "filled": 73,
+   "total": 83,
+   "coverage": 0.88
+  }
+ }
+}

@@ -1,0 +1,123 @@
+[
+ {
+  "name": "Calculated ETH+/USD",
+  "feedCategory": "custom",
+  "heartbeat": 86400,
+  "threshold": 0.5,
+  "proxyAddress": "0x66Ab900341C98de949EC31d11b3C4180743844F1",
+  "docs": {
+   "baseAsset": "ETH+",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "SPYon-USD (Calculated)",
+  "feedCategory": "custom",
+  "heartbeat": 86400,
+  "threshold": 0.5,
+  "proxyAddress": "0xd16cC387E87d37350f57421DaDF811968441C1a5",
+  "docs": {
+   "baseAsset": "SPYON",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "LBTC / BTC",
+  "feedCategory": "medium",
+  "heartbeat": 86400,
+  "threshold": 0.5,
+  "proxyAddress": "0x5c29868C58b6e15e2b962943278969Ab6a7D3212",
+  "docs": {
+   "baseAsset": "LBTC",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "HASTRAPRIME / WYLDS Exchange Rate",
+  "feedCategory": "custom",
+  "heartbeat": 86400,
+  "threshold": 0.05,
+  "proxyAddress": "0xf17C0EdcAA28371e9c8012D7699bF40ECF0F58d1",
+  "docs": {
+   "baseAsset": "HASTRAPRIME",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "Lombard Proof of Reserves",
+  "feedCategory": "custom",
+  "heartbeat": 86400,
+  "threshold": 0.01,
+  "proxyAddress": "0x70c158c7731Da2C14BC84aEBa39A4FF703DDc7d2",
+  "docs": {
+   "baseAsset": "LBTC",
+   "productType": "Proof of Reserve"
+  }
+ },
+ {
+  "name": "USDC / USD",
+  "feedCategory": "low",
+  "heartbeat": 82800,
+  "threshold": 0.25,
+  "proxyAddress": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
+  "docs": {
+   "baseAsset": "USDC",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "nvPRIME / PRIME Exchange Rate",
+  "feedCategory": "custom",
+  "heartbeat": 86400,
+  "threshold": 0.5,
+  "proxyAddress": "0x2717d691013506ef7cA49B35f054b2662d081c5d",
+  "docs": {
+   "baseAsset": "PRIME",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "Saturn sUSDat NAV",
+  "feedCategory": "deprecating",
+  "heartbeat": 86400,
+  "threshold": 0.5,
+  "proxyAddress": "0x73B8E902638a21B4d0319CF99Fa333b2727AD318",
+  "docs": {
+   "baseAsset": "SUSDAT",
+   "productType": "NAVLink"
+  }
+ },
+ {
+  "name": "USDC / USD",
+  "feedCategory": "low",
+  "heartbeat": 86400,
+  "threshold": 0.25,
+  "proxyAddress": "0xfB6471ACD42c91FF265344Ff73E88353521d099F",
+  "docs": {
+   "baseAsset": "USDC",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "USDC / USD",
+  "feedCategory": "low",
+  "heartbeat": 82800,
+  "threshold": 0.25,
+  "proxyAddress": "0x84E045745ED829c5b778aBB17104FC2600020850",
+  "docs": {
+   "baseAsset": "USDC",
+   "productType": "Price"
+  }
+ },
+ {
+  "name": "wstETH / USD Calculated",
+  "feedCategory": "custom",
+  "heartbeat": 86400,
+  "threshold": 0.5,
+  "proxyAddress": "0x164b276057258d81941e97B0a900D4C7B358bCe0",
+  "docs": {
+   "baseAsset": "WSTETH",
+   "productType": "Price"
+  }
+ }
+]

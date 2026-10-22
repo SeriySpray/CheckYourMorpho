@@ -1,6 +1,0 @@
-{
-  "symbol": "WETH",
-  "name": "Wrapped Ether",
-  "decimals": "18",
-  "type": "ERC-20"
-}

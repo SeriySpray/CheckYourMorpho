@@ -1,0 +1,160 @@
+{
+ "chainId": 1,
+ "address": "0xbc6736d346a5ebc0debc997397912cd9b8fae10a",
+ "symbol": "PT-USDe-25SEP2025",
+ "status": "ok",
+ "coverage": 0.913,
+ "data": {
+  "identity": {
+   "name": "PT Ethena USDe 25SEP2025",
+   "symbol": "PT-USDe-25SEP2025",
+   "decimals": 18,
+   "total_supply": "1433117595631002756561619",
+   "token_type": "ERC-20",
+   "contract_name": "PendlePrincipalToken"
+  },
+  "contract": {
+   "sourcify_match": "exact_match",
+   "blockscout_verified": true,
+   "is_proxy": false,
+   "proxy_type": null,
+   "implementations": [],
+   "deployer": "0x1fccc097db89a86bfc474a1028f93958295b1fb7",
+   "creator": "0x35a338522a435d46f77be32c70e215b813d0e3ac",
+   "deployed_at": "2025-05-13T08:12:23.000Z",
+   "fn": {
+    "mint": false,
+    "burn": false,
+    "pause": false,
+    "blacklist": false,
+    "freeze": false,
+    "upgrade": false,
+    "owner": false,
+    "roles": false,
+    "erc4626": false,
+    "permit": false
+   }
+  },
+  "control": {
+   "read_values": {
+    "decimals": "18",
+    "expiry": "1758758400",
+    "isExpired": "True",
+    "symbol": "PT-USDe-25SEP2025",
+    "totalSupply": "1433117595631002756561619"
+   },
+   "controllers": []
+  },
+  "holders": {
+   "count": 172,
+   "top1_pct": 63.153,
+   "top10_pct": 99.508,
+   "top10_contracts": 1,
+   "morpho_blue_pct": 0.063,
+   "top": [
+    {
+     "address": "0xa2a2a29643f82ac99a5cab1780a43ac8457a5bbd",
+     "name": null,
+     "is_contract": false,
+     "pct": 63.153
+    },
+    {
+     "address": "0x480a9d3b3977c775a3a1326ddecbb0162315e500",
+     "name": null,
+     "is_contract": false,
+     "pct": 17.244
+    },
+    {
+     "address": "0x6d98a2b6cdbf44939362a3e99793339ba2016af4",
+     "name": "PendleMarketV3",
+     "is_contract": true,
+     "pct": 17.227
+    },
+    {
+     "address": "0x0aa5c77816584e97f5012118d706689b3d9e3ae0",
+     "name": null,
+     "is_contract": false,
+     "pct": 0.768
+    },
+    {
+     "address": "0xef3ede96a9ec62046d42c0725c5d994c1fbcf70e",
+     "name": null,
+     "is_contract": false,
+     "pct": 0.629
+    }
+   ],
+   "gecko_count": 181,
+   "gecko_top10_pct": 20.6531
+  },
+  "price": {
+   "usd": 0.9997011280569572,
+   "confidence": 0.9,
+   "price_ts": 1792670671,
+   "chart": {
+    "min": 0.9991815100157253,
+    "max": 0.9999332387942448,
+    "last": 0.9997011280569572,
+    "count": 30,
+    "range_pct": 0.075
+   },
+   "market_cap_usd": null,
+   "volume_24h_usd": null
+  },
+  "liquidity": {
+   "pools_count": 3,
+   "total_reserve_usd": 900.95,
+   "total_volume_24h_usd": 0,
+   "pools": [
+    {
+     "dex": "uniswap-v4-ethereum",
+     "reserve_usd": 584.0304,
+     "volume_24h_usd": 0,
+     "created_at": "2025-09-15T01:52:23Z"
+    },
+    {
+     "dex": "uniswap-v4-ethereum",
+     "reserve_usd": 217.9978,
+     "volume_24h_usd": 0,
+     "created_at": "2025-09-17T21:37:47Z"
+    }
+   ],
+   "kyber": {
+    "100000": {
+     "status": "ok",
+     "price_impact_pct": 99.354,
+     "out_usd": 904.66,
+     "gas_usd": 0.7524877437876012,
+     "dexes": [
+      "uniswap-v4",
+      "ekubo-v3"
+     ]
+    },
+    "1000000": {
+     "status": "ok",
+     "price_impact_pct": 99.932,
+     "out_usd": 956.98,
+     "gas_usd": 0.830284614535176,
+     "dexes": [
+      "uniswap-v4",
+      "ekubo-v3"
+     ]
+    }
+   }
+  },
+  "pendle": {
+   "active": false
+  },
+  "rwa": null,
+  "oracle_feeds": {
+   "feeds": [],
+   "has_por_feed": false
+  },
+  "meta": {
+   "collected_at": 1792671516,
+   "chain_supported": true,
+   "filled": 63,
+   "total": 69,
+   "coverage": 0.913
+  }
+ }
+}

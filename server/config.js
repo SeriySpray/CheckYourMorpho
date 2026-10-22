@@ -37,6 +37,14 @@ export const CONFIG = {
     // Per-IP budget for /api/*: well above a human clicking through vaults, below a scripted flood
     rateLimit: { windowMs: 60000, maxRequests: 300 }
   },
+  // Collector of public facts about collateral tokens (services/tokenCollector.js)
+  tokenData: {
+    intervalMs: 600000, // one tick every 10 minutes
+    budgetMs: 480000, // a tick stops starting new tokens after 8 minutes
+    firstDelayMs: 60000,
+    refreshSec: 86400, // a good record is collected again after a day
+    retrySec: 3600 // a partial or failed one after an hour
+  },
   sync: {
     intervalMs: 180000, // 3 minutes for background full sync
     pageSize: 100,

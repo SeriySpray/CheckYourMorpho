@@ -3,6 +3,7 @@ import { CONFIG } from './config.js';
 import { getDatabase, closeDatabase } from './db/database.js';
 import { handleRequest, DEFAULT_VAULTS_LIMIT } from './api/routes.js';
 import { syncAllVaults, isSyncing } from './services/syncEngine.js';
+import { startTokenDataLoop, stopTokenDataLoop } from './services/tokenCollector.js';
 
 // Global process error safety guards
 // After an uncaught exception the process state is undefined: exit and let systemd restart the service
@@ -73,6 +74,8 @@ if (CONFIG.sync.intervalMs && CONFIG.sync.intervalMs > 0) {
   console.log(`[Scheduler] Background synchronization scheduled every ${CONFIG.sync.intervalMs / 1000}s.`);
 }
 
+if (startTokenDataLoop(db)) console.log('[Scheduler] Token data collection scheduled.');
+
 // Graceful shutdown handling
 export function handleShutdown(signal) {
   console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
@@ -80,6 +83,7 @@ export function handleShutdown(signal) {
     clearInterval(syncIntervalTimer);
     syncIntervalTimer = null;
   }
+  stopTokenDataLoop();
   server.close(() => {
     console.log('[Server] HTTP server closed.');
     try {

@@ -1,0 +1,139 @@
+{
+ "chainId": 8453,
+ "address": "0x4200000000000000000000000000000000000006",
+ "symbol": "WETH",
+ "status": "ok",
+ "coverage": 0.81,
+ "ms": 98624,
+ "data": {
+  "identity": {
+   "name": "L2 Standard Bridged WETH (Base)",
+   "symbol": "WETH",
+   "decimals": 18,
+   "total_supply": "285232114724422328460654",
+   "token_type": "ERC-20",
+   "contract_name": "WETH9"
+  },
+  "contract": {
+   "sourcify_match": "match",
+   "blockscout_verified": true,
+   "is_proxy": false,
+   "proxy_type": null,
+   "implementations": [],
+   "deployer": null,
+   "creator": null,
+   "deployed_at": null,
+   "fn": {
+    "mint": false,
+    "burn": false,
+    "pause": false,
+    "blacklist": false,
+    "freeze": false,
+    "upgrade": false,
+    "owner": false,
+    "roles": false,
+    "erc4626": false,
+    "permit": false
+   }
+  },
+  "control": {
+   "read_values": {
+    "decimals": "18",
+    "name": "Wrapped Ether",
+    "symbol": "WETH",
+    "totalSupply": "285232768841816147917995"
+   },
+   "controllers": []
+  },
+  "holders": {
+   "count": 5265816,
+   "top1_pct": null,
+   "top10_pct": null,
+   "top10_contracts": null,
+   "morpho_blue_pct": null,
+   "top": [],
+   "gecko_count": 5010818,
+   "gecko_top10_pct": 45.3732
+  },
+  "price": {
+   "usd": 2409.4332875043433,
+   "confidence": 0.99,
+   "price_ts": 1792664869,
+   "chart": {
+    "min": 2372.862836428639,
+    "max": 2749.451487839371,
+    "last": 2406.7399867682734,
+    "count": 30,
+    "range_pct": 15.871
+   },
+   "market_cap_usd": 673912383.077702,
+   "volume_24h_usd": 458320280.9203516
+  },
+  "liquidity": {
+   "pools_count": 20,
+   "total_reserve_usd": 17356048125.13,
+   "total_volume_24h_usd": 338596395.02,
+   "pools": [
+    {
+     "dex": "uniswap-v4-base",
+     "reserve_usd": 3655200687.9955,
+     "volume_24h_usd": 321022.701002952,
+     "created_at": "2026-10-22T01:09:23Z"
+    },
+    {
+     "dex": "uniswap-v4-base",
+     "reserve_usd": 3371541293.6635,
+     "volume_24h_usd": 457049.563674325,
+     "created_at": "2026-10-22T00:52:35Z"
+    }
+   ],
+   "kyber": {
+    "100000": {
+     "status": "ok",
+     "price_impact_pct": 0.012,
+     "out_usd": 99991.98,
+     "gas_usd": 0.10540689210223,
+     "dexes": [
+      "spire-prop",
+      "prism-prop",
+      "lunarbase",
+      "manta-prop",
+      "kipseli-prop",
+      "pancake-v3",
+      "tidefi-prop",
+      "aerodrome-cl-3"
+     ]
+    },
+    "1000000": {
+     "status": "ok",
+     "price_impact_pct": 0.129,
+     "out_usd": 998750.39,
+     "gas_usd": 0.21748204266533694,
+     "dexes": [
+      "kipseli-prop",
+      "manta-prop",
+      "elfomofi",
+      "woofi-v3/aerodrome-cl-3",
+      "bebop/aerodrome-cl-3",
+      "pmm-1/aerodrome-cl-3",
+      "native-v2/aerodrome-cl-3",
+      "pmm-20/aerodrome-cl-3"
+     ]
+    }
+   }
+  },
+  "pendle": null,
+  "rwa": null,
+  "oracle_feeds": {
+   "feeds": [],
+   "has_por_feed": false
+  },
+  "meta": {
+   "collected_at": 1792665024,
+   "chain_supported": true,
+   "filled": 51,
+   "total": 63,
+   "coverage": 0.81
+  }
+ }
+}

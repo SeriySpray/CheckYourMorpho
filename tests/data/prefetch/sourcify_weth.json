@@ -1,8 +1,0 @@
-{
-  "name": "WETH9",
-  "isProxy": false,
-  "proxyType": null,
-  "implementations": [],
-  "deployer": "0x4f26ffbe5f04ed43630dc13074be70173374379f",
-  "match": "exact_match"
-}

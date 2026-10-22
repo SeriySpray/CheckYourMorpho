@@ -18,7 +18,7 @@ const EXPECTED_INDEXES = [
   'idx_vaults_liquidity', 'idx_vaults_listed_liq', 'idx_vaults_listed_assets', 'idx_vaults_listed_net_apy',
   'idx_vaults_listed_chain_liq', 'idx_vaults_listed_chain_assets', 'idx_markets_chain', 'idx_markets_loan_collateral',
   'idx_allocations_vault', 'idx_allocations_vault_supply', 'idx_allocations_market', 'idx_daily_apys_vault', 'idx_snapshots_vault_time',
-  'idx_vault_events_vault_occurred', 'idx_vault_events_occurred', 'idx_vault_events_status_valid', 'idx_research_history_token'
+  'idx_vault_events_vault_occurred', 'idx_vault_events_occurred', 'idx_vault_events_status_valid', 'idx_token_data_history_token'
 ];
 
 export default {
@@ -27,7 +27,7 @@ export default {
       const db = fresh(SCHEMA_SQL);
       const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name).sort();
       db.close();
-      assert.deepEqual(names, ['daily_apys', 'markets', 'sync_state', 'token_research', 'token_research_history', 'token_tags', 'vault_allocations', 'vault_events', 'vault_snapshots', 'vault_watch_state', 'vaults']);
+      assert.deepEqual(names, ['daily_apys', 'markets', 'sync_state', 'token_data', 'token_data_history', 'token_tags', 'vault_allocations', 'vault_events', 'vault_snapshots', 'vault_watch_state', 'vaults']);
     }],
     ['створює всі очікувані індекси', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
@@ -119,26 +119,16 @@ export default {
       const name = db.prepare('SELECT name FROM vaults').get().name; db.close();
       assert.equal(name, 'keep');
     }],
-    ['token_research: CHECK на risk_tier 1..5 (NULL дозволений), NOT NULL і PRIMARY KEY (chain_id, address)', ({ SCHEMA_SQL }) => {
+    ['token_data: PRIMARY KEY (chain_id, address), NOT NULL для статусу і даних; history має автоінкрементний id', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
-      const row = { chain_id: 1, address: '0xa', category: 'other', confidence: 'low', facts_json: '{}', sources_json: '[]', checks_json: '[]',
-        as_of: '2026-01-01', researched_at: 1, run_id: 'r', model: 'm', prompt_version: 'p', status: 'rated', raw_json: '{}' };
-      ins(db, 'token_research', { ...row, risk_tier: null });
-      assert.throws(() => ins(db, 'token_research', { ...row, risk_tier: 1 }), /UNIQUE/);
-      assert.throws(() => ins(db, 'token_research', { ...row, address: '0xb', risk_tier: 6 }), /CHECK/);
-      assert.throws(() => ins(db, 'token_research', { ...row, address: '0xb', risk_tier: 0 }), /CHECK/);
-      ins(db, 'token_research', { ...row, address: '0xb', risk_tier: 5 });
-      const { risk_tier, ...noCategory } = row; delete noCategory.category;
-      assert.throws(() => ins(db, 'token_research', { ...noCategory, address: '0xc' }), /NOT NULL/);
-      assert.equal(db.prepare('SELECT pending_tier FROM token_research').get().pending_tier, null);
-      db.close();
-    }],
-    ['token_research_history: автоінкрементний id, outcome обовʼязковий, запис не потребує токена в token_research', ({ SCHEMA_SQL }) => {
-      const db = fresh(SCHEMA_SQL);
-      const h = { chain_id: 1, address: '0xa', run_id: 'r', received_at: 1, outcome: 'rejected' };
-      ins(db, 'token_research_history', h); ins(db, 'token_research_history', h);
-      assert.deepEqual(db.prepare('SELECT id FROM token_research_history ORDER BY id').all().map(r => r.id), [1, 2]);
-      assert.throws(() => ins(db, 'token_research_history', { chain_id: 1, address: '0xa', run_id: 'r', received_at: 1 }), /NOT NULL/);
+      const row = { chain_id: 1, address: '0xa', collected_at: 1, status: 'ok', data_json: '{}' };
+      ins(db, 'token_data', row);
+      assert.throws(() => ins(db, 'token_data', row), /UNIQUE/);
+      assert.throws(() => ins(db, 'token_data', { ...row, address: '0xb', status: null }), /NOT NULL/);
+      assert.throws(() => ins(db, 'token_data', { ...row, address: '0xb', data_json: null }), /NOT NULL/);
+      const h = { chain_id: 1, address: '0xa', collected_at: 1, status: 'ok', data_json: '{}' };
+      ins(db, 'token_data_history', h); ins(db, 'token_data_history', h);
+      assert.deepEqual(db.prepare('SELECT id FROM token_data_history ORDER BY id').all().map(r => r.id), [1, 2]);
       db.close();
     }],
     ['на файловій БД вмикає WAL', ({ SCHEMA_SQL }) => {

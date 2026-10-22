@@ -1,4 +1,3 @@
-import { researchTierOf, isImpairedCollateral } from './collateralEngine.js';
 import { isIdleReserveMarket } from './hhiEngine.js';
 import { getMaterialityThresholdUsd, isMarketClean, isUnpricedVault } from './mqiEngine.js';
 
@@ -38,8 +37,7 @@ export const EVENT_KINDS = Object.freeze([
   'tvl_drop',
   'exit_liquidity_low',
   'vault_delisted',
-  'collateral_class_share_crossed',
-  'collateral_tier_changed'
+  'collateral_class_share_crossed'
 ]);
 
 export const SEVERITY_RANK = Object.freeze({
@@ -704,15 +702,10 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
     ? verdict.liquidity.instantExitCapacityPercent
     : null;
 
-  const collateralTier = verdict?.collateral?.tier || 'UNKNOWN';
-
   const materialityUsd = getMaterialityThresholdUsd(totalAssetsUsd || 0);
   const badDebtMarkets = {};
   const unverifiedBadDebtMarkets = [];
   const flaggedMarkets = {};
-  const collateralTiers = {};
-  const tokenUsd = new Map();
-  const nowSec = extra.nowSec ?? Math.floor(Date.now() / 1000);
   const caps = {};
 
   for (const alloc of (Array.isArray(allocations) ? allocations : [])) {
@@ -745,29 +738,17 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
 
     if (supplyUsd >= materialityUsd && materialityUsd >= 0 && !isIdleReserveMarket(alloc)) {
       const cleanCheck = isMarketClean(alloc);
-      // Only impaired collateral (tier 5, confidence above low) is a flag; unrated collateral is not one
-      const impaired = isImpairedCollateral(alloc, nowSec);
-      if (!cleanCheck.isClean || impaired) {
+      if (!cleanCheck.isClean) {
         flaggedMarkets[mKey] = {
           marketKey: mKey,
           label,
           collateralSymbol: alloc.collateral_asset_symbol || 'UNKNOWN',
-          collateralTier: researchTierOf(alloc, nowSec),
           reasons: cleanCheck.reasons,
           supplyUsd: Math.round(supplyUsd * 100) / 100
         };
       }
     }
-
-    // Tier per token for tokens with a material total, so a tier change shows up as an event
-    if (!isIdleReserveMarket(alloc)) {
-      const tKey = `${Number(alloc.chain_id ?? vault?.chain_id ?? 1)}:${normAddr(alloc.collateral_asset_address)}`;
-      const t = tokenUsd.get(tKey) || { usd: 0, tier: researchTierOf(alloc, nowSec) };
-      t.usd += supplyUsd;
-      tokenUsd.set(tKey, t);
-    }
   }
-  for (const [tKey, t] of tokenUsd) if (t.usd >= materialityUsd) collateralTiers[tKey] = t.tier;
 
   return {
     chain_id: Number(vault?.chain_id ?? vault?.chainId ?? 1),
@@ -780,12 +761,9 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
     exit_unknown: exitUnknown,
     is_listed: vault?.is_listed !== undefined ? Number(vault.is_listed) : 1,
     missed_syncs: Number(vault?.missed_syncs || 0),
-    collateral_tier: collateralTier,
-    collateral_model: extra.collateralModel ?? 'none',
     bad_debt_markets: badDebtMarkets,
     unverified_bad_debt_markets: unverifiedBadDebtMarkets,
     flagged_markets: flaggedMarkets,
-    collateral_tiers: collateralTiers,
     fee: normalizeFeeFraction(vault?.fee ?? extra.fee ?? null),
     timelock: extra.timelock !== undefined && extra.timelock !== null ? Number(extra.timelock) : null,
     guardian: extra.guardian || null,
@@ -809,9 +787,6 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   const chainId = Number(vaultContext.chainId ?? vaultContext.chain_id ?? 1);
   const syncHourBucket = Math.floor(nowSec / 3600);
   const events = [];
-  // A new collateral model changes verdicts and flags without anything happening to the vault, so those two stay quiet for one sync.
-  // shortcut: if the first tag fetch fails on one chain only, the model flips for the whole run and a later wave of flag events is possible, accepted
-  const sameModel = (prevState.collateral_model ?? 'classes') === nextState.collateral_model;
 
   const pushDerived = (kind, severity, title, details, transitionKey, stableBucket = false) => {
     events.push({
@@ -837,7 +812,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   // 1. Verdict transitions (ignore null/unknown)
   const prevVerdict = String(prevState.verdict_level ?? prevState.verdictLevel ?? '').toLowerCase();
   const nextVerdict = String(nextState.verdict_level ?? nextState.verdictLevel ?? '').toLowerCase();
-  if (sameModel && prevVerdict in VERDICT_RANK && nextVerdict in VERDICT_RANK && prevVerdict !== nextVerdict) {
+  if (prevVerdict in VERDICT_RANK && nextVerdict in VERDICT_RANK && prevVerdict !== nextVerdict) {
     if (VERDICT_RANK[nextVerdict] > VERDICT_RANK[prevVerdict]) {
       pushDerived(
         'verdict_worsened',
@@ -896,7 +871,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   // 4. Flagged collateral / market added with material exposure
   const prevFlagged = prevState.flagged_markets ?? prevState.flaggedMarkets ?? {};
   const nextFlagged = nextState.flagged_markets ?? nextState.flaggedMarkets ?? {};
-  for (const [mKey, info] of Object.entries(sameModel ? nextFlagged : {})) {
+  for (const [mKey, info] of Object.entries(nextFlagged)) {
     if (!prevFlagged[mKey]) {
       pushDerived(
         'flagged_collateral_added',
@@ -906,27 +881,10 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
           marketKey: mKey,
           marketLabel: info.label || mKey,
           collateralSymbol: info.collateralSymbol,
-          collateralTier: info.collateralTier,
           reasons: info.reasons || [],
           supplyUsd: info.supplyUsd
         },
         mKey
-      );
-    }
-  }
-
-  // 4b. Research tier of a material collateral token changed from one number to another (unrated to rated is not an event)
-  const prevTiers = prevState.collateral_tiers ?? {};
-  for (const [tKey, nextTier] of Object.entries(sameModel ? (nextState.collateral_tiers ?? {}) : {})) {
-    const prevTier = prevTiers[tKey];
-    if (Number.isInteger(prevTier) && Number.isInteger(nextTier) && prevTier !== nextTier) {
-      const symbol = (vaultContext.allocations ?? []).find(a => `${Number(a.chain_id ?? chainId)}:${normAddr(a.collateral_asset_address)}` === tKey)?.collateral_asset_symbol || tKey;
-      pushDerived(
-        'collateral_tier_changed',
-        nextTier >= 4 ? 'warning' : 'info',
-        `Collateral ${symbol} risk tier changed from ${prevTier} to ${nextTier} (AI research)`,
-        { tokenKey: tKey, collateralSymbol: symbol, previousTier: prevTier, currentTier: nextTier },
-        `${tKey}:${nextTier}`
       );
     }
   }

@@ -1,0 +1,189 @@
+{
+ "chainId": 8453,
+ "address": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+ "symbol": "cbBTC",
+ "status": "ok",
+ "coverage": 0.935,
+ "data": {
+  "identity": {
+   "name": "Coinbase Wrapped BTC",
+   "symbol": "cbBTC",
+   "decimals": 8,
+   "total_supply": "4826815121021",
+   "token_type": "ERC-20",
+   "contract_name": "FiatTokenProxy"
+  },
+  "contract": {
+   "sourcify_match": "exact_match",
+   "blockscout_verified": true,
+   "is_proxy": true,
+   "proxy_type": "ZeppelinOSProxy",
+   "implementations": [
+    {
+     "address": "0x7458bfdc30034eb860b265e6068121d18fa5aa72",
+     "name": "FiatTokenV2_1"
+    }
+   ],
+   "deployer": "0xce97003ea2e0a565a9a0b6e36209c6ddaaa14b05",
+   "creator": "0x00000000001c3dc9a681a014e2732bf1419afaec",
+   "deployed_at": "2024-08-20T14:52:15.000Z",
+   "fn": {
+    "mint": true,
+    "burn": true,
+    "pause": true,
+    "blacklist": true,
+    "freeze": false,
+    "upgrade": true,
+    "owner": true,
+    "roles": false,
+    "erc4626": false,
+    "permit": true
+   }
+  },
+  "control": {
+   "read_values": {
+    "admin": "0x42D90b3faF2287475cdc863706Bd7cc3E938C2Af",
+    "decimals": "8",
+    "owner": "0xbbc9b6001cf0a4FCcfFAB7bDda1ab16cafb9dB4F",
+    "symbol": "cbBTC",
+    "totalSupply": "4826815121021"
+   },
+   "controllers": [
+    {
+     "address": "0xbbc9b6001cf0a4FCcfFAB7bDda1ab16cafb9dB4F",
+     "role": "owner",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0x42D90b3faF2287475cdc863706Bd7cc3E938C2Af",
+     "role": "admin",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0x7399168043B684B57f198c42fC31558467cF2D6a",
+     "role": "pauser",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0x158cFA498B1f72f458aCf8DF993c709efCA11e31",
+     "role": "blacklister",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    }
+   ]
+  },
+  "holders": {
+   "count": 626367,
+   "top1_pct": null,
+   "top10_pct": null,
+   "top10_contracts": null,
+   "morpho_blue_pct": null,
+   "top": [],
+   "gecko_count": 515748,
+   "gecko_top10_pct": 91.501
+  },
+  "price": {
+   "usd": 81950.53385330648,
+   "confidence": 0.99,
+   "price_ts": 1792664674,
+   "chart": {
+    "min": 81126.3249757332,
+    "max": 86345.40743159431,
+    "last": 81794.34803467848,
+    "count": 30,
+    "range_pct": 6.433
+   },
+   "market_cap_usd": 7777861376.762029,
+   "volume_24h_usd": 309990067.8836485
+  },
+  "liquidity": {
+   "pools_count": 20,
+   "total_reserve_usd": 106010702.76,
+   "total_volume_24h_usd": 253867569.36,
+   "pools": [
+    {
+     "dex": "uniswap-v3-base",
+     "reserve_usd": 16302878.5301,
+     "volume_24h_usd": 31384747.2688648,
+     "created_at": "2024-09-13T15:24:23Z"
+    },
+    {
+     "dex": "uniswap-v3-base",
+     "reserve_usd": 14385065.328,
+     "volume_24h_usd": 902806.568416972,
+     "created_at": "2026-05-29T16:16:13Z"
+    }
+   ],
+   "kyber": {
+    "100000": {
+     "status": "ok",
+     "price_impact_pct": -0.005,
+     "out_usd": 100047.17,
+     "gas_usd": 0.04351738874763244,
+     "dexes": [
+      "tessera"
+     ]
+    },
+    "1000000": {
+     "status": "ok",
+     "price_impact_pct": 0.065,
+     "out_usd": 999158.16,
+     "gas_usd": 0.234122436226214,
+     "dexes": [
+      "tessera",
+      "kipseli-prop"
+     ]
+    }
+   }
+  },
+  "pendle": null,
+  "rwa": null,
+  "oracle_feeds": {
+   "feeds": [
+    {
+     "name": "cbBTC Reserves",
+     "category": "custom",
+     "heartbeat_sec": 86400,
+     "deviation_pct": 0.5,
+     "proxy_address": "0x0f8e057d1d7b282ef968d26e9cb432617df52519",
+     "product_type": "Proof of Reserve"
+    },
+    {
+     "name": "CBBTC / USD",
+     "category": "low",
+     "heartbeat_sec": 86400,
+     "deviation_pct": 0.5,
+     "proxy_address": "0x10509b4053385b49145fab2d6b1c58e96eac5b79",
+     "product_type": "Price"
+    },
+    {
+     "name": "cbBTC / USD",
+     "category": "low",
+     "heartbeat_sec": 1200,
+     "deviation_pct": 0.3,
+     "proxy_address": "0x07da0e54543a844a80abe69c8a12f22b3aa59f9d",
+     "product_type": "Price"
+    }
+   ],
+   "has_por_feed": true
+  },
+  "meta": {
+   "collected_at": 1792664798,
+   "chain_supported": true,
+   "filled": 72,
+   "total": 77,
+   "coverage": 0.935
+  }
+ }
+}

@@ -121,9 +121,8 @@ const verdictOf = (over = {}) => ({
   mqi: { mqiPercent: 100, isAllClean: true, compromisedMarkets: [], compromisedPercent: 0, unverifiedPercent: 0, unpriced: false, ...over.mqi },
   liquidity: { instantExitCapacityPercent: 40, instantExitCapacityUsd: 4e6, stressedExitCapacityPercent: 40, stressedExitCapacityUsd: 4e6, ...over.liquidity },
   collateral: {
-    tier: 'CLASSIFIED', lowRiskPercent: 87.5, highRiskPercent: 0, impairedPercent: 0, unratedPercent: 12.5, unverifiedPercent: 0,
-    byRiskTier: { 1: 75, 2: 12.5, 3: 0, 4: 0, 5: 0 },
-    tokens: [{ symbol: 'WETH', tier: 1, usd: 5e6, percent: 50 }, { symbol: 'NEW', tier: null, usd: 2.5e6, percent: 25 }], ...over.collateral
+    tier: 'ALLOCATED', unverifiedPercent: 0,
+    tokens: [{ symbol: 'WETH', usd: 5e6, percent: 50 }, { symbol: 'NEW', usd: 2.5e6, percent: 25 }], ...over.collateral
   },
   redFlags: over.redFlags ?? []
 });
@@ -849,7 +848,7 @@ const base = {
       s.allVaults = [item];
       const data = audit({ totalAssetsUsd: 2e6, netApy: 0.07, asset: { symbol: 'USDC', decimals: 6 } }, {
         mqi: { mqiPercent: 87.5, isAllClean: false, compromisedMarkets: [{}, {}], compromisedPercent: 12.5, unverifiedPercent: 1, unpriced: false },
-        liquidity: { instantExitCapacityPercent: 33, instantExitCapacityUsd: 660000 }, collateral: { lowRiskPercent: 60, highRiskPercent: 25, impairedPercent: 5, unratedPercent: 10, tier: 'CLASSIFIED' }
+        liquidity: { instantExitCapacityPercent: 33, instantExitCapacityUsd: 660000 }
       });
       f('0xaaa1', data);
       assert.equal(s.clientAuditCache.get('0xaaa1'), data);
@@ -858,7 +857,6 @@ const base = {
       assert.equal(item.mqiPercent, 87.5); assert.equal(item.isAllClean, false);
       assert.equal(item.compromisedCount, 2); assert.equal(item.compromisedPercent, 12.5); assert.equal(item.unverifiedPercent, 1);
       assert.equal(item.isUnpriced, false); assert.equal(item.exitCapPercent, 33); assert.equal(item.exitCapUsd, 660000);
-      assert.deepEqual([item.lowRiskCollateralPercent, item.highRiskCollateralPercent, item.impairedCollateralPercent, item.unratedCollateralPercent, item.collateralTier], [60, 25, 5, 10, 'CLASSIFIED']);
       assert.deepEqual(item.asset, { symbol: 'USDC', logo: 'keep', decimals: 6 });
     }),
     T('відкрита модалка цього vault оновлюється, закрита - ні', ({ applyVaultAuditData: f, __state: s }) => {
@@ -1046,20 +1044,18 @@ const base = {
       assert.match(s.DOM.explorerVaultsList.innerHTML, /No vaults match your filter criteria/);
       assert.equal(s.DOM.explorerCount.textContent, '0 / 1 Vaults');
     }),
-    T('сортування за APY, ліквідністю, MQI і ризиком застав', ({ renderVaultExplorer: f, __state: s }) => {
+    T('сортування за APY, ліквідністю і MQI', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
-        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true, lowRiskCollateralPercent: 80, collateralTier: 'CLASSIFIED' }),
-        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null, lowRiskCollateralPercent: null, collateralTier: 'UNKNOWN' }),
-        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false, lowRiskCollateralPercent: 10, collateralTier: 'CLASSIFIED' }),
-        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false, lowRiskCollateralPercent: 50, collateralTier: 'CLASSIFIED' })
+        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true }),
+        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null }),
+        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false }),
+        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false })
       ];
       const order = sort => { s.explorerFilters.sort = sort; const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')).join(''); };
       assert.equal(order('apy_desc'), 'bcad');
       assert.equal(order('liq_desc'), 'acbd');
       assert.equal(order('mqi_asc'), 'bdca'); // невідомий першим, позначений 100 - перед чистим
       assert.equal(order('mqi_desc'), 'acdb');
-      assert.equal(order('risk_desc'), 'cdab'); // менша частка low-risk спочатку, без картини застав у кінці
-      assert.equal(order('risk_asc'), 'adcb');
     }),
     T('бейджі рядка: Unpriced, Unverified, % Flagged, кількість Flagged, % Unverified, чистий без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
@@ -1519,12 +1515,9 @@ const base = {
       assert.equal(D.overviewMarketsCount.textContent, '0 MARKETS');
       assert.equal(D.riskMqiPct.textContent, '100%'); assert.equal(D.riskMqiBar.style.width, '100%');
       assert.equal(D.riskMqiDesc.textContent, '100% of capital is deployed in verified, non-defaulted markets');
-      assert.equal(D.riskMixVal.textContent, '87.5%'); assert.equal(D.riskMixBar.style.width, '88%');
-      assert.equal(D.riskMixDesc.textContent, 'tier 3 0%, tier 4 0%, tier 5 0%, unrated 12.5% of total capital');
       assert.equal(D.riskEffectiveAssets.textContent, '2 tokens');
-      assert.equal(collateral.length, 3); // two tokens and the note
-      assert.match(collateral[0].innerHTML, /WETH · T1[\s\S]*\$5\.00M[\s\S]*50%/);
-      assert.match(collateral[2].textContent, /never counted as safe/);
+      assert.equal(collateral.length, 2); // two tokens
+      assert.match(collateral[0].innerHTML, /WETH[\s\S]*\$5\.00M[\s\S]*50%/);
       assert.equal(D.riskFlagsList.innerHTML, '<div class="flag-item clear">No critical risk flags detected for this vault.</div>');
       assert.match(D.allocationsTbody.innerHTML, /No active market allocations recorded/);
       assert.match(D.riskExitPopoverBody.innerHTML, /fully preserved at <strong>40%<\/strong> \(\$4\.00M\)/);
@@ -1557,36 +1550,15 @@ const base = {
       assert.equal(s.DOM.modalScore.textContent, '3% Unverified');
       assert.equal(s.DOM.riskMqiDesc.textContent, '$300.0K is unverified (data missing or not expanded) and left out of the score');
     }),
-    T('метр AI research: UNKNOWN і UNALLOCATED -> N/A; частки tier 3-5 і unrated; при неперевіреній частці - "verified capital"', ({ populateAuditModal: f, __state: s }) => {
-      const D = s.DOM;
-      f(audit({}, { collateral: { tier: 'UNKNOWN', tokens: [] } }));
-      assert.equal(D.riskMixVal.textContent, 'N/A'); assert.equal(D.riskMixBar.style.width, '0%');
-      assert.equal(D.riskMixDesc.textContent, 'No capital could be verified yet');
-      assert.equal(D.riskEffectiveAssets.textContent, '0 tokens');
-      assert.match(D.riskCollateralList.innerHTML, /No active collateral backing recorded/);
-      f(audit({}, { collateral: { tier: 'UNALLOCATED', tokens: [] } }));
-      assert.equal(D.riskMixDesc.textContent, 'No active collateral backing');
-      f(audit({}, { collateral: { unverifiedPercent: 10, lowRiskPercent: 0, byRiskTier: { 1: 0, 2: 0, 3: 60, 4: 20, 5: 10 }, unratedPercent: 10 } }));
-      assert.equal(D.riskMixDesc.textContent, 'tier 3 60%, tier 4 20%, tier 5 10%, unrated 10% of verified capital');
-      assert.equal(D.riskMixBar.style.width, '0%'); assert.equal(D.riskMixVal.textContent, '0%');
-      f(audit({}, { collateral: { tokens: [] } }));
-      assert.equal(D.riskEffectiveAssets.textContent, '0 tokens');
-    }),
-    T('метр AI research: усі токени без tier -> "Assessment pending" без відсотків; з tier показує частку', ({ populateAuditModal: f, __state: s }) => {
-      const D = s.DOM;
-      f(audit({}, { collateral: { lowRiskPercent: 0, unratedPercent: 100, tokens: [{ symbol: 'A', tier: null, usd: 1, percent: 100 }] } }));
-      assert.equal(D.riskMixVal.textContent, 'Assessment pending'); assert.equal(D.riskMixBar.style.width, '0%');
-      assert.match(D.riskMixDesc.textContent, /no risk assessment has been made yet/);
-      f(audit({}, { collateral: { lowRiskPercent: 40, tokens: [{ symbol: 'A', tier: null, usd: 1, percent: 60 }, { symbol: 'B', tier: 1, usd: 1, percent: 40 }] } }));
-      assert.equal(D.riskMixVal.textContent, '40%');
-    }),
-    T('метр AI research: розбивка по токенах з tier і unrated, однина для одного токена', ({ populateAuditModal: f, __state: s }) => {
+    T('розбивка застав по токенах: символ екранується, пустий символ - Unknown, однина для одного токена, без токенів - 0 tokens', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
       const rows = collect(D.riskCollateralList);
-      f(audit({}, { collateral: { tokens: [{ symbol: '<b>x</b>', tier: 5, usd: 1, percent: 1 }, { symbol: null, tier: null, usd: 1, percent: 1 }] } }));
-      assert.match(rows[0].innerHTML, /&lt;b&gt;x&lt;\/b&gt; · T5/); assert.match(rows[1].innerHTML, /Unknown · unrated/);
-      f(audit({}, { collateral: { tokens: [{ symbol: 'A', tier: 2, usd: 1, percent: 1 }] } }));
+      f(audit({}, { collateral: { tokens: [{ symbol: '<b>x</b>', usd: 1, percent: 1 }, { symbol: null, usd: 1, percent: 1 }] } }));
+      assert.match(rows[0].innerHTML, /&lt;b&gt;x&lt;\/b&gt;/); assert.match(rows[1].innerHTML, /Unknown/); assert.doesNotMatch(rows[0].innerHTML, /unrated|T5/);
+      f(audit({}, { collateral: { tokens: [{ symbol: 'A', usd: 1, percent: 1 }] } }));
       assert.equal(D.riskEffectiveAssets.textContent, '1 token');
+      f(audit({}, { collateral: { tier: 'UNKNOWN', tokens: [] } }));
+      assert.equal(D.riskEffectiveAssets.textContent, '0 tokens'); assert.match(D.riskCollateralList.innerHTML, /No active collateral backing recorded/);
     }),
     T('невідомий вихід: Exit Cap N/A, поповер без оцінки, стан виходу null', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
@@ -1616,7 +1588,7 @@ const base = {
       const origCreate = document.createElement;
       document.createElement = tag => { const e = origCreate(tag); created.push(e); return e; };
       f(audit({ totalAssetsUsd: 1e6 }, {}, [
-        { collateralSymbol: 'WETH', collateralTags: ['eth', 'lst'], collateralResearch: { tier: 2, category: 'wrapped-crypto', asOf: '2026-10-20', sources: [{ title: 'Docs', url: 'https://d.example.com/a' }] }, lltvPercent: 86, weight: 0.5, supplyAssetsUsd: 5e5, marketFreeLiquidityUsd: 1e5, isFlagged: true, supplyApy: 0.0412 },
+        { collateralSymbol: 'WETH', collateralTags: ['eth', 'lst'], collateralAddress: '0x' + 'a'.repeat(40), lltvPercent: 86, weight: 0.5, supplyAssetsUsd: 5e5, marketFreeLiquidityUsd: 1e5, isFlagged: true, supplyApy: 0.0412 },
         { collateralSymbol: 'cbBTC', lltvPercent: null, weight: 0.2, supplyAssetsUsd: 2e5, isFlagged: false, isUnverified: true },
         { collateralSymbol: '<img src=x>', lltvPercent: 77, weight: 0.1, supplyAssetsUsd: 1e5, isClean: true },
         { collateralSymbol: 'PT', weight: 0.2, supplyAssetsUsd: 2e5, isClean: false },
@@ -1628,7 +1600,7 @@ const base = {
       assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'CLEAN', 'FLAGGED', 'CLEAN']);
       assert.match(rows[0].innerHTML, /<td>86%<\/td>[\s\S]*<td>50\.0%<\/td>[\s\S]*\$500\.0K[\s\S]*\$100\.0K[\s\S]*4\.12%/);
       assert.match(rows[0].innerHTML, /eth, lst/); assert.match(rows[1].innerHTML, /no tags/);
-      assert.match(rows[0].innerHTML, /T2 · wrapped-crypto · AI research, 2026-10-20 · sources <a href="https:\/\/d\.example\.com\/a"/); assert.match(rows[1].innerHTML, /unrated, no AI research yet/);
+      assert.match(rows[0].innerHTML, /class="token-facts" data-chain="1" data-address="0xa{40}"/); assert.doesNotMatch(rows[1].innerHTML, /token-facts/);
       assert.match(rows[1].innerHTML, /<td>n\/a<\/td>/);
       assert.match(rows[1].innerHTML, /<td>—<\/td>/); // невідома вільна ліквідність
       assert.ok(rows[2].innerHTML.includes('&lt;img src=x&gt;'));
@@ -1662,37 +1634,56 @@ const base = {
       assert.equal(s.DOM.modalAssetsHuman.textContent, '0.00 ');
     }),
   ],
-  researchCellHtml: [
-    T('без запису: unrated без даних', ({ researchCellHtml: f }) => {
-      assert.match(f(null), /unrated, no AI research yet/); assert.match(f(undefined), /unrated, no AI research yet/);
+  tokenFactsPlaceholder: [
+    T('слот лише для коректної адреси токена, значення екрануються', ({ tokenFactsPlaceholder: f }) => {
+      const a = '0x' + 'b'.repeat(40);
+      assert.equal(f(8453, a), `<div class="token-facts" data-chain="8453" data-address="${a}">token data loading</div>`);
+      for (const bad of [null, undefined, '', '0x123', '<img>', 'x'.repeat(42)]) assert.equal(f(1, bad), '');
+      assert.ok(f('<b>', a).includes('data-chain="&lt;b&gt;"'));
     }),
-    T('tier, категорія, дата, посилання https з nofollow і підказка з моделлю та обґрунтуванням', ({ researchCellHtml: f }) => {
-      const html = f({ tier: 3, category: 'rwa-credit', asOf: '2026-10-21', model: 'gemini-x', rationale: 'Stacked "dependencies"', stale: false,
-        sources: [{ title: 'A <b>', url: 'https://a.example.com/x?y=1&z=2' }, { title: 'B', url: 'https://b.example.com' }] });
-      assert.match(html, /T3 · rwa-credit · AI research, 2026-10-21 · sources /);
-      assert.equal((html.match(/rel="noopener noreferrer nofollow"/g) || []).length, 2); assert.equal((html.match(/target="_blank"/g) || []).length, 2);
-      assert.ok(html.includes('href="https://a.example.com/x?y=1&amp;z=2"') && html.includes('[1]') && html.includes('[2]'));
-      assert.ok(html.includes('title="gemini-x: Stacked &quot;dependencies&quot;"')); assert.ok(html.includes('title="A &lt;b&gt;"'));
-      assert.doesNotMatch(html, /stale/);
+  ],
+  tokenFactsHtml: [
+    T('без запису: коротка примітка', ({ tokenFactsHtml: f }) => {
+      assert.equal(f(null), 'no token data collected yet'); assert.equal(f({}), 'no token data collected yet');
     }),
-    T('не-https і небезпечні посилання відкидаються, пусті джерела не дають слова sources', ({ researchCellHtml: f }) => {
-      const html = f({ tier: 1, sources: [{ url: 'http://x.example.com' }, { url: 'javascript:alert(1)' }, { url: 'ftp://x' }, null, {}] });
-      assert.doesNotMatch(html, /<a |sources|javascript/);
-      assert.doesNotMatch(f({ tier: 1, sources: 'x' }), /sources/);
+    T('факти з джерел: верифікація, holders, swap, можливості контракту, власник, дата і покриття', ({ tokenFactsHtml: f }) => {
+      const html = f({ coverage: 0.874, collectedAt: 1792660000, stale: false, data: {
+        contract: { sourcify_match: 'exact_match', fn: { mint: true, blacklist: true, freeze: false, pause: null, upgrade: true } },
+        holders: { top10_pct: 72.97 }, liquidity: { kyber: { 1000000: { status: 'ok', price_impact_pct: 0.031 } } },
+        control: { controllers: [{ role: 'owner', is_contract: true, safe: { threshold: 6, owner_count: 10 } }] },
+        rwa: { issuer: 'Midas' }, pendle: { days_to_expiry: 433 } } });
+      assert.ok(html.includes('source verified · top 10 holders 72.97%'));
+      assert.ok(html.includes('$1M swap impact 0.031%')); assert.ok(html.includes('can mint, blacklist, upgrade')); assert.ok(html.includes('owner: Safe 6 of 10'));
+      assert.ok(html.includes('issuer Midas · expires in 433 days')); assert.ok(html.includes('data 87%, 2026-10-22')); assert.doesNotMatch(html, /stale/);
     }),
-    T('застарілий запис позначений, tier null читається як unrated, чужий HTML екранується', ({ researchCellHtml: f }) => {
-      const html = f({ tier: null, category: '<img>', asOf: null, stale: true, sources: [] });
-      assert.match(html, /&lt;img&gt; · AI-collected facts, date unknown · stale, counted as unrated/);
+    T('невідомі значення пропускаються, no_route і single key читаються прямо, stale і чужий HTML екранується', ({ tokenFactsHtml: f }) => {
+      const html = f({ coverage: 0.1, collectedAt: 0, stale: true, data: { contract: { fn: {} }, holders: {}, liquidity: { kyber: { 1000000: { status: 'no_route' } } },
+        control: { controllers: [{ role: '<b>', is_contract: false, safe: null }] } } });
+      assert.ok(html.includes('no swap route')); assert.ok(html.includes('&lt;b&gt;: single key')); assert.doesNotMatch(html, /top 10|source verified|can /);
+      assert.ok(html.includes('data 10%, 1970-01-01, stale'));
+      assert.ok(f({ data: { contract: {}, control: { controllers: [{ role: 'admin', is_contract: true }] } } }).includes('admin: contract'));
     }),
-    T('без tier: категорія, чипи лише з true сигналів (до 4, у фіксованому порядку), дата, посилання і дисклеймер', ({ researchCellHtml: f }) => {
-      const sig = { token: { can_freeze_or_blacklist: true, upgradeable_proxy: true, has_timelock: true, admin_multisig: false, evil: true }, system: { kyc_required: true, custodial_backing: true, has_unresolved_incident: true, independently_audited: true, redemption_gated: null, can_mint_without_limit: true } };
-      const html = f({ tier: null, category: 'rwa-credit', asOf: '2026-10-21', summary: 'Facts <b>', model: 'm', signals: sig, sources: [{ title: 'A', url: 'https://a.example.com' }] });
-      assert.match(html, /rwa-credit · AI-collected facts, 2026-10-21 · sources <a href="https:\/\/a\.example\.com"/);
-      const chips = [...html.matchAll(/<span [^>]*>([^<]+)<\/span>/g)].map(m => m[1]);
-      assert.deepEqual(chips, ['token: can freeze', 'system: unresolved incident', 'token: upgradeable', 'system: KYC']);
-      assert.ok(html.includes('AI-collected facts, not a risk rating') && html.includes('title="m: Facts &lt;b&gt;"'));
-      assert.doesNotMatch(f({ tier: 2, category: 'x', signals: sig, sources: [] }), /<span|not a risk rating/);
-      assert.doesNotMatch(f({ tier: null, category: 'x', signals: null, sources: [] }), /<span/);
+  ],
+  loadTokenFacts: [
+    T('заповнює слоти, один запит на токен, 404 - примітка, помилка - unavailable без кешу', async ({ loadTokenFacts: f }, env) => {
+      env.quiet();
+      const slot = (chain, address) => Object.assign(fakeNode(), { dataset: { chain, address } });
+      const A = '0x' + 'a'.repeat(40), B = '0x' + 'b'.repeat(40), C = '0x' + 'c'.repeat(40);
+      const [s1, s2, s3, s4] = [slot('1', A), slot('1', A), slot('1', B), slot('1', C)];
+      let failC = true;
+      env.fetch(url => {
+        if (url.endsWith(B)) return { status: 404, ok: false };
+        if (url.endsWith(C) && failC) return { status: 500, ok: false };
+        return { status: 200, ok: true, json: async () => ({ coverage: 0.5, collectedAt: 1792660000, stale: false, data: { holders: { top10_pct: 10 } } }) };
+      });
+      f(fakeNode({ '.token-facts': [s1, s2, s3, s4] }));
+      await new Promise(r => setImmediate(r));
+      assert.deepEqual([...env.fetched].sort(), [`/api/tokens/1/${A}`, `/api/tokens/1/${B}`, `/api/tokens/1/${C}`]);
+      assert.ok(s1.innerHTML.includes('top 10 holders 10%') && s2.innerHTML === s1.innerHTML);
+      assert.equal(s3.innerHTML, 'no token data collected yet'); assert.equal(s4.innerHTML, 'token data unavailable');
+      failC = false; const s5 = slot('1', C); f(fakeNode({ '.token-facts': [s5] }));
+      await new Promise(r => setImmediate(r));
+      assert.ok(s5.innerHTML.includes('top 10 holders 10%'), 'a failed request is not cached');
     }),
   ],
   setupModalEvents: [

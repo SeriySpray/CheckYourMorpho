@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="stylesheet" href="css/main.css?v=20261016_a11y">
-  <link rel="stylesheet" href="css/components.css?v=20261019_collateral3">
+  <link rel="stylesheet" href="css/components.css?v=20261022_tokendata">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -231,15 +231,6 @@
             <span class="item-text">Market Quality: Clean First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="risk_desc" role="option" aria-selected="false">
-            <span class="item-text">Low-risk collateral: Low First</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="risk_asc" role="option" aria-selected="false">
-            <span class="item-text">Low-risk collateral: High First</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-
         </div>
       </div>
     </div>
@@ -430,36 +421,7 @@
           <div class="meter-desc" id="risk-mqi-desc">Capital deployed in verified, non-defaulted markets</div>
         </div>
 
-        <!-- 2. Collateral (AI research) Meter -->
-        <div class="meter-box">
-          <div class="meter-header">
-            <span class="meter-label">Collateral (AI research)</span>
-            <div class="meter-val-wrap">
-              <span class="meter-value" id="risk-mix-val">0%</span>
-              <span class="info-circle-wrap">
-                <button type="button" class="info-circle-btn" id="risk-mix-info-btn" aria-label="How collateral is rated" aria-describedby="risk-mix-popover">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                  </svg>
-                </button>
-                <div class="info-popover" id="risk-mix-popover" role="tooltip">
-                  <div class="info-popover-title">AI research</div>
-                  <div class="info-popover-body">
-                    Share of capital lent against collateral rated tier 1 or 2 (least fragile) on a 1 to 5 scale. Ratings are judgements by an AI research agent (model and date shown beside each token) from public sources. They may be wrong or outdated and are not financial advice or an official rating. Tokens without a fresh rating are shown as unrated and never counted as safe. Until ratings exist, the meter reads Assessment pending and each token shows only facts collected by the agent.
-                  </div>
-                </div>
-              </span>
-            </div>
-          </div>
-          <div class="meter-track">
-            <div class="meter-fill" id="risk-mix-bar" style="width: 0%;"></div>
-          </div>
-          <div class="meter-desc" id="risk-mix-desc">Share of capital behind tier 1 and 2 collateral</div>
-        </div>
-
-        <!-- 3. Instant Exit Capacity Meter -->
+        <!-- 2. Instant Exit Capacity Meter -->
         <div class="meter-box" id="risk-exit-meter-box">
           <div class="meter-header">
             <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>

@@ -42,6 +42,23 @@ const indexes = db => db.prepare("SELECT name FROM sqlite_master WHERE type = 'i
 
 export default {
   getDatabase: [
+    ['стара БД: таблиці AI research видаляються, події collateral_tier_changed стираються, token_data створюється, інші події лишаються', async ({ getDatabase }) => {
+      const f = oldDbFile(); const d = new DatabaseSync(f);
+      d.exec(`CREATE TABLE token_research (chain_id INTEGER, address TEXT); CREATE TABLE token_research_history (id INTEGER PRIMARY KEY, chain_id INTEGER);
+        CREATE TABLE vault_events (id INTEGER PRIMARY KEY AUTOINCREMENT, vault_address TEXT NOT NULL, chain_id INTEGER NOT NULL, kind TEXT NOT NULL, source TEXT NOT NULL,
+          severity TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'final', title TEXT NOT NULL, details_json TEXT, dedupe_key TEXT NOT NULL UNIQUE,
+          occurred_at INTEGER, valid_at INTEGER, detected_at INTEGER NOT NULL);
+        INSERT INTO vault_events (vault_address, chain_id, kind, source, severity, title, dedupe_key, detected_at) VALUES
+          ('0xold', 1, 'collateral_tier_changed', 'derived', 'info', 't', 'k1', 1), ('0xold', 1, 'tvl_drop', 'derived', 'info', 't', 'k2', 1);`);
+      d.close();
+      await withDbAt(f, mod => {
+        const db = mod.getDatabase();
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
+        assert.ok(!tables.includes('token_research') && !tables.includes('token_research_history'));
+        assert.ok(tables.includes('token_data') && tables.includes('token_data_history'));
+        assert.deepEqual(db.prepare('SELECT kind FROM vault_events').all().map(r => r.kind), ['tvl_drop']);
+      });
+    }],
     ['повертає той самий екземпляр (singleton)', ({ getDatabase }) => assert.equal(getDatabase(), getDatabase())],
     ['foreign_keys увімкнено, busy_timeout 5000, журнал WAL', ({ getDatabase }) => {
       const db = getDatabase();

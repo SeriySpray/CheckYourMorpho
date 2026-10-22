@@ -6,7 +6,6 @@ import {
   buildWatchState,
   diffDerivedState
 } from '../engine/eventsEngine.js';
-import { COLLATERAL_MODEL } from '../engine/collateralEngine.js';
 import { formatUnits } from './normalizers.js';
 
 const DEFAULT_RETENTION_DAYS = 180;
@@ -68,15 +67,10 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     : allVaults;
 
   const allocRows = db.prepare(`
-    SELECT va.*, m.*, r.risk_tier AS collateral_risk_tier, r.confidence AS collateral_confidence, r.researched_at AS collateral_researched_at,
-           r.status AS collateral_research_status, r.category AS collateral_category
+    SELECT va.*, m.*
     FROM vault_allocations va
     JOIN markets m ON va.market_unique_key = m.unique_key
-    LEFT JOIN token_research r ON r.chain_id = m.chain_id AND r.address = lower(m.collateral_asset_address)
   `).all();
-
-  // Until the first rated record exists the collateral model is 'none', so the first research import does not look like a model change later
-  const researchReady = db.prepare("SELECT COUNT(*) AS c FROM token_research WHERE status = 'rated'").get().c > 0;
 
   const peerRowsByMarket = new Map();
   for (const a of allocRows) {
@@ -185,7 +179,6 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       timelock: vaultContext.timelock,
       guardian: vaultContext.guardian,
       lastAdminEventTs,
-      collateralModel: researchReady ? COLLATERAL_MODEL : 'none',
       nowSec
     });
 

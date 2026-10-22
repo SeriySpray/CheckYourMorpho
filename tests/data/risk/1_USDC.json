@@ -1,0 +1,231 @@
+{
+ "chainId": 1,
+ "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+ "symbol": "USDC",
+ "status": "ok",
+ "coverage": 0.848,
+ "data": {
+  "identity": {
+   "name": "USDC",
+   "symbol": "USDC",
+   "decimals": 6,
+   "total_supply": "48097590095986090",
+   "token_type": "ERC-20",
+   "contract_name": "FiatTokenProxy"
+  },
+  "contract": {
+   "sourcify_match": "match",
+   "blockscout_verified": true,
+   "is_proxy": true,
+   "proxy_type": "ZeppelinOSProxy",
+   "implementations": [
+    {
+     "address": "0x43506849d7c04f9138d1a2050bbf3a0c054402dd",
+     "name": "FiatTokenV2_2"
+    }
+   ],
+   "deployer": "0x95ba4cf87d6723ad9c0db21737d862be80e93911",
+   "creator": "0x95ba4cf87d6723ad9c0db21737d862be80e93911",
+   "deployed_at": "2018-08-03T19:28:24.000Z",
+   "fn": {
+    "mint": true,
+    "burn": true,
+    "pause": true,
+    "blacklist": true,
+    "freeze": false,
+    "upgrade": true,
+    "owner": true,
+    "roles": false,
+    "erc4626": false,
+    "permit": true
+   }
+  },
+  "control": {
+   "read_values": {
+    "decimals": "6",
+    "owner": "0xFcb19e6a322b27c06842A71e8c725399f049AE3a",
+    "symbol": "USDC",
+    "totalSupply": "48097986460086769"
+   },
+   "controllers": [
+    {
+     "address": "0xFcb19e6a322b27c06842A71e8c725399f049AE3a",
+     "role": "owner",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0x4914f61d25e5C567143774B76EdbF4D5109a8566",
+     "role": "pauser",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0x0A06BE16275B95a7d2567fBdAE118b36C7DA78F9",
+     "role": "blacklister",
+     "name": null,
+     "is_contract": false,
+     "implementation_names": [],
+     "safe": null
+    },
+    {
+     "address": "0xE982615d461DD5cD06575BbeA87624fda4e3de17",
+     "role": "masterMinter",
+     "name": "MinterAdmin",
+     "is_contract": true,
+     "implementation_names": [],
+     "safe": null
+    }
+   ]
+  },
+  "holders": {
+   "count": 9504124,
+   "top1_pct": 8.576,
+   "top10_pct": 26.764,
+   "top10_contracts": 8,
+   "morpho_blue_pct": 0.271,
+   "top": [
+    {
+     "address": "0x37305b1cd40574e4c5ce33f8e8306be057fd7341",
+     "name": "Sky: PSM",
+     "is_contract": false,
+     "pct": 8.576
+    },
+    {
+     "address": "0xe1940f578743367f38d3f25c2d2d32d6636929b6",
+     "name": "ERC1967Proxy",
+     "is_contract": true,
+     "pct": 3.534
+    },
+    {
+     "address": "0xffa69c0080582098af595156240214b742735a5e",
+     "name": "ERC1967Proxy",
+     "is_contract": true,
+     "pct": 3.291
+    },
+    {
+     "address": "0xad354cfbaa4a8572dd6df021514a3931a8329ef5",
+     "name": "ERC1967Proxy",
+     "is_contract": true,
+     "pct": 2.91
+    },
+    {
+     "address": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
+     "name": "RootChainManagerProxy",
+     "is_contract": true,
+     "pct": 2.12
+    }
+   ],
+   "gecko_count": 9093901,
+   "gecko_top10_pct": 26.7871
+  },
+  "price": {
+   "usd": 0.9996814518742759,
+   "confidence": 0.99,
+   "price_ts": 1792668408,
+   "chart": {
+    "min": 0.9994458276896525,
+    "max": 0.9999897735649284,
+    "last": 0.9996814518742759,
+    "count": 30,
+    "range_pct": 0.054
+   },
+   "market_cap_usd": 72461283995.49402,
+   "volume_24h_usd": 14781745271.544075
+  },
+  "liquidity": {
+   "pools_count": 20,
+   "total_reserve_usd": 594323160.48,
+   "total_volume_24h_usd": 479951460.01,
+   "pools": [
+    {
+     "dex": "curve",
+     "reserve_usd": 160208283.422,
+     "volume_24h_usd": 17408273.42919302,
+     "created_at": "2022-07-13T11:48:12Z"
+    },
+    {
+     "dex": "uniswap_v3",
+     "reserve_usd": 81949442.8135,
+     "volume_24h_usd": 35330641.769744,
+     "created_at": "2021-12-29T12:35:14Z"
+    }
+   ],
+   "kyber": {
+    "100000": {
+     "status": "error",
+     "price_impact_pct": null,
+     "out_usd": null,
+     "gas_usd": null,
+     "dexes": []
+    },
+    "1000000": {
+     "status": "error",
+     "price_impact_pct": null,
+     "out_usd": null,
+     "gas_usd": null,
+     "dexes": []
+    }
+   }
+  },
+  "pendle": null,
+  "rwa": {
+   "ticker": "USDC",
+   "issuer": "Circle International",
+   "manager": null,
+   "custodian": "The Bank of New York Mellon Mutual Funds",
+   "transfer_agent": null,
+   "administrator": null,
+   "auditor": "Deloitte",
+   "nav_usd": 1,
+   "redemption_frequency": null,
+   "redemption_fee_bps": null,
+   "min_subscription_usd": null,
+   "kyc_required": true,
+   "bankruptcy_remote": true,
+   "regulatory_framework": "Markets in Crypto-Assets Regulation (MiCA)",
+   "jurisdiction": "European Union",
+   "holders_count": 50561824
+  },
+  "oracle_feeds": {
+   "feeds": [
+    {
+     "name": "USDC / ETH",
+     "category": "medium",
+     "heartbeat_sec": 86400,
+     "deviation_pct": 1,
+     "proxy_address": "0x986b5e1e1755e3c2440e960477f25201b0a8bbd4",
+     "product_type": "Price"
+    },
+    {
+     "name": "USDC / USD",
+     "category": "low",
+     "heartbeat_sec": 82800,
+     "deviation_pct": 0.25,
+     "proxy_address": "0x8fffffd4afb6115b954bd326cbe7b4ba576818f6",
+     "product_type": "Price"
+    },
+    {
+     "name": "USDC / USD TEST CAPPED",
+     "category": null,
+     "heartbeat_sec": 86400,
+     "deviation_pct": 0.5,
+     "proxy_address": "0x23b5cc113290b4159fc8aff0790180e5c80087c1",
+     "product_type": null
+    }
+   ],
+   "has_por_feed": false
+  },
+  "meta": {
+   "collected_at": 1792668584,
+   "chain_supported": true,
+   "filled": 78,
+   "total": 92,
+   "coverage": 0.848
+  }
+ }
+}

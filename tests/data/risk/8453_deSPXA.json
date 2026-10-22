@@ -1,0 +1,164 @@
+{
+ "chainId": 8453,
+ "address": "0x9c5c365e764829876243d0b289733b9d2b729685",
+ "symbol": "deSPXA",
+ "status": "ok",
+ "coverage": 0.91,
+ "ms": 104117,
+ "data": {
+  "identity": {
+   "name": "DeFi S&P 500",
+   "symbol": "deSPXA",
+   "decimals": 18,
+   "total_supply": "2473718789705126542554",
+   "token_type": "ERC-20",
+   "contract_name": "ShareToken"
+  },
+  "contract": {
+   "sourcify_match": "match",
+   "blockscout_verified": true,
+   "is_proxy": false,
+   "proxy_type": null,
+   "implementations": [],
+   "deployer": "0x8d566adace57ee5dd2bf98953b804991d634211a",
+   "creator": null,
+   "deployed_at": null,
+   "fn": {
+    "mint": true,
+    "burn": true,
+    "pause": false,
+    "blacklist": false,
+    "freeze": false,
+    "upgrade": false,
+    "owner": false,
+    "roles": false,
+    "erc4626": false,
+    "permit": true
+   }
+  },
+  "control": {
+   "read_values": {
+    "DOMAIN_SEPARATOR": "0x310a071f1f2f1998221a282f93c0df8735b9ce8dfd99a56b9666da3d2a84049e",
+    "PERMIT_TYPEHASH": "0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9",
+    "decimals": "18",
+    "deploymentChainId": "8453",
+    "hook": "0x2a9B9C14851Baf7AD19f26607C9171CA1E7a1A61",
+    "name": "S&P 500 DeFi (Centrifuge)",
+    "symbol": "deSPXA",
+    "totalSupply": "2473718789705126542554"
+   },
+   "controllers": []
+  },
+  "holders": {
+   "count": 545,
+   "top1_pct": 35.836,
+   "top10_pct": 92.3,
+   "top10_contracts": 5,
+   "morpho_blue_pct": 2.555,
+   "top": [
+    {
+     "address": "0xd08f1fb797bfacded23323178672557034c64cfa",
+     "name": "UniswapV3Pool",
+     "is_contract": true,
+     "pct": 35.836
+    },
+    {
+     "address": "0xf8191d98ae98d2f7abdfb63a9b0b812b93c873aa",
+     "name": null,
+     "is_contract": false,
+     "pct": 15.454
+    },
+    {
+     "address": "0xb3dacc732509ba6b7f25ad149e56ca44fe901ab9",
+     "name": null,
+     "is_contract": false,
+     "pct": 15.287
+    },
+    {
+     "address": "0xfba7f3a9d4b10787757d366df542868ef380d61b",
+     "name": null,
+     "is_contract": false,
+     "pct": 10.546
+    },
+    {
+     "address": "0x51c72848c68a965f66fa7a88855f9f7784502a7f",
+     "name": "Market Maker: 0x51c7...2a7f",
+     "is_contract": true,
+     "pct": 3.283
+    }
+   ],
+   "gecko_count": 854,
+   "gecko_top10_pct": 98.1366
+  },
+  "price": {
+   "usd": 770.4354549479053,
+   "confidence": 0.99,
+   "price_ts": 1792668167,
+   "chart": {
+    "min": 766.6935060980103,
+    "max": 783.1929762625518,
+    "last": 770.4354549479053,
+    "count": 30,
+    "range_pct": 2.152
+   },
+   "market_cap_usd": 1903608.5789754977,
+   "volume_24h_usd": 396679.6282181714
+  },
+  "liquidity": {
+   "pools_count": 16,
+   "total_reserve_usd": 1945944.41,
+   "total_volume_24h_usd": 399223.43,
+   "pools": [
+    {
+     "dex": "uniswap-v3-base",
+     "reserve_usd": 1630985.4659,
+     "volume_24h_usd": 398892.037370379,
+     "created_at": "2026-05-04T10:09:21Z"
+    },
+    {
+     "dex": "pancakeswap-infinity-clmm-base",
+     "reserve_usd": 292505.6268,
+     "volume_24h_usd": 0,
+     "created_at": "2026-04-04T13:54:41Z"
+    }
+   ],
+   "kyber": {
+    "100000": {
+     "status": "ok",
+     "price_impact_pct": 0.223,
+     "out_usd": 99842.33,
+     "gas_usd": 0.035776219142407625,
+     "dexes": [
+      "uniswapv3",
+      "tessera"
+     ]
+    },
+    "1000000": {
+     "status": "ok",
+     "price_impact_pct": 1.111,
+     "out_usd": 989531.9,
+     "gas_usd": 0.042081690330341814,
+     "dexes": [
+      "uniswapv3",
+      "tessera",
+      "aerodrome-cl-3",
+      "aerodrome-cl-2"
+     ]
+    }
+   }
+  },
+  "pendle": null,
+  "rwa": null,
+  "oracle_feeds": {
+   "feeds": [],
+   "has_por_feed": false
+  },
+  "meta": {
+   "collected_at": 1792668897,
+   "chain_supported": true,
+   "filled": 61,
+   "total": 67,
+   "coverage": 0.91
+  }
+ }
+}

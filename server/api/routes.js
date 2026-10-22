@@ -8,12 +8,13 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
-import { calculateResearchMix, parseTagsJson, RESEARCH_MAX_AGE_SEC } from '../engine/collateralEngine.js';
+import { parseTagsJson } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
-import { researchQueue, applyResearch, isSafeUrl, TOKEN_SIGNAL_KEYS } from '../services/tokenResearch.js';
+import { getTokenData, listTokenData } from '../services/tokenCollector.js';
+import { evaluateToken, rankTokens, assetAddressOf, RISK_MODEL } from '../engine/tokenRisk.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,10 +34,16 @@ let vaultCatalog = null;
 
 export const DEFAULT_VAULTS_LIMIT = 500;
 
+// Token ranking over every token_data record, recomputed at most once a minute (the collector writes in the background)
+const TOKEN_RANKING_TTL_MS = 60000;
+const TOKEN_RANKING_GRADES = ['A', 'B', 'C', 'D', 'E', 'NR'];
+let tokenRanking = null;
+
 // Every successful sync (manual or scheduled) invalidates both caches
 onSyncSuccess(() => {
   vaultAuditCache.clear();
   vaultCatalog = null;
+  tokenRanking = null;
 });
 
 // Sliding-window counter per client IP for /api/* (two fixed windows, weighted): O(1) memory per IP
@@ -411,59 +418,6 @@ export function readJsonBody(req, maxBytes = 262144) {
   });
 }
 
-/** Research import is an operator action of the PC runner: off unless RESEARCH_TOKEN is set, always token-protected. */
-function authorizeResearch(req, res) {
-  const expected = process.env.RESEARCH_TOKEN || '';
-  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (expected && safeEqual(given, expected)) return true;
-  sendJson(res, expected ? 401 : 403, { error: expected ? 'Unauthorized' : 'Research import is disabled' });
-  return false;
-}
-
-/** GET /api/research/queue?limit=: tokens that need AI research, most urgent first. */
-export function handleGetResearchQueue(req, res, url) {
-  if (!authorizeResearch(req, res)) return;
-  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '40', 10) || 40));
-  try {
-    sendJson(res, 200, { tokens: researchQueue(getDatabase(), Math.floor(Date.now() / 1000), { limit }) });
-  } catch (err) {
-    console.error('[API] Research queue failed:', err);
-    sendJson(res, 500, { error: 'Failed to read the research queue' });
-  }
-}
-
-const str = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max;
-
-/** POST /api/research: one token result {runId, model, promptVersion, chainId, address, raw, checks}. */
-export async function handlePostResearch(req, res) {
-  if (!authorizeResearch(req, res)) return;
-  let body;
-  try {
-    body = await readJsonBody(req);
-  } catch (err) {
-    sendJson(res, err.status || 400, { error: err.message });
-    if (err.status === 413) req.destroy();
-    return;
-  }
-  const valid = body && typeof body === 'object' && str(body.runId, 100) && str(body.model, 100) && str(body.promptVersion, 100)
-    && Number.isInteger(body.chainId) && typeof body.address === 'string' && ADDRESS_RE.test(body.address)
-    && body.raw && typeof body.raw === 'object' && Array.isArray(body.checks) && body.checks.length <= 50;
-  if (!valid) {
-    sendJson(res, 400, { error: 'Expected {runId, model, promptVersion, chainId, address, raw, checks}' });
-    return;
-  }
-  try {
-    const result = applyResearch(getDatabase(), body, Math.floor(Date.now() / 1000));
-    // Rated tiers feed the verdict: drop both caches so the next request sees the new record
-    vaultAuditCache.clear();
-    vaultCatalog = null;
-    sendJson(res, 200, result);
-  } catch (err) {
-    console.error('[API] Research import failed:', err);
-    sendJson(res, 500, { error: 'Failed to store the research result' });
-  }
-}
-
 // Map, not an object: sortBy=constructor or __proto__ must not resolve to a prototype property
 const SORT_FIELDS = new Map([
   ['liquidity_usd', 'liquidityUsd'],
@@ -514,39 +468,6 @@ export function handleGetVaults(req, res, url) {
   }
 }
 
-/** Stored signals as {token, system} of plain values; an old flat row is split by the known token keys, junk gives null. */
-function splitSignals(stored) {
-  if (!stored || typeof stored !== 'object') return null;
-  const vals = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, v?.value ?? null]));
-  if ('token' in stored || 'system' in stored) return { token: vals(stored.token), system: vals(stored.system) };
-  const flat = vals(stored);
-  const pick = want => Object.fromEntries(Object.entries(flat).filter(([k]) => TOKEN_SIGNAL_KEYS.includes(k) === want));
-  return { token: pick(true), system: pick(false) };
-}
-
-/** AI research shown next to a collateral token in the audit, or null when the token has no record (or is an idle market). */
-export function collateralResearchOf(a, nowSec = Math.floor(Date.now() / 1000)) {
-  if (!a.collateral_research_status) return null;
-  let sources = [];
-  try { sources = JSON.parse(a.collateral_sources_json); } catch { /* malformed row: no sources */ }
-  let signals = null;
-  try { signals = JSON.parse(a.collateral_signals_json); } catch { /* old row without signals */ }
-  return {
-    tier: a.collateral_risk_tier ?? null,
-    category: a.collateral_category,
-    confidence: a.collateral_confidence,
-    model: a.collateral_research_model,
-    asOf: a.collateral_as_of,
-    rationale: a.collateral_rationale,
-    summary: a.collateral_summary ?? null,
-    // only the value of each signal; the sources of the record are listed below
-    signals: splitSignals(signals),
-    sources: (Array.isArray(sources) ? sources : []).filter(s => isSafeUrl(s?.url)).map(s => ({ title: String(s.title ?? ''), url: s.url })),
-    // a stale record is shown but counts as unrated in all shares
-    stale: !(Number(a.collateral_researched_at) >= nowSec - RESEARCH_MAX_AGE_SEC)
-  };
-}
-
 /** List entries with MQI/collateral mix/liquidity for every vault, ordered by address so sort ties stay stable. */
 export function getVaultCatalog() {
   if (vaultCatalog && Date.now() - vaultCatalog.timestamp < CATALOG_TTL_MS) return vaultCatalog.vaults;
@@ -555,11 +476,9 @@ export function getVaultCatalog() {
   const rows = db.prepare('SELECT * FROM vaults ORDER BY address').all();
 
   const allocRows = db.prepare(`
-    SELECT va.*, m.*, r.risk_tier AS collateral_risk_tier, r.confidence AS collateral_confidence, r.researched_at AS collateral_researched_at,
-           r.status AS collateral_research_status, r.category AS collateral_category
+    SELECT va.*, m.*
     FROM vault_allocations va
     JOIN markets m ON va.market_unique_key = m.unique_key
-    LEFT JOIN token_research r ON r.chain_id = m.chain_id AND r.address = lower(m.collateral_asset_address)
   `).all();
 
   // Peer supplies per market come from the same rows: every allocation of every vault is loaded anyway
@@ -581,7 +500,6 @@ export function getVaultCatalog() {
     const scored = withEffectiveTotal(row, allocs);
     const mqi = calculateMQI(scored, allocs);
     const hhi = calculateHHI(withMaterialUnresolved(scored, mqi), allocs);
-    const collateral = calculateResearchMix(withMaterialUnresolved(scored, mqi), allocs);
     const liq = calculateLiquidityMetrics(withMaterialUnresolved(scored, mqi), allocs);
 
     return {
@@ -621,11 +539,6 @@ export function getVaultCatalog() {
       hhi: hhi.hhi,
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
-      collateralTier: collateral.tier,
-      lowRiskCollateralPercent: collateral.lowRiskPercent,
-      highRiskCollateralPercent: collateral.highRiskPercent,
-      impairedCollateralPercent: collateral.impairedPercent,
-      unratedCollateralPercent: collateral.unratedPercent,
       updatedAt: row.metadata_updated_at
     };
   });
@@ -639,6 +552,58 @@ export function getVaultCatalog() {
  * Employs Stale-While-Revalidate: returns local SQLite audit metrics immediately (<1ms)
  * and dispatches lightweight non-blocking revalidation for the latest 10 transactions.
  */
+/**
+ * GET /api/tokens/:chainId/:address: the public facts collected about one collateral token (404 until it has been collected),
+ * plus `risk`, the rating of the facts by server/engine/tokenRisk.js (a vault share is compared with its asset's stored price).
+ */
+export function handleGetToken(req, res, chainId, address) {
+  try {
+    const db = getDatabase();
+    const found = getTokenData(db, chainId, address);
+    if (!found) { sendJson(res, 404, { error: 'No data has been collected for this token yet' }, req); return; }
+    const asset = assetAddressOf(found);
+    const assetPriceUsd = asset ? getTokenData(db, chainId, asset)?.data?.price?.usd ?? null : null;
+    sendJson(res, 200, { ...found, risk: evaluateToken(found, { assetPriceUsd }) }, req);
+  } catch (err) {
+    console.error('[API] Token data failed:', err);
+    sendJson(res, 500, { error: 'Failed to read the token data' }, req);
+  }
+}
+
+/** Ranked list of every collected token, safest first; cached for TOKEN_RANKING_TTL_MS. */
+function getTokenRanking() {
+  if (tokenRanking && Date.now() - tokenRanking.timestamp < TOKEN_RANKING_TTL_MS) return tokenRanking.list;
+  const list = rankTokens(listTokenData(getDatabase()));
+  tokenRanking = { timestamp: Date.now(), list };
+  return list;
+}
+
+/**
+ * GET /api/tokens/ranking?limit=&offset=&chainId=&grade=: tokens from the safest to the riskiest, not rated (NR) ones last.
+ * `rank` is the place in the whole ranking, so it stays the same when a filter is applied.
+ */
+export function handleGetTokenRanking(req, res, url) {
+  try {
+    const rawLimit = parseInt(url.searchParams.get('limit') || '100', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(500, Math.max(1, rawLimit)) : 100;
+    const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
+    const offset = Number.isFinite(rawOffset) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, rawOffset)) : 0;
+    const rawChainId = parseInt(url.searchParams.get('chainId') || '', 10);
+    const chainId = Number.isFinite(rawChainId) && rawChainId > 0 ? rawChainId : null;
+    const rawGrade = url.searchParams.get('grade');
+    const grade = rawGrade ? rawGrade.trim().toUpperCase() : null;
+    if (grade !== null && !TOKEN_RANKING_GRADES.includes(grade)) {
+      sendJson(res, 400, { error: `Invalid grade parameter (one of ${TOKEN_RANKING_GRADES.join(', ')})` }, req);
+      return;
+    }
+    const matches = getTokenRanking().filter(t => (chainId === null || t.chainId === chainId) && (grade === null || t.grade === grade));
+    sendJson(res, 200, { model: RISK_MODEL, total: matches.length, limit, offset, tokens: matches.slice(offset, offset + limit) }, req);
+  } catch (err) {
+    console.error('[API] Token ranking failed:', err);
+    sendJson(res, 500, { error: 'Failed to build the token ranking' }, req);
+  }
+}
+
 export function handleGetVaultByAddress(req, res, address) {
   try {
     const cleanAddress = address.toLowerCase();
@@ -697,22 +662,10 @@ export function handleGetVaultByAddress(req, res, address) {
         m.realized_bad_debt_usd,
         m.warnings_count,
         m.warnings_json,
-        t.tags_json AS collateral_tags_json,
-        r.risk_tier AS collateral_risk_tier,
-        r.confidence AS collateral_confidence,
-        r.researched_at AS collateral_researched_at,
-        r.status AS collateral_research_status,
-        r.category AS collateral_category,
-        r.as_of AS collateral_as_of,
-        r.tier_rationale AS collateral_rationale,
-        r.summary AS collateral_summary,
-        r.signals_json AS collateral_signals_json,
-        r.sources_json AS collateral_sources_json,
-        r.model AS collateral_research_model
+        t.tags_json AS collateral_tags_json
       FROM vault_allocations va
       JOIN markets m ON va.market_unique_key = m.unique_key
       LEFT JOIN token_tags t ON t.chain_id = m.chain_id AND t.address = lower(m.collateral_asset_address)
-      LEFT JOIN token_research r ON r.chain_id = m.chain_id AND r.address = lower(m.collateral_asset_address)
       WHERE va.vault_address = ?
       ORDER BY va.supply_assets_usd DESC
     `).all(cleanAddress);
@@ -739,7 +692,7 @@ export function handleGetVaultByAddress(req, res, address) {
       alloc.peer_vaults = peerData.peers;
     }
 
-    // Compute comprehensive institutional audit verdict (MQI + collateral research tiers + Exit Liquidity)
+    // Compute comprehensive institutional audit verdict (MQI + collateral breakdown + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
     const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
     const unverifiedKeys = new Set(verdict.mqi.unverifiedMarkets.map(m => m.marketUniqueKey));
@@ -781,8 +734,8 @@ export function handleGetVaultByAddress(req, res, address) {
           marketUniqueKey: a.market_unique_key,
           loanSymbol: a.loan_asset_symbol,
           collateralSymbol: a.collateral_asset_symbol,
+          collateralAddress: a.collateral_asset_address ? String(a.collateral_asset_address).toLowerCase() : null,
           collateralTags: parseTagsJson(a.collateral_tags_json) ?? [],
-          collateralResearch: collateralResearchOf(a),
           // an LLTV the API did not report is unknown (null), not 0%
           lltvPercent: a.lltv == null || a.lltv === '' ? null : a.lltv_percent,
           supplyAssetsHuman: a.supply_assets_human,
@@ -1282,21 +1235,20 @@ export function handleRequest(req, res) {
     return;
   }
 
-  if (pathname === '/api/research/queue' && req.method === 'GET') {
-    handleGetResearchQueue(req, res, parsedUrl);
-    return;
-  }
-
-  if (pathname === '/api/research' && req.method === 'POST') {
-    handlePostResearch(req, res).catch(err => {
-      console.error('[API] Research request handler failed:', err);
-      if (!res.headersSent) sendJson(res, 500, { error: 'Internal server error' });
-    });
-    return;
-  }
-
   if (pathname === '/api/vaults' && isRead) {
     handleGetVaults(req, res, parsedUrl);
+    return;
+  }
+
+  // Before the :chainId/:address pattern, so the literal path is never read as a token
+  if (pathname === '/api/tokens/ranking' && isRead) {
+    handleGetTokenRanking(req, res, parsedUrl);
+    return;
+  }
+
+  const tokenMatch = pathname.match(/^\/api\/tokens\/(\d{1,9})\/(0x[0-9a-fA-F]{40})$/);
+  if (tokenMatch && isRead) {
+    handleGetToken(req, res, Number(tokenMatch[1]), tokenMatch[2].toLowerCase());
     return;
   }
 

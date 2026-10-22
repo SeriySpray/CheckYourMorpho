@@ -10,6 +10,7 @@ import { withFetch, jsonResponse } from '../fixtures.js';
 // (зокрема на Oracle, де порт 3000 зайнятий живою службою), порт випадковий, мережа відрізана.
 // Цей код виконується під час сканування, до імпорту index.js раннером.
 process.env.PORT = '0';
+process.env.TOKEN_DATA_DISABLED = '1'; // the collector must not start its loop under test
 process.env.HOST = '127.0.0.1';
 globalThis.fetch = async () => { throw new Error('мережу вимкнено в тестах'); };
 

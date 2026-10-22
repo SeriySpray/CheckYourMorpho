@@ -82,9 +82,6 @@ const DOM = {
   riskMqiPct: document.getElementById('risk-mqi-pct'),
   riskMqiBar: document.getElementById('risk-mqi-bar'),
   riskMqiDesc: document.getElementById('risk-mqi-desc'),
-  riskMixVal: document.getElementById('risk-mix-val'),
-  riskMixBar: document.getElementById('risk-mix-bar'),
-  riskMixDesc: document.getElementById('risk-mix-desc'),
   riskExitMeterBox: document.getElementById('risk-exit-meter-box'),
   riskExitLabel: document.getElementById('risk-exit-label'),
   riskExitInfoBtn: document.getElementById('risk-exit-info-btn'),
@@ -494,8 +491,6 @@ function updateActiveFilterChips() {
       liq_desc: 'Free Liquidity: High to Low',
       mqi_asc: 'Market Quality: Flagged First',
       mqi_desc: 'Market Quality: Clean First',
-      risk_desc: 'Low-risk collateral: Low First',
-      risk_asc: 'Low-risk collateral: High First'
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -830,11 +825,6 @@ function applyVaultAuditData(vaultAddress, auditData) {
       if (verdict.liquidity?.instantExitCapacityUsd !== undefined) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
       }
-      if (verdict.collateral?.tier !== undefined) matchingVault.collateralTier = verdict.collateral.tier;
-      if (verdict.collateral?.lowRiskPercent !== undefined) matchingVault.lowRiskCollateralPercent = verdict.collateral.lowRiskPercent;
-      if (verdict.collateral?.highRiskPercent !== undefined) matchingVault.highRiskCollateralPercent = verdict.collateral.highRiskPercent;
-      if (verdict.collateral?.impairedPercent !== undefined) matchingVault.impairedCollateralPercent = verdict.collateral.impairedPercent;
-      if (verdict.collateral?.unratedPercent !== undefined) matchingVault.unratedCollateralPercent = verdict.collateral.unratedPercent;
     }
   }
 
@@ -1177,13 +1167,6 @@ function renderVaultExplorer() {
     }
     if (explorerFilters.sort === 'mqi_desc') {
       return mqiSortKey(b) - mqiSortKey(a);
-    }
-    if (explorerFilters.sort === 'risk_desc' || explorerFilters.sort === 'risk_asc') {
-      // sorted by the low-risk collateral share (low first for risk_desc); vaults with no collateral picture go last in both directions
-      const noPicture = v => v.collateralTier === 'UNALLOCATED' || v.collateralTier === 'UNKNOWN';
-      if (noPicture(a) !== noPicture(b)) return noPicture(a) ? 1 : -1;
-      const diff = (a.lowRiskCollateralPercent ?? 0) - (b.lowRiskCollateralPercent ?? 0);
-      return explorerFilters.sort === 'risk_desc' ? diff : -diff;
     }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
@@ -1812,36 +1795,49 @@ function updateStressedExitDisplay(isStressed) {
   }
 }
 
-// Signals shown as chips when true, in this order, at most 4. Positive signals (timelock, audit) are left out so the line never reads as a rating.
-const SIGNAL_CHIPS = [
-  ['token', 'can_freeze_or_blacklist', 'can freeze'], ['token', 'can_mint_without_limit', 'unlimited mint'], ['system', 'has_unresolved_incident', 'unresolved incident'],
-  ['token', 'upgradeable_proxy', 'upgradeable'], ['system', 'kyc_required', 'KYC'], ['system', 'custodial_backing', 'custodial'], ['system', 'redemption_gated', 'gated redemption'], ['system', 'oracle_is_market_price', 'market oracle']
-];
+// Facts per collateral token come from GET /api/tokens/:chainId/:address; one request per token, cached for the page's life
+const tokenFactsCache = new Map();
+
+/** Empty slot under a collateral token; loadTokenFacts() fills it. */
+function tokenFactsPlaceholder(chainId, address) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(address ?? ''))) return '';
+  return `<div class="token-facts" data-chain="${escapeHtml(chainId)}" data-address="${escapeHtml(address)}">token data loading</div>`;
+}
 
 /**
- * Block under a collateral token in the allocation table. With a tier: "T3 · category · AI research, date · sources [1] [2]".
- * Without one (the agent only collects facts): category, signal chips, "AI-collected facts, date", sources and a disclaimer.
- * Source links are https only, escaped and marked nofollow; the summary and model go into the tooltip.
- * @param {object|null|undefined} r collateralResearch from the audit API
+ * Compact facts of one token: what the sources state, no rating. Each line is skipped when its values are unknown (null).
+ * @param {object|null} t Response of the token API; null when nothing has been collected yet
  */
-function researchCellHtml(r) {
-  const style = 'color:var(--text-muted); font-size:10px;';
-  if (!r) return `<div style="${style}">unrated, no AI research yet</div>`;
-  const rated = Boolean(r.tier);
-  const parts = rated
-    ? [`T${escapeHtml(r.tier)}`, escapeHtml(r.category || 'other'), `AI research, ${escapeHtml(r.asOf || 'date unknown')}`]
-    : [escapeHtml(r.category || 'other'), `AI-collected facts, ${escapeHtml(r.asOf || 'date unknown')}`];
-  if (r.stale) parts.push('stale, counted as unrated');
-  const links = (Array.isArray(r.sources) ? r.sources : []).filter(x => /^https:\/\//i.test(String(x?.url)));
-  if (links.length) {
-    parts.push('sources ' + links.map((x, i) => `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(x.title || x.url)}">[${i + 1}]</a>`).join(' '));
-  }
-  const chips = rated ? [] : SIGNAL_CHIPS.filter(([g, k]) => r.signals?.[g]?.[k] === true).slice(0, 4)
-    .map(([g, , label]) => `<span style="border:1px solid var(--border-color, rgba(255,255,255,0.2)); border-radius:3px; padding:0 4px; margin-right:3px;">${g}: ${label}</span>`);
-  const tip = escapeHtml([r.model, r.summary || r.rationale].filter(Boolean).join(': '));
-  return `<div style="${style}" title="${tip}">${parts.join(' · ')}</div>`
-    + (chips.length ? `<div style="${style} margin-top:2px;">${chips.join('')}</div>` : '')
-    + (rated ? '' : `<div style="${style} font-style:italic;">AI-collected facts, not a risk rating</div>`);
+function tokenFactsHtml(t) {
+  if (!t || !t.data) return 'no token data collected yet';
+  const d = t.data;
+  const fn = d.contract?.fn || {};
+  const can = [['mint', 'mint'], ['blacklist', 'blacklist'], ['freeze', 'freeze'], ['pause', 'pause'], ['upgrade', 'upgrade']].filter(([k]) => fn[k] === true).map(([, l]) => l);
+  const ctrl = d.control?.controllers?.[0];
+  const owner = ctrl && `${ctrl.role}: ${ctrl.safe ? `Safe ${ctrl.safe.threshold} of ${ctrl.safe.owner_count}` : ctrl.is_contract ? 'contract' : 'single key'}`;
+  const swap = d.liquidity?.kyber?.['1000000'];
+  const lines = [
+    [d.contract?.sourcify_match || d.contract?.blockscout_verified ? 'source verified' : null,
+      d.holders?.top10_pct != null ? `top 10 holders ${d.holders.top10_pct}%` : null,
+      swap?.status === 'ok' && swap.price_impact_pct != null ? `$1M swap impact ${swap.price_impact_pct}%` : swap?.status === 'no_route' ? 'no swap route' : null],
+    [can.length ? `can ${can.join(', ')}` : null, owner],
+    [d.rwa?.issuer ? `issuer ${d.rwa.issuer}` : null, d.pendle?.days_to_expiry != null ? `expires in ${d.pendle.days_to_expiry} days` : null]
+  ].map(parts => parts.filter(Boolean)).filter(parts => parts.length);
+  const stamp = `data ${Math.round((t.coverage ?? 0) * 100)}%, ${new Date((t.collectedAt || 0) * 1000).toISOString().slice(0, 10)}${t.stale ? ', stale' : ''}`;
+  return [...lines.map(parts => escapeHtml(parts.join(' · '))), `<span style="opacity:0.7;">${escapeHtml(stamp)}</span>`].join('<br>');
+}
+
+/** Fills the token slots found under `root`. A failed request leaves a short note, never an error. */
+function loadTokenFacts(root) {
+  root.querySelectorAll('.token-facts').forEach(el => {
+    const key = `${el.dataset.chain}/${el.dataset.address}`;
+    if (!tokenFactsCache.has(key)) {
+      tokenFactsCache.set(key, apiFetch(`/api/tokens/${key}`)
+        .then(r => (r.status === 404 ? null : r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .catch(() => { tokenFactsCache.delete(key); return undefined; }));
+    }
+    tokenFactsCache.get(key).then(t => { el.innerHTML = t === undefined ? 'token data unavailable' : tokenFactsHtml(t); });
+  });
 }
 
 /**
@@ -1923,26 +1919,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
   }
 
-  // 2. Collateral (AI research): share of capital behind tier 1 and 2 collateral, with the other tiers and unrated beside it
+  // 2. Collateral breakdown by token
   const mix = verdict.collateral || {};
   const mixTokens = mix.tokens || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
-  const safePct = mix.lowRiskPercent ?? 0;
-  // The agent only collects facts for now: with no tier on any token there is no share to show
-  const assessmentPending = !isUnallocated && mixTokens.length > 0 && mixTokens.every(t => !t.tier);
-
-  if (DOM.riskMixVal) DOM.riskMixVal.textContent = isUnallocated ? 'N/A' : assessmentPending ? 'Assessment pending' : `${safePct}%`;
-  if (DOM.riskMixBar) DOM.riskMixBar.style.width = isUnallocated || assessmentPending ? '0%' : `${Math.round(safePct)}%`;
-  if (DOM.riskMixDesc) {
-    if (assessmentPending) {
-      DOM.riskMixDesc.textContent = 'AI-collected facts are shown beside each token; no risk assessment has been made yet';
-    } else if (isUnallocated) {
-      DOM.riskMixDesc.textContent = mix.tier === 'UNKNOWN' ? 'No capital could be verified yet' : 'No active collateral backing';
-    } else {
-      const t = mix.byRiskTier || {};
-      DOM.riskMixDesc.textContent = `tier 3 ${t[3] ?? 0}%, tier 4 ${t[4] ?? 0}%, tier 5 ${t[5] ?? 0}%, unrated ${mix.unratedPercent ?? 0}% of ${mix.unverifiedPercent > 0 ? 'verified' : 'total'} capital`;
-    }
-  }
 
   // 3. Exit Liquidity & Stressed Interaction
   // null = backend has no liquidity data for this vault; an absent field keeps the old 0 default
@@ -1992,7 +1972,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
   }
   if (DOM.riskCollateralList) {
     DOM.riskCollateralList.innerHTML = '';
-    const breakdown = mixTokens.map(c => ({ label: `${c.symbol || 'Unknown'} · ${c.tier ? 'T' + c.tier : 'unrated'}`, usd: c.usd, sharePercent: c.percent }));
+    const breakdown = mixTokens.map(c => ({ label: c.symbol || 'Unknown', usd: c.usd, sharePercent: c.percent }));
     if (breakdown.length === 0) {
       DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
     } else {
@@ -2005,12 +1985,6 @@ function populateAuditModal(data, isQuietRefresh = false) {
         `;
         DOM.riskCollateralList.appendChild(row);
       });
-      const note = document.createElement('span');
-      note.style.cssText = 'color:var(--text-muted); font-size:10px; margin-top:4px;';
-      note.textContent = assessmentPending
-        ? 'AI-collected facts, not a risk rating. Tokens without an assessment are never counted as safe.'
-        : 'T1 is the least fragile, T5 the most. Unrated tokens have no usable AI research and are never counted as safe.';
-      DOM.riskCollateralList.appendChild(note);
     }
   }
 
@@ -2060,7 +2034,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(a.collateralTags?.length ? a.collateralTags.join(', ') : 'no tags')}</div>${researchCellHtml(a.collateralResearch)}</td>
+        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(a.collateralTags?.length ? a.collateralTags.join(', ') : 'no tags')}</div>${tokenFactsPlaceholder(v.chainId, a.collateralAddress)}</td>
         <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
         <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>
@@ -2070,6 +2044,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
       `;
       DOM.allocationsTbody.appendChild(tr);
     });
+    loadTokenFacts(DOM.allocationsTbody);
   }
 }
 
