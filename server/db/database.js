@@ -41,6 +41,8 @@ export function getDatabase() {
   // The AI research module was replaced by token_data (services/tokenCollector.js)
   dbInstance.exec('DROP TABLE IF EXISTS token_research; DROP TABLE IF EXISTS token_research_history;');
   try { dbInstance.exec("DELETE FROM vault_events WHERE kind = 'collateral_tier_changed';"); } catch {}
+  // Never populated by any code
+  dbInstance.exec('DROP TABLE IF EXISTS daily_apys; DROP TABLE IF EXISTS vault_snapshots;');
 
   // Apply schema and pragmas
   dbInstance.exec(SCHEMA_SQL);

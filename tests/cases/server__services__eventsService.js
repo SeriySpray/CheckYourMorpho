@@ -130,6 +130,7 @@ export default {
     }],
     ['переводить pendingConfigs у applied або revoked після зникнення та виявляє похідні події при зміні стану', ({ syncVaultEvents }) => {
       const db = makeDb();
+      db.prepare("UPDATE vaults SET total_assets = '4000000000000', total_assets_usd = 4000000 WHERE address = ?").run(V1_ADDR);
       const rawV1Pass1 = [{
         address: V1_ADDR,
         state: {
@@ -156,8 +157,8 @@ export default {
 
       syncVaultEvents(db, rawV1Pass1, [], { nowSec: NOW });
 
-      // Змінюємо стан у БД: TVL падає на 40%, у ринку з'являється bad debt, а обидва pendingConfigs зникають на NOW + 500
-      db.prepare('UPDATE vaults SET total_assets_usd = 600000 WHERE address = ?').run(V1_ADDR);
+      // Змінюємо стан у БД: TVL падає на 40% (у токенах), у ринку з'являється bad debt, а обидва pendingConfigs зникають на NOW + 500
+      db.prepare("UPDATE vaults SET total_assets = '2400000000000', total_assets_usd = 2400000 WHERE address = ?").run(V1_ADDR);
       db.prepare('UPDATE markets SET bad_debt_usd = 25000 WHERE unique_key = ?').run(MKT_KEY);
 
       const rawV1Pass2 = [{
@@ -179,7 +180,41 @@ export default {
       const derivedKinds = derived.map(r => r.kind);
       assert.ok(derivedKinds.includes('tvl_drop'));
       assert.ok(derivedKinds.includes('bad_debt_appeared'));
-      assert.ok(derivedKinds.includes('verdict_worsened'));
+      assert.ok(!derivedKinds.includes('verdict_worsened'));
+      db.close();
+    }],
+    ['знімок vaults пишеться раз на годину (повторний синк тієї ж години замінює), а старші за 8 діб видаляються', ({ syncVaultEvents }) => {
+      const db = makeDb();
+      const r1 = syncVaultEvents(db, [], [], { nowSec: NOW });
+      assert.equal(r1.samplesWritten, 2);
+      syncVaultEvents(db, [], [], { nowSec: NOW + 180 });
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vault_samples').get().c, 2);
+      syncVaultEvents(db, [], [], { nowSec: NOW + 3600 });
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vault_samples').get().c, 4);
+      const s = db.prepare('SELECT total_assets, total_assets_usd, net_apy, is_listed FROM vault_samples WHERE vault_address = ? ORDER BY hour_bucket LIMIT 1').get(V1_ADDR);
+      assert.deepEqual({ ...s }, { total_assets: 1_000_000, total_assets_usd: 1_000_000, net_apy: 0.045, is_listed: 1 });
+      syncVaultEvents(db, [], [], { nowSec: NOW + 9 * DAY });
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vault_samples WHERE sampled_at < ?').get(NOW + DAY).c, 0);
+      db.close();
+    }],
+    ['tvl_drop: без знімка у вікні 24 год події немає; з вікном - рахується в токенах, падіння ціни не є відтоком, малий vault нижче $500k ігнорується', ({ syncVaultEvents }) => {
+      const db = makeDb();
+      const setVault = (addr, tokens, usd, price = 1) => db.prepare('UPDATE vaults SET total_assets = ?, total_assets_usd = ?, asset_price_usd = ? WHERE address = ?').run(String(tokens * 1e6), usd, price, addr);
+      const drops = () => db.prepare("SELECT vault_address, severity FROM vault_events WHERE kind = 'tvl_drop' ORDER BY id").all().map(r => ({ ...r }));
+      setVault(V1_ADDR, 10_000_000, 10_000_000); setVault(V2_ADDR, 100_000, 100_000);
+      syncVaultEvents(db, [], [], { nowSec: NOW });
+      assert.deepEqual(drops(), []);
+      // V1: -40% токенів; V2: -50%, але лише $50k; після цього падіння ціни ETH-подібного активу без зміни токенів
+      setVault(V1_ADDR, 6_000_000, 6_000_000); setVault(V2_ADDR, 50_000, 50_000);
+      syncVaultEvents(db, [], [], { nowSec: NOW + 7200 });
+      assert.deepEqual(drops(), [{ vault_address: V1_ADDR, severity: 'critical' }]);
+      // той самий день і рівень: повторний синк не дублює
+      syncVaultEvents(db, [], [], { nowSec: NOW + 7380 });
+      assert.equal(drops().length, 1);
+      // вікно 24 год минуло: порівняння з пізнішими знімками, а не з відтоком дворічної давності
+      setVault(V1_ADDR, 6_000_000, 3_000_000, 0.5);
+      syncVaultEvents(db, [], [], { nowSec: NOW + 2 * DAY });
+      assert.equal(drops().length, 1);
       db.close();
     }],
     ['pending не закривається і last_admin_event_ts не рухається назад, коли vault відсутній у відповіді API або поле pendingConfigs відсутнє', ({ syncVaultEvents }) => {

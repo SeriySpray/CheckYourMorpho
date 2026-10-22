@@ -439,6 +439,14 @@ export function diffAdminEvents(vaultContext, rawAdminEvents = [], prevState = n
   return { events, lastAdminEventTs: maxTs };
 }
 
+// Share of the vault assets a cap increase adds: a relative cap is already a share, an absolute one is scaled by the vault assets in tokens
+const capIncreaseShare = (isRelative, newCap, oldCap, assetsHuman) => {
+  if (newCap === null || !Number.isFinite(newCap)) return null;
+  const added = newCap - (oldCap ?? 0);
+  if (isRelative) return added;
+  return assetsHuman > 0 ? added / assetsHuman : null;
+};
+
 const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelocks, nowSec) => {
   const vaultAddress = vaultContext.address;
   const chainId = Number(vaultContext.chainId ?? vaultContext.chain_id ?? 1);
@@ -468,7 +476,11 @@ const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelock
     }
     targetKey = `${marketId || 'market'}:${String(rawCap)}`;
     title = `Pending supply cap increase for ${label}`;
-    details = { ...details, marketId, marketLabel: label, oldCap: oldCapHuman, newCap: newCapHuman, rawCap: String(rawCap) };
+    details = {
+      ...details, marketId, marketLabel: label, oldCap: oldCapHuman, newCap: newCapHuman, rawCap: String(rawCap),
+      tvlShareAdded: capIncreaseShare(false, newCapHuman, oldCapHuman, vaultContext.assetsHuman),
+      capWasZero: !oldCapHuman
+    };
   } else if (fn === 'RemoveMarket' || typename === 'VaultRemoveMarketPendingData') {
     kind = 'pending_market_removal';
     const market = decoded.market || null;
@@ -568,14 +580,21 @@ const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelock
     const newCapHuman = fn === 'IncreaseRelativeCap'
       ? normalizeFeeFraction(rawCap)
       : toHumanTokenAmount(rawCap, decimals);
-    const lookupKey = marketId || cfgId;
-    const oldCapHuman = lookupKey && currentCaps[lookupKey] !== undefined ? Number(currentCaps[lookupKey]) : null;
-    if (oldCapHuman !== null && oldCapHuman > 0 && newCapHuman !== null && newCapHuman > oldCapHuman * 2) {
+    const isRelative = fn === 'IncreaseRelativeCap';
+    const prevCap = cfgId ? vaultContext.capsById?.[cfgId] : null;
+    const oldCapHuman = prevCap ? (isRelative ? prevCap.relative : prevCap.absolute) : null;
+    if (oldCapHuman && newCapHuman !== null && newCapHuman > oldCapHuman * 2) {
       severity = 'critical';
     }
+    const capLabel = market ? marketLabelFromData(market) : (cfg.data?.collateralToken?.symbol ? `${cfg.data.collateralToken.symbol} collateral` : (cfg.type || 'cap'));
     targetKey = `${cfgId || marketId || item.data || 'cap'}:${String(rawCap)}`;
-    title = `Pending cap increase (${fn})`;
-    details = { ...details, configId: cfgId, configType: cfg.type || null, marketId, oldCap: oldCapHuman, newCap: newCapHuman, rawCap: String(rawCap) };
+    title = `Pending ${isRelative ? 'relative' : 'absolute'} cap increase for ${capLabel}`;
+    details = {
+      ...details, configId: cfgId, configType: cfg.type || null, marketId, marketLabel: capLabel, oldCap: oldCapHuman, newCap: newCapHuman, rawCap: String(rawCap),
+      capKind: isRelative ? 'relative' : 'absolute',
+      tvlShareAdded: capIncreaseShare(isRelative, newCapHuman, oldCapHuman, vaultContext.assetsHuman),
+      capWasZero: !oldCapHuman
+    };
   } else if (fn === 'SetForceDeallocatePenalty') {
     kind = 'pending_force_deallocate_penalty';
     const adapterAddress = decoded.adapterAddress || null;
@@ -772,10 +791,8 @@ export function buildWatchState(vault, allocations = [], verdict = null, extra =
   };
 }
 
-const VERDICT_RANK = { green: 0, yellow: 1, red: 2 };
-
 /**
- * Diffs consecutive watch states for a vault and returns derived events.
+ * Diffs consecutive watch states for a vault and returns bad debt and delisting events.
  * On first observation (prevState is null/undefined), returns [] so baseline state never triggers derived events.
  */
 export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Math.floor(Date.now() / 1000)) {
@@ -785,10 +802,9 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
 
   const vaultAddress = vaultContext.address;
   const chainId = Number(vaultContext.chainId ?? vaultContext.chain_id ?? 1);
-  const syncHourBucket = Math.floor(nowSec / 3600);
   const events = [];
 
-  const pushDerived = (kind, severity, title, details, transitionKey, stableBucket = false) => {
+  const pushDerived = (kind, severity, title, details, transitionKey) => {
     events.push({
       vault_address: vaultAddress,
       chain_id: chainId,
@@ -801,7 +817,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
       dedupe_key: buildDedupeKey('derived', {
         vaultAddress,
         kind,
-        bucket: stableBucket ? transitionKey : `${transitionKey}:${syncHourBucket}`
+        bucket: transitionKey
       }),
       occurred_at: nowSec,
       valid_at: null,
@@ -809,50 +825,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
     });
   };
 
-  // 1. Verdict transitions (ignore null/unknown)
-  const prevVerdict = String(prevState.verdict_level ?? prevState.verdictLevel ?? '').toLowerCase();
-  const nextVerdict = String(nextState.verdict_level ?? nextState.verdictLevel ?? '').toLowerCase();
-  if (prevVerdict in VERDICT_RANK && nextVerdict in VERDICT_RANK && prevVerdict !== nextVerdict) {
-    if (VERDICT_RANK[nextVerdict] > VERDICT_RANK[prevVerdict]) {
-      pushDerived(
-        'verdict_worsened',
-        nextVerdict === 'red' ? 'critical' : 'warning',
-        `Vault audit verdict worsened from ${prevVerdict.toUpperCase()} to ${nextVerdict.toUpperCase()}`,
-        { previousVerdict: prevVerdict, currentVerdict: nextVerdict },
-        `${prevVerdict}->${nextVerdict}`
-      );
-    } else {
-      pushDerived(
-        'verdict_improved',
-        'info',
-        `Vault audit verdict improved from ${prevVerdict.toUpperCase()} to ${nextVerdict.toUpperCase()}`,
-        { previousVerdict: prevVerdict, currentVerdict: nextVerdict },
-        `${prevVerdict}->${nextVerdict}`
-      );
-    }
-  }
-
-  // 2. MQI drop (>= 10 points in one sync interval, both numeric)
-  const prevMqi = prevState.mqi_percent ?? prevState.mqiPercent;
-  const nextMqi = nextState.mqi_percent ?? nextState.mqiPercent;
-  if (
-    typeof prevMqi === 'number' && Number.isFinite(prevMqi) &&
-    typeof nextMqi === 'number' && Number.isFinite(nextMqi) &&
-    !prevState.unpriced && !nextState.unpriced
-  ) {
-    const drop = Math.round((prevMqi - nextMqi) * 100) / 100;
-    if (drop >= 10) {
-      pushDerived(
-        'mqi_dropped',
-        'warning',
-        `Market Quality Index dropped by ${drop} points (${prevMqi}% to ${nextMqi}%)`,
-        { previousMqi: prevMqi, currentMqi: nextMqi, drop },
-        `${Math.round(prevMqi)}->${Math.round(nextMqi)}`
-      );
-    }
-  }
-
-  // 3. Bad debt appeared on a market of the vault
+  // Bad debt appeared on a market of the vault
   const prevBadDebt = prevState.bad_debt_markets ?? prevState.badDebtMarkets ?? {};
   const nextBadDebt = nextState.bad_debt_markets ?? nextState.badDebtMarkets ?? {};
   const prevUnverifiedBd = new Set(prevState.unverified_bad_debt_markets ?? prevState.unverifiedBadDebtMarkets ?? []);
@@ -868,69 +841,7 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
     }
   }
 
-  // 4. Flagged collateral / market added with material exposure
-  const prevFlagged = prevState.flagged_markets ?? prevState.flaggedMarkets ?? {};
-  const nextFlagged = nextState.flagged_markets ?? nextState.flaggedMarkets ?? {};
-  for (const [mKey, info] of Object.entries(nextFlagged)) {
-    if (!prevFlagged[mKey]) {
-      pushDerived(
-        'flagged_collateral_added',
-        'warning',
-        `Flagged collateral or market exposure added: ${info.label || mKey}`,
-        {
-          marketKey: mKey,
-          marketLabel: info.label || mKey,
-          collateralSymbol: info.collateralSymbol,
-          reasons: info.reasons || [],
-          supplyUsd: info.supplyUsd
-        },
-        mKey
-      );
-    }
-  }
-
-  // 5. TVL drop (warning at <= -15%, critical at <= -30%)
-  const prevTvl = prevState.total_assets_usd ?? prevState.totalAssetsUsd;
-  const nextTvl = nextState.total_assets_usd ?? nextState.totalAssetsUsd;
-  if (
-    typeof prevTvl === 'number' && Number.isFinite(prevTvl) && prevTvl > 0 &&
-    typeof nextTvl === 'number' && Number.isFinite(nextTvl) && nextTvl >= 0 &&
-    !prevState.unpriced && !nextState.unpriced
-  ) {
-    const changeRatio = Math.round(((nextTvl - prevTvl) / prevTvl) * 1e6) / 1e6;
-    if (changeRatio <= -0.15) {
-      const dropPct = Math.round(Math.abs(changeRatio) * 1000) / 10;
-      const severity = changeRatio <= -0.30 ? 'critical' : 'warning';
-      pushDerived(
-        'tvl_drop',
-        severity,
-        `Vault TVL dropped by ${dropPct}%`,
-        { previousTvlUsd: prevTvl, currentTvlUsd: nextTvl, dropPercent: dropPct },
-        `${severity}:${Math.round(dropPct)}`
-      );
-    }
-  }
-
-  // 6. Exit liquidity low (first falls under 20% from >= 20%)
-  const prevExit = prevState.instant_exit_percent ?? prevState.instantExitCapacityPercent;
-  const nextExit = nextState.instant_exit_percent ?? nextState.instantExitCapacityPercent;
-  if (
-    !prevState.exit_unknown && !nextState.exit_unknown &&
-    typeof prevExit === 'number' && Number.isFinite(prevExit) &&
-    typeof nextExit === 'number' && Number.isFinite(nextExit)
-  ) {
-    if (prevExit >= 20 && nextExit < 20) {
-      pushDerived(
-        'exit_liquidity_low',
-        'warning',
-        `Instant exit capacity fell below 20% (${nextExit}%)`,
-        { previousExitPercent: prevExit, currentExitPercent: nextExit },
-        `${Math.round(prevExit)}->${Math.round(nextExit)}`
-      );
-    }
-  }
-
-  // 7. Vault delisted
+  // Vault delisted
   const prevListed = prevState.is_listed ?? prevState.isListed;
   const nextListed = nextState.is_listed ?? nextState.isListed;
   if (prevListed !== null && prevListed !== undefined && nextListed !== null && nextListed !== undefined) {
@@ -941,11 +852,49 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
         'warning',
         vaultName ? `Vault ${vaultName} was delisted from Morpho registry` : 'Vault was delisted from Morpho registry',
         { vaultName, previousListed: 1, currentListed: 0 },
-        'delisted',
-        true
+        'delisted'
       );
     }
   }
 
   return events;
+}
+
+const TVL_OUTFLOW_WARNING = 0.15;
+const TVL_OUTFLOW_CRITICAL = 0.30;
+const TVL_OUTFLOW_MIN_USD = 500000;
+
+/**
+ * Detects a TVL outflow of the vault against the highest sample of the last 24 hours.
+ * The ratio is measured in token units, so a price move of the asset is not an outflow; USD only sets the size floor.
+ * Returns null when there is no sample in the window, the vault is unpriced or the drop is below the thresholds.
+ */
+export function detectTvlOutflow(vaultContext, currentAssets, windowMaxAssets, windowMaxUsd, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!vaultContext?.address || vaultContext.unpriced) return null;
+  if (!Number.isFinite(currentAssets) || !Number.isFinite(windowMaxAssets) || windowMaxAssets <= 0 || currentAssets < 0) return null;
+  const price = Number(vaultContext.assetPriceUsd ?? vaultContext.asset_price_usd ?? 0);
+  if (!(price > 0)) return null;
+  const dropRatio = (windowMaxAssets - currentAssets) / windowMaxAssets;
+  const droppedUsd = (Number(windowMaxUsd) || 0) - currentAssets * (windowMaxUsd / windowMaxAssets);
+  if (dropRatio < TVL_OUTFLOW_WARNING || droppedUsd < TVL_OUTFLOW_MIN_USD) return null;
+  const critical = dropRatio >= TVL_OUTFLOW_CRITICAL;
+  const dropPercent = Math.round(dropRatio * 1000) / 10;
+  const previousTvlUsd = Number(windowMaxUsd);
+  const currentTvlUsd = Math.round(previousTvlUsd * (1 - dropRatio));
+  const level = critical ? 'critical' : 'warning';
+  const dayBucket = Math.floor(nowSec / 86400);
+  return {
+    vault_address: vaultContext.address,
+    chain_id: Number(vaultContext.chainId ?? vaultContext.chain_id ?? 1),
+    kind: 'tvl_drop',
+    source: 'derived',
+    severity: level,
+    status: 'final',
+    title: `Vault TVL dropped by ${dropPercent}% in 24h`,
+    details_json: JSON.stringify({ previousTvlUsd, currentTvlUsd, dropPercent }),
+    dedupe_key: buildDedupeKey('derived', { vaultAddress: vaultContext.address, kind: 'tvl_drop', bucket: `${level}:${dayBucket}` }),
+    occurred_at: nowSec,
+    valid_at: null,
+    detected_at: nowSec
+  };
 }

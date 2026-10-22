@@ -4,7 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261016_a11y';
-import { initActivity, onFavoritesChanged } from './activity.js?v=20261020_activity1';
+import { initActivity, onFavoritesChanged } from './activity.js?v=20261022_tg3';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');

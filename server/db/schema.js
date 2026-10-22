@@ -101,37 +101,6 @@ CREATE INDEX IF NOT EXISTS idx_allocations_vault_supply ON vault_allocations(vau
 CREATE INDEX IF NOT EXISTS idx_allocations_market ON vault_allocations(market_unique_key);
 
 
--- Daily historical APYs for backtesting and Monte Carlo calibration
-CREATE TABLE IF NOT EXISTS daily_apys (
-  vault_address TEXT NOT NULL,
-  date TEXT NOT NULL,
-  apy REAL,
-  net_apy REAL,
-  PRIMARY KEY (vault_address, date),
-  FOREIGN KEY (vault_address) REFERENCES vaults(address) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_daily_apys_vault ON daily_apys(vault_address);
-
--- Periodic calculated snapshots of vault safety and liquidity metrics
-CREATE TABLE IF NOT EXISTS vault_snapshots (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  vault_address TEXT NOT NULL,
-  timestamp INTEGER NOT NULL,
-  twr_30d REAL,
-  twr_90d REAL,
-  twr_all_time REAL,
-  safety_score REAL,
-  discipline_score REAL,
-  liquidity_coverage REAL,
-  vault_dominance REAL,
-  instant_exit_capacity REAL,
-  peak_risk_spike REAL,
-  FOREIGN KEY (vault_address) REFERENCES vaults(address) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_snapshots_vault_time ON vault_snapshots(vault_address, timestamp);
-
 -- System state and sync tracking
 CREATE TABLE IF NOT EXISTS sync_state (
   key TEXT PRIMARY KEY,
@@ -139,7 +108,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
   updated_at INTEGER
 );
 
--- Vault events (admin actions, pending timelock configs, and derived state changes)
+-- Vault events (pending timelock changes, bad debt, TVL outflow, reallocations); history shown in the Vault Activity panel
 CREATE TABLE IF NOT EXISTS vault_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   vault_address TEXT NOT NULL,
@@ -160,11 +129,48 @@ CREATE INDEX IF NOT EXISTS idx_vault_events_vault_occurred ON vault_events(vault
 CREATE INDEX IF NOT EXISTS idx_vault_events_occurred ON vault_events(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_vault_events_status_valid ON vault_events(status, valid_at);
 
--- Per-vault baseline state for diffing derived metrics and tracking admin event watermarks
+-- Per-vault baseline for bad debt transitions and the admin event watermark
 CREATE TABLE IF NOT EXISTS vault_watch_state (
   vault_address TEXT PRIMARY KEY,
   state_json TEXT NOT NULL,
   updated_at INTEGER NOT NULL
+);
+
+-- One sample per vault and hour: windows for TVL outflow, 7-day Net APY average and the daily digest diff
+CREATE TABLE IF NOT EXISTS vault_samples (
+  vault_address TEXT NOT NULL,
+  hour_bucket INTEGER NOT NULL,
+  sampled_at INTEGER NOT NULL,
+  total_assets REAL,
+  total_assets_usd REAL,
+  net_apy REAL,
+  mqi_percent REAL,
+  verdict_level TEXT,
+  fee REAL,
+  is_listed INTEGER,
+  PRIMARY KEY (vault_address, hour_bucket)
+);
+
+-- Telegram subscriptions: sub_id is the secret the browser keeps, chat_id is set when the user presses Start in the bot
+CREATE TABLE IF NOT EXISTS tg_subscriptions (
+  sub_id TEXT PRIMARY KEY,
+  chat_id INTEGER,
+  vaults_json TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  bound_at INTEGER,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tg_subscriptions_chat ON tg_subscriptions(chat_id);
+
+-- What has already been sent to a subscription (event dedupe_key or digest:<date>), so a restart never repeats a message
+CREATE TABLE IF NOT EXISTS tg_sent (
+  sub_id TEXT NOT NULL,
+  message_key TEXT NOT NULL,
+  sent_at INTEGER NOT NULL,
+  PRIMARY KEY (sub_id, message_key),
+  FOREIGN KEY (sub_id) REFERENCES tg_subscriptions(sub_id) ON DELETE CASCADE
 );
 
 -- Morpho asset tags per collateral token (NULL = never fetched, 'null' = Morpho does not know the token)

@@ -459,8 +459,10 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
           }
           caps {
             items {
+              id
               allocation
               absoluteCap
+              relativeCap
               data {
                 ... on MarketV1CapData {
                   market {

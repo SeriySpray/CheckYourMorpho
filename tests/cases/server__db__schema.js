@@ -17,8 +17,8 @@ const EXPECTED_INDEXES = [
   'idx_vaults_version', 'idx_vaults_chain', 'idx_vaults_curator', 'idx_vaults_is_listed', 'idx_vaults_total_assets',
   'idx_vaults_liquidity', 'idx_vaults_listed_liq', 'idx_vaults_listed_assets', 'idx_vaults_listed_net_apy',
   'idx_vaults_listed_chain_liq', 'idx_vaults_listed_chain_assets', 'idx_markets_chain', 'idx_markets_loan_collateral',
-  'idx_allocations_vault', 'idx_allocations_vault_supply', 'idx_allocations_market', 'idx_daily_apys_vault', 'idx_snapshots_vault_time',
-  'idx_vault_events_vault_occurred', 'idx_vault_events_occurred', 'idx_vault_events_status_valid', 'idx_token_data_history_token'
+  'idx_allocations_vault', 'idx_allocations_vault_supply', 'idx_allocations_market',
+  'idx_vault_events_vault_occurred', 'idx_vault_events_occurred', 'idx_vault_events_status_valid', 'idx_tg_subscriptions_chat', 'idx_token_data_history_token'
 ];
 
 export default {
@@ -27,7 +27,7 @@ export default {
       const db = fresh(SCHEMA_SQL);
       const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name).sort();
       db.close();
-      assert.deepEqual(names, ['daily_apys', 'markets', 'sync_state', 'token_data', 'token_data_history', 'token_tags', 'vault_allocations', 'vault_events', 'vault_snapshots', 'vault_watch_state', 'vaults']);
+      assert.deepEqual(names, ['markets', 'sync_state', 'tg_sent', 'tg_subscriptions', 'token_data', 'token_data_history', 'token_tags', 'vault_allocations', 'vault_events', 'vault_samples', 'vault_watch_state', 'vaults']);
     }],
     ['створює всі очікувані індекси', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
@@ -57,14 +57,32 @@ export default {
       ins(db, 'vault_allocations', { vault_address: '0xa', market_unique_key: 'm1' });
       ins(db, 'vault_allocations', { vault_address: '0xa', market_unique_key: 'm2' });
       assert.throws(() => ins(db, 'vault_allocations', { vault_address: '0xa', market_unique_key: 'm1' }), /UNIQUE/);
-      ins(db, 'daily_apys', { vault_address: '0xa', date: '2026-01-01' });
-      assert.throws(() => ins(db, 'daily_apys', { vault_address: '0xa', date: '2026-01-01' }), /UNIQUE/);
       const ev = { vault_address: '0xa', chain_id: 1, kind: 'k', source: 's', severity: 'info', title: 't', details_json: '{}', dedupe_key: 'dup-1', occurred_at: 1, detected_at: 1 };
       ins(db, 'vault_events', ev);
       assert.throws(() => ins(db, 'vault_events', ev), /UNIQUE/);
       ins(db, 'vault_watch_state', { vault_address: '0xa', state_json: '{}', updated_at: 1 });
       assert.throws(() => ins(db, 'vault_watch_state', { vault_address: '0xa', state_json: '{}', updated_at: 2 }), /UNIQUE/);
       db.close();
+    }],
+    ['vault_samples: один запис на vault і годину, повторний запис тієї ж години замінює попередній', ({ SCHEMA_SQL }) => {
+      const db = fresh(SCHEMA_SQL);
+      const row = (t, assets) => ({ vault_address: '0xa', hour_bucket: 100, sampled_at: t, total_assets: assets });
+      ins(db, 'vault_samples', row(1, 5));
+      assert.throws(() => ins(db, 'vault_samples', row(2, 6)), /UNIQUE/);
+      db.prepare('INSERT OR REPLACE INTO vault_samples (vault_address, hour_bucket, sampled_at, total_assets) VALUES (?, ?, ?, ?)').run('0xa', 100, 3, 7);
+      const r = db.prepare('SELECT COUNT(*) AS c, MAX(total_assets) AS a FROM vault_samples').get(); db.close();
+      assert.deepEqual({ ...r }, { c: 1, a: 7 });
+    }],
+    ['tg_sent: одне повідомлення на підписку, видалення підписки прибирає її журнал відправок', ({ SCHEMA_SQL }) => {
+      const db = fresh(SCHEMA_SQL);
+      ins(db, 'tg_subscriptions', { sub_id: 's1', vaults_json: '[]', created_at: 1, updated_at: 1 });
+      ins(db, 'tg_sent', { sub_id: 's1', message_key: 'k', sent_at: 1 });
+      assert.throws(() => ins(db, 'tg_sent', { sub_id: 's1', message_key: 'k', sent_at: 2 }), /UNIQUE/);
+      assert.throws(() => ins(db, 'tg_sent', { sub_id: 'nope', message_key: 'k', sent_at: 2 }), /FOREIGN KEY/);
+      const s = db.prepare('SELECT active, chat_id, bound_at FROM tg_subscriptions').get();
+      assert.deepEqual({ ...s }, { active: 1, chat_id: null, bound_at: null });
+      db.prepare("DELETE FROM tg_subscriptions WHERE sub_id = 's1'").run();
+      assert.equal(count(db, 'tg_sent'), 0); db.close();
     }],
     ['NOT NULL: vault без chain_id і алокація без ринку відхиляються', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
@@ -73,29 +91,24 @@ export default {
       assert.throws(() => ins(db, 'vault_allocations', { vault_address: '0xb' }), /NOT NULL/);
       db.close();
     }],
-    ['зовнішні ключі увімкнені самою схемою: алокації, APY і знімки неіснуючого vault відхиляються', ({ SCHEMA_SQL }) => {
+    ['зовнішні ключі увімкнені самою схемою: алокація неіснуючого vault відхиляється', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
-      for (const [t, row] of [['vault_allocations', { vault_address: '0xnone', market_unique_key: 'm' }],
-        ['daily_apys', { vault_address: '0xnone', date: 'd' }], ['vault_snapshots', { vault_address: '0xnone', timestamp: 1 }]]) {
-        assert.throws(() => ins(db, t, row), /FOREIGN KEY/, t);
-      }
+      assert.throws(() => ins(db, 'vault_allocations', { vault_address: '0xnone', market_unique_key: 'm' }), /FOREIGN KEY/);
       db.close();
     }],
-    ['ON DELETE CASCADE: видалення vault прибирає алокації, APY і знімки, але зберігає ринки, інші vaults, події та watch_state', ({ SCHEMA_SQL }) => {
+    ['ON DELETE CASCADE: видалення vault прибирає алокації, але зберігає ринки, інші vaults, події та watch_state', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
       for (const a of ['0xa', '0xb']) {
         ins(db, 'vaults', { address: a, chain_id: 1 });
         ins(db, 'vault_allocations', { vault_address: a, market_unique_key: 'm' });
-        ins(db, 'daily_apys', { vault_address: a, date: 'd' });
-        ins(db, 'vault_snapshots', { vault_address: a, timestamp: 1 });
         ins(db, 'vault_events', { vault_address: a, chain_id: 1, kind: 'k', source: 's', severity: 'info', title: 't', details_json: '{}', dedupe_key: `k-${a}`, occurred_at: 1, detected_at: 1 });
         ins(db, 'vault_watch_state', { vault_address: a, state_json: '{}', updated_at: 1 });
       }
       ins(db, 'markets', { unique_key: 'm', chain_id: 1 });
       db.prepare("DELETE FROM vaults WHERE address = '0xa'").run();
-      const left = ['vault_allocations', 'daily_apys', 'vault_snapshots', 'vault_events', 'vault_watch_state', 'markets', 'vaults'].map(t => count(db, t));
+      const left = ['vault_allocations', 'vault_events', 'vault_watch_state', 'markets', 'vaults'].map(t => count(db, t));
       db.close();
-      assert.deepEqual(left, [1, 1, 1, 2, 2, 1, 1]);
+      assert.deepEqual(left, [1, 2, 2, 1, 1]);
     }],
     ['upsert vault (ON CONFLICT DO UPDATE) не видаляє його алокації', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
@@ -104,13 +117,6 @@ export default {
       db.prepare("INSERT INTO vaults (address, chain_id, name) VALUES ('0xa', 1, 'n') ON CONFLICT(address) DO UPDATE SET name = excluded.name").run();
       const c = count(db, 'vault_allocations'); db.close();
       assert.equal(c, 1);
-    }],
-    ['знімки отримують автоінкрементний id', ({ SCHEMA_SQL }) => {
-      const db = fresh(SCHEMA_SQL);
-      ins(db, 'vaults', { address: '0xa', chain_id: 1 });
-      ins(db, 'vault_snapshots', { vault_address: '0xa', timestamp: 1 }); ins(db, 'vault_snapshots', { vault_address: '0xa', timestamp: 2 });
-      const idsList = db.prepare('SELECT id FROM vault_snapshots ORDER BY id').all().map(r => r.id); db.close();
-      assert.deepEqual(idsList, [1, 2]);
     }],
     ['повторне виконання ідемпотентне і зберігає дані', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);

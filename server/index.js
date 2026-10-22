@@ -4,6 +4,7 @@ import { getDatabase, closeDatabase } from './db/database.js';
 import { handleRequest, DEFAULT_VAULTS_LIMIT } from './api/routes.js';
 import { syncAllVaults, isSyncing } from './services/syncEngine.js';
 import { startTokenDataLoop, stopTokenDataLoop } from './services/tokenCollector.js';
+import { startNotifications } from './services/telegramService.js';
 
 // Global process error safety guards
 // After an uncaught exception the process state is undefined: exit and let systemd restart the service
@@ -76,6 +77,9 @@ if (CONFIG.sync.intervalMs && CONFIG.sync.intervalMs > 0) {
 
 if (startTokenDataLoop(db)) console.log('[Scheduler] Token data collection scheduled.');
 
+let notifications = null;
+startNotifications(db).then(n => { notifications = n; });
+
 // Graceful shutdown handling
 export function handleShutdown(signal) {
   console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
@@ -84,6 +88,7 @@ export function handleShutdown(signal) {
     syncIntervalTimer = null;
   }
   stopTokenDataLoop();
+  notifications?.stop();
   server.close(() => {
     console.log('[Server] HTTP server closed.');
     try {

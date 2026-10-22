@@ -13,6 +13,7 @@ import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
+import { getBotInfo, upsertSubscription } from '../services/telegramService.js';
 import { getTokenData, listTokenData } from '../services/tokenCollector.js';
 import { evaluateToken, rankTokens, assetAddressOf, RISK_MODEL } from '../engine/tokenRisk.js';
 
@@ -418,6 +419,35 @@ export function readJsonBody(req, maxBytes = 262144) {
   });
 }
 
+/**
+ * Handler for GET /api/tg/config: whether Telegram alerts are available and which bot to open.
+ */
+export function handleGetTelegramConfig(req, res) {
+  sendJson(res, 200, getBotInfo(), req);
+}
+
+/**
+ * Handler for PUT /api/tg/subscription: stores the favorite vaults of a browser-generated sub_id.
+ */
+export async function handlePutTelegramSubscription(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req, 8192);
+  } catch (err) {
+    sendJson(res, err.status || 400, { error: err.message });
+    if (err.status === 413) req.destroy();
+    return;
+  }
+  try {
+    const result = upsertSubscription(getDatabase(), body?.sub_id, body?.vaults);
+    if (!result.ok) { sendJson(res, 400, { error: result.error }); return; }
+    sendJson(res, 200, { vaults: result.vaults, connected: result.connected });
+  } catch (err) {
+    console.error('[API] Failed to store the Telegram subscription:', err);
+    sendJson(res, 500, { error: 'Failed to store the subscription' });
+  }
+}
+
 // Map, not an object: sortBy=constructor or __proto__ must not resolve to a prototype property
 const SORT_FIELDS = new Map([
   ['liquidity_usd', 'liquidityUsd'],
@@ -779,18 +809,8 @@ const SEVERITY_EXPAND = new Map([
   ['critical', ['critical']]
 ]);
 
-/** Escapes special characters for safe inclusion in XML text and attribute values. */
-export function escapeXml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
 /**
- * Validates and normalizes query parameters for /api/events, /api/events/pending, and /api/events/feed.atom.
+ * Validates and normalizes query parameters for /api/events and /api/events/pending.
  */
 export function validateEventQueryParams(searchParams, options = {}) {
   const maxAddresses = options.maxAddresses || 50;
@@ -1073,117 +1093,6 @@ export function handleGetPendingEvents(req, res, url) {
 }
 
 /**
- * Handler for GET /api/events/feed.atom
- */
-export function handleGetEventsAtomFeed(req, res, url) {
-  try {
-    const parsed = validateEventQueryParams(url.searchParams, { defaultLimit: 50, maxLimit: 50 });
-    if (!parsed.ok) {
-      sendJson(res, 400, { error: parsed.error }, req);
-      return;
-    }
-
-    const db = getDatabase();
-    const conditions = [];
-    const params = [];
-
-    if (parsed.addresses.length === 1) {
-      conditions.push('ve.vault_address = ?');
-      params.push(parsed.addresses[0]);
-    } else if (parsed.addresses.length > 1) {
-      conditions.push('ve.vault_address IN (SELECT value FROM json_each(?))');
-      params.push(JSON.stringify(parsed.addresses));
-    }
-
-    if (parsed.since !== null) {
-      conditions.push('ve.occurred_at >= ?');
-      params.push(parsed.since);
-    }
-
-    if (parsed.kinds && parsed.kinds.length > 0) {
-      conditions.push('ve.kind IN (SELECT value FROM json_each(?))');
-      params.push(JSON.stringify(parsed.kinds));
-    }
-
-    if (parsed.severities && parsed.severities.length > 0) {
-      conditions.push('ve.severity IN (SELECT value FROM json_each(?))');
-      params.push(JSON.stringify(parsed.severities));
-    }
-
-    if (parsed.status !== null) {
-      conditions.push('ve.status = ?');
-      params.push(parsed.status);
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const rows = db.prepare(`
-      SELECT ve.*, v.name AS vault_name, v.symbol AS vault_symbol
-      FROM vault_events ve
-      LEFT JOIN vaults v ON v.address = ve.vault_address
-      ${whereClause}
-      ORDER BY ve.occurred_at DESC, ve.id DESC
-      LIMIT 50
-    `).all(...params);
-
-    const latestSec = rows.length > 0 ? Number(rows[0].occurred_at) : Math.floor(Date.now() / 1000);
-    const updatedIso = new Date(latestSec * 1000).toISOString();
-    const host = /^[a-zA-Z0-9.:_-]+$/.test(req.headers.host || '') ? req.headers.host : 'localhost';
-    const baseUrl = `http://${host}`;
-    const selfHref = `${baseUrl}${url.pathname}${url.search}`;
-
-    const entriesXml = rows.map(row => {
-      const ev = formatEventRow(row);
-      const entryUpdated = new Date(Number(ev.occurred_at) * 1000).toISOString();
-      const vaultLabel = ev.vault_name || ev.vault_symbol || ev.vault_address;
-      const entryTitle = `[${ev.severity.toUpperCase()}] ${vaultLabel}: ${ev.title}`;
-      const vaultLink = `${baseUrl}/?vault=${encodeURIComponent(ev.vault_address)}`;
-      const summaryText = `${ev.title} (kind: ${ev.kind}, status: ${ev.status}, chain: ${ev.chain_id})`;
-      return [
-        '  <entry>',
-        `    <id>urn:cym:event:${escapeXml(ev.dedupe_key)}</id>`,
-        `    <title>${escapeXml(entryTitle)}</title>`,
-        `    <updated>${escapeXml(entryUpdated)}</updated>`,
-        `    <link href="${escapeXml(vaultLink)}" rel="alternate" />`,
-        `    <category term="${escapeXml(ev.kind)}" label="${escapeXml(ev.severity)}" />`,
-        `    <summary type="text">${escapeXml(summaryText)}</summary>`,
-        '  </entry>'
-      ].join('\n');
-    }).join('\n');
-
-    const xml = [
-      '<?xml version="1.0" encoding="utf-8"?>',
-      '<feed xmlns="http://www.w3.org/2005/Atom">',
-      '  <id>urn:cym:feed:events</id>',
-      '  <title>CheckYourMorpho Vault Events</title>',
-      `  <updated>${escapeXml(updatedIso)}</updated>`,
-      `  <link href="${escapeXml(selfHref)}" rel="self" type="application/atom+xml" />`,
-      `  <link href="${escapeXml(baseUrl)}/" rel="alternate" type="text/html" />`,
-      entriesXml,
-      '</feed>'
-    ].filter(Boolean).join('\n') + '\n';
-
-    res.writeHead(200, {
-      'Content-Type': 'application/atom+xml; charset=utf-8',
-      'Content-Length': Buffer.byteLength(xml),
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    });
-    if (req.method === 'HEAD') {
-      res.end();
-      return;
-    }
-    res.end(xml);
-  } catch (err) {
-    console.error('[API] Failed to build Atom feed:', err);
-    sendJson(res, 500, { error: 'Failed to build Atom feed' }, req);
-  }
-}
-
-/**
  * Main HTTP request router.
  */
 export function handleRequest(req, res) {
@@ -1263,6 +1172,16 @@ export function handleRequest(req, res) {
     return;
   }
 
+  if (pathname === '/api/tg/config' && isRead) {
+    handleGetTelegramConfig(req, res);
+    return;
+  }
+
+  if (pathname === '/api/tg/subscription' && req.method === 'PUT') {
+    handlePutTelegramSubscription(req, res);
+    return;
+  }
+
   if (pathname === '/api/events' && isRead) {
     handleGetEvents(req, res, parsedUrl);
     return;
@@ -1270,11 +1189,6 @@ export function handleRequest(req, res) {
 
   if (pathname === '/api/events/pending' && isRead) {
     handleGetPendingEvents(req, res, parsedUrl);
-    return;
-  }
-
-  if (pathname === '/api/events/feed.atom' && isRead) {
-    handleGetEventsAtomFeed(req, res, parsedUrl);
     return;
   }
 

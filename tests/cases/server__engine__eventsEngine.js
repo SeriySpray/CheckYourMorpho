@@ -190,6 +190,30 @@ export default {
     }],
   ],
   diffPendingConfigs: [
+    ['cap V2: частка TVL, що додається, рахується від старого cap за config.id (relative - різниця часток, absolute - від активів vault-а)', ({ diffPendingConfigs }) => {
+      const ctx = baseCtx({ assetsHuman: 1_000_000, capsById: { c1: { absolute: 100_000, relative: 0.1 }, c2: { absolute: 0, relative: 0 } } });
+      const item = (fn, id, cap) => ({ functionName: fn, validAt: NOW + 3600, txHash: '0xh' + id, decodedData: { __typename: 'VaultV2IncreaseCapPendingData', cap, config: { id, type: 'Collateral', data: { collateralToken: { symbol: 'cbBTC' } } } } });
+      const { events } = diffPendingConfigs(ctx, [
+        item('IncreaseRelativeCap', 'c1', '250000000000000000'),
+        item('IncreaseAbsoluteCap', 'c1', String(300_000 * 1e6)),
+        item('IncreaseAbsoluteCap', 'c2', String(50_000 * 1e6)),
+        item('IncreaseAbsoluteCap', 'cX', String(50_000 * 1e6))
+      ], [], NOW);
+      assert.deepEqual(events.slice(0, 2).map(e => e.title), ['Pending relative cap increase for cbBTC collateral', 'Pending absolute cap increase for cbBTC collateral']);
+      const d = events.map(e => JSON.parse(e.details_json));
+      assert.equal(d[0].capKind, 'relative'); assert.ok(Math.abs(d[0].tvlShareAdded - 0.15) < 1e-9); assert.equal(d[0].capWasZero, false);
+      assert.equal(d[1].capKind, 'absolute'); assert.ok(Math.abs(d[1].tvlShareAdded - 0.2) < 1e-9);
+      assert.equal(d[2].capWasZero, true); assert.ok(Math.abs(d[2].tvlShareAdded - 0.05) < 1e-9);
+      assert.equal(d[3].oldCap, null); assert.equal(d[3].capWasZero, true);
+    }],
+    ['cap V1 (SetCap): старе значення з caps vault-а, частка від активів, новий ринок = cap був 0', ({ diffPendingConfigs }) => {
+      const ctx = baseCtx({ assetsHuman: 1_000_000, caps: { '0xm1': 100_000 } });
+      const item = (m, cap) => ({ functionName: 'SetCap', validAt: NOW + 3600, txHash: '0xh' + m, decodedData: { __typename: 'VaultSetCapPendingData', supplyCap: String(cap * 1e6), market: { marketId: m, loanAsset: { symbol: 'USDC', decimals: 6 }, collateralAsset: { symbol: 'wstETH' } } } });
+      const { events } = diffPendingConfigs(ctx, [item('0xm1', 400_000), item('0xnew', 200_000)], [], NOW);
+      const d = events.map(e => JSON.parse(e.details_json));
+      assert.ok(Math.abs(d[0].tvlShareAdded - 0.3) < 1e-9); assert.equal(d[0].capWasZero, false);
+      assert.equal(d[1].capWasZero, true); assert.ok(Math.abs(d[1].tvlShareAdded - 0.2) < 1e-9);
+    }],
     ['мапить pendingConfigs для V1 і V2 та підвищує серйозність до critical при зниженні timelock, видаленні guardian або рості cap > 2x', ({ diffPendingConfigs }) => {
       const pending = [
         {
@@ -310,50 +334,12 @@ export default {
       const next = { verdict_level: 'red', mqi_percent: 40, total_assets_usd: 1000 };
       assert.deepEqual(diffDerivedState(null, next, baseCtx(), NOW), []);
     }],
-    ['виявляє verdict_worsened (warning для yellow, critical для red) і verdict_improved (info), ігноруючи unknown/null', ({ diffDerivedState }) => {
-      const e1 = diffDerivedState({ ...M, verdict_level: 'green' }, { ...M, verdict_level: 'yellow' }, baseCtx(), NOW);
-      assert.equal(e1.length, 1);
-      assert.equal(e1[0].kind, 'verdict_worsened');
-      assert.equal(e1[0].severity, 'warning');
-
-      const e2 = diffDerivedState({ ...M, verdict_level: 'yellow' }, { ...M, verdict_level: 'red' }, baseCtx(), NOW);
-      assert.equal(e2.length, 1);
-      assert.equal(e2[0].kind, 'verdict_worsened');
-      assert.equal(e2[0].severity, 'critical');
-
-      const e3 = diffDerivedState({ ...M, verdict_level: 'red' }, { ...M, verdict_level: 'green' }, baseCtx(), NOW);
-      assert.equal(e3.length, 1);
-      assert.equal(e3[0].kind, 'verdict_improved');
-      assert.equal(e3[0].severity, 'info');
-
-      assert.deepEqual(diffDerivedState({ ...M, verdict_level: null }, { ...M, verdict_level: 'red' }, baseCtx(), NOW), []);
+    ['зміни verdict, MQI, TVL, exit і flagged-ринків більше не створюють подій (їх бере дайджест зі знімків)', ({ diffDerivedState }) => {
+      const prev = { verdict_level: 'green', mqi_percent: 95, total_assets_usd: 1_000_000, instant_exit_percent: 25, flagged_markets: {}, unpriced: false, exit_unknown: false };
+      const next = { verdict_level: 'red', mqi_percent: 60, total_assets_usd: 500_000, instant_exit_percent: 5, flagged_markets: { '0xm2': { label: 'x', supplyUsd: 1 } }, unpriced: false, exit_unknown: false };
+      assert.deepEqual(diffDerivedState(prev, next, baseCtx(), NOW), []);
     }],
-    ['виявляє mqi_dropped при падінні >= 10 п., tvl_drop (-15% warning, -30% critical) та exit_liquidity_low (<20%)', ({ diffDerivedState }) => {
-      const prev = {
-        mqi_percent: 95,
-        total_assets_usd: 1_000_000,
-        instant_exit_percent: 25,
-        unpriced: false,
-        exit_unknown: false
-      };
-      const next = {
-        mqi_percent: 82, // -13 pts
-        total_assets_usd: 680_000, // -32%
-        instant_exit_percent: 14, // < 20%
-        unpriced: false,
-        exit_unknown: false
-      };
-      const evs = diffDerivedState(prev, next, baseCtx(), NOW);
-      assert.deepEqual(
-        evs.map(e => [e.kind, e.severity]),
-        [
-          ['mqi_dropped', 'warning'],
-          ['tvl_drop', 'critical'],
-          ['exit_liquidity_low', 'warning']
-        ]
-      );
-    }],
-    ['виявляє bad_debt_appeared, flagged_collateral_added і vault_delisted; collateral_class_share_crossed більше не створюється', ({ diffDerivedState }) => {
+    ['виявляє bad_debt_appeared і vault_delisted; вдруге ту саму подію не створює (стабільний dedupe_key)', ({ diffDerivedState }) => {
       const prev = { ...M, bad_debt_markets: {}, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 };
       const next = {
         ...M,
@@ -363,8 +349,43 @@ export default {
         is_listed: 0
       };
       const evs = diffDerivedState(prev, next, baseCtx(), NOW);
-      assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical'], ['flagged_collateral_added', 'warning'], ['vault_delisted', 'warning']]);
-      assert.equal(JSON.parse(evs[1].details_json).collateralSymbol, 'sUSDe');
+      assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical'], ['vault_delisted', 'warning']]);
+      const again = diffDerivedState(prev, next, baseCtx(), NOW + 3 * 3600);
+      assert.deepEqual(again.map(e => e.dedupe_key), evs.map(e => e.dedupe_key));
+    }],
+  ],
+  detectTvlOutflow: [
+    ['падіння 20% у токенах і >= $500k -> warning з деталями для клієнта', ({ detectTvlOutflow }) => {
+      const e = detectTvlOutflow(baseCtx(), 8_000_000, 10_000_000, 10_000_000, NOW);
+      assert.equal(e.kind, 'tvl_drop'); assert.equal(e.severity, 'warning'); assert.equal(e.source, 'derived');
+      assert.deepEqual(JSON.parse(e.details_json), { previousTvlUsd: 10_000_000, currentTvlUsd: 8_000_000, dropPercent: 20 });
+    }],
+    ['падіння 30% і більше -> critical', ({ detectTvlOutflow }) => {
+      assert.equal(detectTvlOutflow(baseCtx(), 6_900_000, 10_000_000, 10_000_000, NOW).severity, 'critical');
+    }],
+    ['14.9% нижче порога, а 15% на порозі', ({ detectTvlOutflow }) => {
+      assert.equal(detectTvlOutflow(baseCtx(), 8_510_000, 10_000_000, 10_000_000, NOW), null);
+      assert.ok(detectTvlOutflow(baseCtx(), 8_500_000, 10_000_000, 10_000_000, NOW));
+    }],
+    ['менше $500k втрачено -> null, навіть якщо відсоток великий', ({ detectTvlOutflow }) => {
+      assert.equal(detectTvlOutflow(baseCtx(), 1_000, 2_000_000 / 1000, 2_000_000 / 1000, NOW), null);
+      assert.ok(detectTvlOutflow(baseCtx(), 1_000_000, 2_000_000, 2_000_000, NOW));
+    }],
+    ['падіння ціни активу не рахується: токенів стільки ж -> null', ({ detectTvlOutflow }) => {
+      assert.equal(detectTvlOutflow(baseCtx(), 10_000_000, 10_000_000, 30_000_000, NOW), null);
+    }],
+    ['без вікна, unpriced, без ціни або нечислові значення -> null', ({ detectTvlOutflow }) => {
+      assert.equal(detectTvlOutflow(baseCtx(), 5, 0, 0, NOW), null);
+      assert.equal(detectTvlOutflow(baseCtx(), 5, NaN, 10, NOW), null);
+      assert.equal(detectTvlOutflow(baseCtx({ unpriced: true }), 5_000_000, 10_000_000, 10_000_000, NOW), null);
+      assert.equal(detectTvlOutflow(baseCtx({ assetPriceUsd: 0 }), 5_000_000, 10_000_000, 10_000_000, NOW), null);
+      assert.equal(detectTvlOutflow(null, 5, 10, 10, NOW), null);
+    }],
+    ['dedupe: той самий рівень у ту саму добу має однаковий ключ, критичний - інший', ({ detectTvlOutflow }) => {
+      const a = detectTvlOutflow(baseCtx(), 8_000_000, 10_000_000, 10_000_000, NOW);
+      const b = detectTvlOutflow(baseCtx(), 7_900_000, 10_000_000, 10_000_000, NOW + 3600);
+      const c = detectTvlOutflow(baseCtx(), 6_000_000, 10_000_000, 10_000_000, NOW + 7200);
+      assert.equal(a.dedupe_key, b.dedupe_key); assert.notEqual(a.dedupe_key, c.dedupe_key);
     }],
   ],
 };

@@ -121,7 +121,7 @@ async function readLimited(res, max) {
  * A GET by default; with `body` a JSON POST (JSON-RPC). A failure is a result (`status` 0 and `error`), never an exception.
  * @returns {{get(url:string, opts?:{maxBytes?:number, body?:string}):Promise<{status:number, text:string, ms:number, error?:string}>}}
  */
-export function createFetcher({ fetchImpl = globalThis.fetch, sleep = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+export function createFetcher({ fetchImpl = globalThis.fetch, sleep = ms => new Promise(r => setTimeout(r, ms)), hostDelayMs = HOST_DELAY_MS } = {}) {
   const tails = new Map();
   async function once(url, maxBytes, body) {
     const init = body === undefined ? { headers: HEADERS } : { method: 'POST', headers: { ...HEADERS, 'content-type': 'application/json' }, body };
@@ -144,7 +144,7 @@ export function createFetcher({ fetchImpl = globalThis.fetch, sleep = ms => new 
     } catch (err) {
       return { status: 0, text: '', ms: Date.now() - t0, error: String(err?.message ?? err).slice(0, 120) };
     } finally {
-      try { await sleep(HOST_DELAY_MS[host] ?? 300); } finally { release(); }
+      try { await sleep(hostDelayMs[host] ?? 300); } finally { release(); }
     }
   }
   return { get };

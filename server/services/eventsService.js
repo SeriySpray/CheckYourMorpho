@@ -4,11 +4,13 @@ import {
   diffAdminEvents,
   diffPendingConfigs,
   buildWatchState,
-  diffDerivedState
+  diffDerivedState,
+  detectTvlOutflow
 } from '../engine/eventsEngine.js';
 import { formatUnits } from './normalizers.js';
 
 const DEFAULT_RETENTION_DAYS = 180;
+const SAMPLE_RETENTION_SECONDS = 8 * 86400;
 
 const computePeerSupplyUsd = (marketRows, vaultAddress, alloc) => {
   let total = 0;
@@ -43,7 +45,8 @@ export function pruneOldEvents(db, nowSec = Math.floor(Date.now() / 1000), reten
 }
 
 /**
- * Computes and persists vault events (admin events, pending timelock configs, and derived state transitions)
+ * Computes and persists vault events (admin events, pending timelock configs, bad debt, delisting and 24h TVL outflow),
+ * hourly vault samples
  * and updates vault_watch_state in a single SQLite transaction.
  */
 export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options = {}) {
@@ -104,6 +107,13 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     pendingByVault.get(k).push(r);
   }
 
+  const windowMaxStmt = db.prepare(`
+    SELECT total_assets AS assets, total_assets_usd AS usd
+    FROM vault_samples
+    WHERE vault_address = ? AND sampled_at >= ? AND total_assets > 0
+    ORDER BY total_assets DESC LIMIT 1
+  `);
+  const samplesToWrite = [];
   const eventsToInsert = [];
   const statusUpdates = [];
   const nextWatchStates = [];
@@ -122,8 +132,15 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
         capsMap[a.market_unique_key] = Number(a.supply_cap_human);
       }
     }
+    const capsById = {};
     if (Array.isArray(rawV2?.caps?.items)) {
       for (const capItem of rawV2.caps.items) {
+        if (capItem?.id) {
+          capsById[capItem.id] = {
+            absolute: formatUnits(capItem.absoluteCap ?? 0, vault.asset_decimals ?? 18),
+            relative: Number(capItem.relativeCap ?? 0) / 1e18
+          };
+        }
         const mId = capItem?.data?.market?.marketId;
         const decimals = capItem?.data?.market?.loanAsset?.decimals ?? vault.asset_decimals ?? 18;
         if (mId && capItem.absoluteCap !== undefined && capItem.absoluteCap !== null) {
@@ -146,6 +163,8 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       guardian: rawV1?.state?.guardian ?? prevState?.guardian ?? null,
       timelocks: rawV2?.timelocks || [],
       caps: capsMap,
+      capsById,
+      assetsHuman: Number(vault.total_assets || 0) / (10 ** (Number.isFinite(Number(vault.asset_decimals)) ? Number(vault.asset_decimals) : 18)),
       allocations: allocs
     };
 
@@ -184,6 +203,23 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
 
     const derivedEvents = diffDerivedState(prevState, nextState, vaultContext, nowSec);
     eventsToInsert.push(...derivedEvents);
+
+    const decimals = Number.isFinite(Number(vault.asset_decimals)) ? Number(vault.asset_decimals) : 18;
+    const assetsTokens = vault.total_assets !== null && vault.total_assets !== undefined ? Number(vault.total_assets) / (10 ** decimals) : null;
+    const priced = !nextState.unpriced;
+    if (priced && assetsTokens !== null && Number.isFinite(assetsTokens)) {
+      const win = windowMaxStmt.get(vault.address, nowSec - 86400);
+      if (win) {
+        const outflow = detectTvlOutflow({ ...vaultContext, unpriced: false }, assetsTokens, win.assets, win.usd, nowSec);
+        if (outflow) eventsToInsert.push(outflow);
+      }
+    }
+    samplesToWrite.push([
+      vault.address, Math.floor(nowSec / 3600), nowSec,
+      assetsTokens !== null && Number.isFinite(assetsTokens) ? assetsTokens : null,
+      priced ? nextState.total_assets_usd : null,
+      vault.net_apy ?? null, nextState.mqi_percent, nextState.verdict_level, nextState.fee, nextState.is_listed
+    ]);
 
     nextWatchStates.push({
       vaultAddress: vault.address,
@@ -250,6 +286,12 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       updated_at = excluded.updated_at
   `);
 
+  const upsertSampleStmt = db.prepare(`
+    INSERT OR REPLACE INTO vault_samples (
+      vault_address, hour_bucket, sampled_at, total_assets, total_assets_usd, net_apy, mqi_percent, verdict_level, fee, is_listed
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
   const deleteWatchStmt = db.prepare(`
     DELETE FROM vault_watch_state
     WHERE vault_address = ?
@@ -288,6 +330,9 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       upsertWatchStmt.run(ws.vaultAddress, ws.stateJson, nowSec);
     }
 
+    for (const sample of samplesToWrite) upsertSampleStmt.run(...sample);
+    db.prepare('DELETE FROM vault_samples WHERE sampled_at < ?').run(nowSec - SAMPLE_RETENTION_SECONDS);
+
     for (const delAddr of watchAddressesToDelete) {
       deleteWatchStmt.run(delAddr);
     }
@@ -304,6 +349,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     insertedCount,
     updatedPendingCount,
     prunedCount,
-    vaultsProcessed: vaults.length
+    vaultsProcessed: vaults.length,
+    samplesWritten: samplesToWrite.length
   };
 }

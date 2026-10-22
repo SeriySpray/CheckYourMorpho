@@ -68,7 +68,7 @@ export default {
     }],
     ['схема містить усі таблиці', ({ getDatabase }) => {
       const names = getDatabase().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
-      for (const t of ['vaults', 'markets', 'vault_allocations', 'daily_apys', 'vault_snapshots', 'sync_state', 'vault_events', 'vault_watch_state']) assert.ok(names.includes(t), t);
+      for (const t of ['vaults', 'markets', 'vault_allocations', 'sync_state', 'vault_events', 'vault_watch_state', 'vault_samples']) assert.ok(names.includes(t), t);
     }],
     ['створює відсутню вкладену теку для файлу БД', async () => {
       const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cym-db-')), 'a', 'b', 'new.db');
@@ -88,7 +88,7 @@ export default {
         assert.ok(cols(db, 'markets').includes(c), `markets.${c}`);
       }
       assert.ok(cols(db, 'vault_allocations').includes('via_vault'));
-      for (const t of ['daily_apys', 'vault_snapshots', 'sync_state', 'vault_events', 'vault_watch_state']) assert.ok(cols(db, t).length > 0, t);
+      for (const t of ['sync_state', 'vault_events', 'vault_watch_state', 'vault_samples']) assert.ok(cols(db, t).length > 0, t);
     })],
     ['мігрує стару схему: наявні рядки отримують значення за замовчуванням (liquidity і bad debt невідомі, null), дані збережено', async () => withDbAt(oldDbFile(), async ({ getDatabase }) => {
       const db = getDatabase();

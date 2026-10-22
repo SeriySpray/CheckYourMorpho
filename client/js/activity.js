@@ -45,9 +45,12 @@ const EVENT_KINDS = Object.freeze([
 
 const STORAGE_KEY_SEEN = 'cym_activity_seen_ts';
 const STORAGE_KEY_SHOW_REALLOC = 'cym_activity_show_reallocations';
+const STORAGE_KEY_TG_SUB = 'cym_tg_sub';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 let seenTsMemoryFallback = null;
+let tgUsername = null;
+let tgSyncTimer = null;
 let showReallocMemoryFallback = null;
 
 // External dependencies injected by app.js
@@ -745,12 +748,72 @@ export function buildPendingEventsUrl({ addresses = [], kinds = [], limit = null
 }
 
 /**
- * Builds URL for GET /api/events/feed.atom with at most 50 favorites.
+ * Creates a random subscription id (128 bits, base64url, 22 characters) for the Telegram bot deep link.
  */
-export function buildAtomFeedUrl(addresses = []) {
-  const valid = (Array.isArray(addresses) ? addresses : []).filter(isValidAddress).slice(0, 50);
-  if (valid.length === 0) return '';
-  return `/api/events/feed.atom?addresses=${valid.join(',')}`;
+export function newSubId(cryptoObj = globalThis.crypto) {
+  const bytes = cryptoObj.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Builds the link that opens the bot and binds the chat to the subscription id.
+ */
+export function buildTelegramUrl(username, subId) {
+  return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(subId)}`;
+}
+
+/**
+ * The subscription code the bot puts in the site link (?tg=...) when a chat is not connected yet; null when absent or malformed.
+ */
+export function readTelegramPairing(search) {
+  const code = new URLSearchParams(search).get('tg');
+  return code && /^[A-Za-z0-9_-]{16,64}$/.test(code) ? code : null;
+}
+
+function readSubId() {
+  try { return localStorage.getItem(STORAGE_KEY_TG_SUB); } catch { return null; }
+}
+
+/**
+ * Sends the current favorites to the server under this browser's subscription id (created on first use).
+ * Runs when the panel renders, so the Telegram link is a plain navigation and not a popup after an await.
+ */
+async function syncTelegram() {
+  if (!tgUsername) return null;
+  let subId = readSubId();
+  if (!subId) {
+    subId = newSubId();
+    try { localStorage.setItem(STORAGE_KEY_TG_SUB, subId); } catch { /* the id is only needed for this session then */ }
+  }
+  const vaults = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress).slice(0, 100);
+  try {
+    await fetch('/api/tg/subscription', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sub_id: subId, vaults }),
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch { /* the next render or favorites change retries */ }
+  return subId;
+}
+
+/**
+ * Keeps the bot's list equal to the favorites: a browser that has a subscription id pushes every change (debounced).
+ */
+function scheduleTelegramSync() {
+  if (!tgUsername || !readSubId()) return;
+  clearTimeout(tgSyncTimer);
+  tgSyncTimer = setTimeout(() => syncTelegram(), 1500);
+}
+
+async function loadTelegramConfig() {
+  try {
+    const res = await deps.apiFetch('/api/tg/config');
+    const cfg = res.ok ? await res.json() : null;
+    tgUsername = cfg && cfg.enabled && typeof cfg.username === 'string' ? cfg.username : null;
+  } catch {
+    tgUsername = null;
+  }
 }
 
 /**
@@ -896,7 +959,7 @@ function renderActivityPanel() {
   const tabUpcoming = document.getElementById('activity-tab-upcoming');
   const tabHistory = document.getElementById('activity-tab-history');
   const updatedAt = document.getElementById('activity-updated-at');
-  const atomLink = document.getElementById('activity-atom-link');
+  const tgLink = document.getElementById('activity-tg-link');
   const reallocCb = document.getElementById('activity-show-realloc-cb');
 
   if (upcomingCount) {
@@ -928,14 +991,15 @@ function renderActivityPanel() {
   if (updatedAt) {
     updatedAt.textContent = formatUpdatedAge(lastFetchTs);
   }
-  if (atomLink) {
-    const favs = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress);
-    if (activeScope === 'favorites' && favs.length > 0) {
-      atomLink.href = buildAtomFeedUrl(favs);
-      atomLink.classList.remove('hidden');
-    } else {
-      atomLink.classList.add('hidden');
-      atomLink.removeAttribute('href');
+  if (tgLink) {
+    const hasFavs = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).some(isValidAddress);
+    tgLink.classList.toggle('hidden', !(tgUsername && hasFavs));
+    if (tgUsername && hasFavs) {
+      clearTimeout(tgSyncTimer);
+      tgSyncTimer = setTimeout(async () => {
+        const subId = await syncTelegram();
+        if (subId) tgLink.href = buildTelegramUrl(tgUsername, subId);
+      }, 300);
     }
   }
 
@@ -1173,6 +1237,7 @@ async function fetchActivityData(forceRefetch = false) {
  */
 export function onFavoritesChanged() {
   fetchActivityData(true);
+  scheduleTelegramSync();
 }
 
 /**
@@ -1287,6 +1352,16 @@ function setupActivityEvents() {
 export async function initActivity(dependencies = {}) {
   deps = Object.assign(deps, dependencies);
   setupActivityEvents();
+  // Opened from the bot: keep its code, so the favorites are pushed to that chat from now on, and clear it from the address bar
+  const paired = readTelegramPairing(globalThis.location?.search ?? '');
+  if (paired) {
+    try { localStorage.setItem(STORAGE_KEY_TG_SUB, paired); } catch { /* the code is then used only until the page is closed */ }
+    try { const url = new URL(location.href); url.searchParams.delete('tg'); history.replaceState(null, '', url); } catch { /* the address bar keeps the code */ }
+  }
+  loadTelegramConfig().then(() => {
+    scheduleTelegramSync();
+    if (isPanelOpen) renderActivityPanel();
+  });
   // Initial fetch for unseen count badge
   return fetchActivityData();
 }

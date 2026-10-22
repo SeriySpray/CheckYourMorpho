@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { makeElement, makeClassList } from '../clientEnv.js';
-import { jsonResponse } from '../fixtures.js';
+import { jsonResponse, withFetch } from '../fixtures.js';
 
 // Setup fake DOM helper for activity tests
 function setupFakeDom(m) {
@@ -38,7 +38,6 @@ function setupFakeDom(m) {
   const tabUpcoming = getOrMake('activity-tab-upcoming', 'button');
   const tabHistory = getOrMake('activity-tab-history', 'button');
   const updatedAt = getOrMake('activity-updated-at', 'span');
-  const atomLink = getOrMake('activity-atom-link', 'a');
   const reallocCb = getOrMake('activity-show-realloc-cb', 'input');
   const closeBtn = getOrMake('activity-close-btn', 'button');
 
@@ -60,7 +59,7 @@ function setupFakeDom(m) {
 
   return {
     btn, badge, panel, heading, explorerHeading: heading, list, container, upcomingCount,
-    scopeFav, scopeAll, tabUpcoming, tabHistory, updatedAt, atomLink,
+    scopeFav, scopeAll, tabUpcoming, tabHistory, updatedAt,
     reallocCb, closeBtn,
     searchBox, explorerSearchBox: searchBox,
     filtersGrid, explorerFiltersGrid: filtersGrid,
@@ -599,17 +598,6 @@ export default {
     }]
   ],
 
-  buildAtomFeedUrl: [
-    ['будує URL стрічки atom максимум для 50 адрес', ({ buildAtomFeedUrl }) => {
-      const addrs = Array.from({ length: 60 }, (_, i) => `0x${String(i).padStart(40, '0')}`);
-      const url = buildAtomFeedUrl(addrs);
-      assert.ok(url.startsWith('/api/events/feed.atom?addresses='));
-      const parsedAddrs = decodeURIComponent(url.split('addresses=')[1]).split(',');
-      assert.equal(parsedAddrs.length, 50);
-      assert.equal(buildAtomFeedUrl([]), '');
-    }]
-  ],
-
   buildEventRowViewModel: [
     ['будує view-model з ворожими рядками, зберігаючи їх безпечними', ({ buildEventRowViewModel }) => {
       const hostileEvent = {
@@ -894,6 +882,105 @@ export default {
       await onFavoritesChanged();
       assert.equal(fetched, true);
     }]
+  ],
+
+  newSubId: [
+    ['22 символи base64url без доповнення, придатні для параметра start (до 64 символів [A-Za-z0-9_-]); два виклики різні', ({ newSubId }) => {
+      const a = newSubId(); const b = newSubId();
+      assert.match(a, /^[A-Za-z0-9_-]{22}$/);
+      assert.notEqual(a, b);
+    }],
+    ['кодує байти джерела випадковості (0xff.. -> "_" без "+", "/" і "=")', ({ newSubId }) => {
+      const id = newSubId({ getRandomValues: arr => arr.fill(0xfb) });
+      assert.equal(id, '-_v7-_v7-_v7-_v7-_v7-w');
+      assert.ok(!/[+/=]/.test(id));
+    }],
+  ],
+
+  readTelegramPairing: [
+    ['code from ?tg= when it is 16-64 characters of [A-Za-z0-9_-]; anything else (absent, short, long, other characters) gives null', ({ readTelegramPairing: f }) => {
+      assert.equal(f('?tg=abcdefghijklmnopqrstuv'), 'abcdefghijklmnopqrstuv'); assert.equal(f('?x=1&tg=A_b-C1234567890123'), 'A_b-C1234567890123');
+      for (const bad of ['', '?tg=', '?tg=short', '?tg=' + 'a'.repeat(65), '?tg=has%20space1234567890', '?tg=<script>alert(1)</script>', '?other=abcdefghijklmnopqrstuv']) assert.equal(f(bad), null, bad);
+    }],
+  ],
+
+  buildTelegramUrl: [
+    ['посилання на бота з кодом підписки, спецсимволи екрануються', ({ buildTelegramUrl }) => {
+      assert.equal(buildTelegramUrl('cym_bot', 'abc-_123'), 'https://t.me/cym_bot?start=abc-_123');
+      assert.equal(buildTelegramUrl('a b', 'x&y'), 'https://t.me/a%20b?start=x%26y');
+    }],
+  ],
+
+  readSubId: [
+    ['повертає збережений id або null; недоступне сховище не кидає виняток', ({ readSubId }) => {
+      localStorage.removeItem('cym_tg_sub');
+      assert.equal(readSubId(), null);
+      localStorage.setItem('cym_tg_sub', 'abc');
+      assert.equal(readSubId(), 'abc');
+      localStorage.removeItem('cym_tg_sub');
+      const saved = localStorage.getItem;
+      localStorage.getItem = () => { throw new Error('blocked'); };
+      try { assert.equal(readSubId(), null); } finally { localStorage.getItem = saved; }
+    }],
+  ],
+
+  loadTelegramConfig: [
+    ['бот увімкнено -> tgUsername; вимкнено, не ok, не JSON або мережева помилка -> null', async ({ loadTelegramConfig, __state: s }) => {
+      const fake = body => ({ apiFetch: async () => body });
+      s.deps.apiFetch = async () => jsonResponse({ enabled: true, username: 'cym_bot' });
+      await loadTelegramConfig(); assert.equal(s.tgUsername, 'cym_bot');
+      s.deps.apiFetch = async () => jsonResponse({ enabled: false, username: null });
+      await loadTelegramConfig(); assert.equal(s.tgUsername, null);
+      s.tgUsername = 'x'; s.deps.apiFetch = async () => ({ ok: false });
+      await loadTelegramConfig(); assert.equal(s.tgUsername, null);
+      s.tgUsername = 'x'; s.deps.apiFetch = async () => { throw new Error('offline'); };
+      await loadTelegramConfig(); assert.equal(s.tgUsername, null);
+      s.tgUsername = 'x'; s.deps.apiFetch = async () => jsonResponse({ enabled: true, username: 42 });
+      await loadTelegramConfig(); assert.equal(s.tgUsername, null);
+      void fake;
+    }],
+  ],
+
+  syncTelegram: [
+    ['без імені бота нічого не відправляє і повертає null', async ({ syncTelegram, __state: s }) => {
+      let calls = 0;
+      s.tgUsername = null;
+      const r = await withFetch(async () => { calls++; return jsonResponse({}); }, () => syncTelegram());
+      assert.equal(r, null); assert.equal(calls, 0);
+    }],
+    ['створює і зберігає id, PUT з валідними адресами; наступний виклик використовує той самий id', async ({ syncTelegram, __state: s }) => {
+      localStorage.removeItem('cym_tg_sub');
+      s.tgUsername = 'cym_bot';
+      s.deps.getPinnedAddresses = () => ['0x1111111111111111111111111111111111111111', 'not-an-address'];
+      let put;
+      const subId = await withFetch(async (url, init) => { put = { url, init }; return jsonResponse({ vaults: 1 }); }, () => syncTelegram());
+      assert.match(subId, /^[A-Za-z0-9_-]{22}$/);
+      assert.equal(localStorage.getItem('cym_tg_sub'), subId);
+      assert.equal(put.url, '/api/tg/subscription'); assert.equal(put.init.method, 'PUT');
+      assert.deepEqual(JSON.parse(put.init.body), { sub_id: subId, vaults: ['0x1111111111111111111111111111111111111111'] });
+      assert.equal(await withFetch(async () => jsonResponse({}), () => syncTelegram()), subId);
+    }],
+    ['мережева помилка не кидає виняток, id усе одно повертається', async ({ syncTelegram, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot';
+      s.deps.getPinnedAddresses = () => [];
+      assert.equal(await withFetch(async () => { throw new Error('offline'); }, () => syncTelegram()), 'existing-subscription-id');
+    }],
+  ],
+
+  scheduleTelegramSync: [
+    ['ставить відкладену синхронізацію лише коли бот увімкнено і в браузері є id підписки', ({ scheduleTelegramSync, __state: s }) => {
+      s.tgSyncTimer = null;
+      localStorage.removeItem('cym_tg_sub');
+      s.tgUsername = 'cym_bot'; scheduleTelegramSync();
+      assert.equal(s.tgSyncTimer, null);
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = null; scheduleTelegramSync();
+      assert.equal(s.tgSyncTimer, null);
+      s.tgUsername = 'cym_bot'; scheduleTelegramSync();
+      assert.notEqual(s.tgSyncTimer, null);
+      clearTimeout(s.tgSyncTimer); s.tgSyncTimer = null;
+    }],
   ],
 
   setupActivityEvents: [
