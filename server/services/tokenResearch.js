@@ -15,7 +15,7 @@ const SCHEMA = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
 
 export const RESEARCH_CATEGORIES = SCHEMA.properties.category.enum;
 export const TOKEN_SIGNAL_KEYS = Object.keys(SCHEMA.properties.token_signals.properties);
-export const PROMPT_VERSION = 'research-prompt-4';
+export const PROMPT_VERSION = 'research-prompt-5';
 // A record older than this goes back to the queue
 export const REQUEUE_AGE_SEC = 7 * 86400;
 const BACKOFF_WINDOW_SEC = 21 * 86400;
@@ -34,6 +34,21 @@ export const EXPLORERS = {
   137: 'https://polygonscan.com/token/',
   10: 'https://optimistic.etherscan.io/token/'
 };
+
+// The agent may cite only these hosts (checked live: they return data for ordinary and new tokens). Hosts that were empty, keyed or
+// blocked in the check (CoinGecko for new tokens, GoPlus for proxies, RedStone, Morpho forum, SEC, Credora) are left out on purpose.
+export const SOURCE_HOSTS = [
+  'api.llama.fi', 'coins.llama.fi', 'sourcify.dev', 'api-v2.pendle.finance', 'reference-data-directory.vercel.app',
+  'app.rwa.xyz', 'app.morpho.org', 'github.com'
+];
+const SOURCE_HOST_SUFFIXES = ['.blockscout.com', 'etherscan.io', 'basescan.org', 'arbiscan.io', 'polygonscan.com'];
+
+/** True when the URL is on the research allowlist (exact hosts, Blockscout instances, the block explorers). */
+export function isAllowedSourceUrl(url) {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  return SOURCE_HOSTS.includes(host) || SOURCE_HOST_SUFFIXES.some(s => (s.startsWith('.') ? host.endsWith(s) : host === s || host.endsWith(`.${s}`)));
+}
 
 const lower = a => String(a || '').trim().toLowerCase();
 
@@ -118,6 +133,9 @@ export function validateResearch(raw, want, checks, nowSec) {
     else if (isRedirectUrl(s.url) && !(checkById.get(s.id)?.finalUrl && isSafeUrl(checkById.get(s.id).finalUrl) && !isRedirectUrl(checkById.get(s.id).finalUrl))) {
       errors.push(`source ${s.id}: search redirect was not resolved`);
     }
+    // A search redirect is judged by the page it resolved to
+    const real = isRedirectUrl(s.url) ? checkById.get(s.id)?.finalUrl : s.url;
+    if (real && isSafeUrl(real) && !isAllowedSourceUrl(real)) errors.push(`source ${s.id}: host is not on the allowlist`);
     if (!dateOk(s.accessed, nowSec)) errors.push(`source ${s.id}: bad accessed date`);
   }
   if (!dateOk(raw.as_of, nowSec)) errors.push('as_of is not a valid date or lies in the future');
@@ -205,6 +223,7 @@ export function researchQueue(db, nowSec, { limit = 40 } = {}) {
 export function buildResearchPrompt(token, today) {
   const chainKey = Object.entries(CONFIG.chains).find(([, id]) => id === Number(token.chainId))?.[0];
   const chainName = chainKey ? chainKey.charAt(0).toUpperCase() + chainKey.slice(1) : `Chain ${token.chainId}`;
+  const blockscout = { 1: 'eth', 8453: 'base', 42161: 'arbitrum' }[token.chainId];
   const explorer = EXPLORERS[token.chainId] ? `${EXPLORERS[token.chainId]}${token.address}` : 'none known; do not guess one';
   // Symbols and tags come from chain data anyone can mint: keep them to harmless characters so they cannot carry instructions
   const symbol = String(token.symbol ?? '').replace(/[^A-Za-z0-9._+\- ]/g, '').trim().slice(0, 30) || 'unknown (read it from the contract)';
@@ -225,7 +244,15 @@ export function buildResearchPrompt(token, today) {
     '',
     'STEP 1 - IDENTITY. Confirm that this exact contract address on this exact chain is the token you are researching. If you cannot confirm it, set identity_confirmed=false and every fact and signal to null.',
     '',
-    'STEP 2 - FACTS. Fill in: issuer, underlying, backing, redemption, price_oracle, admin_controls, liquidity, regulatory. Also list audits and incidents (depegs, exploits, redemption halts, regulatory actions). Prefer the issuer\'s official docs, audit reports, block explorers, DefiLlama, rwa.xyz, L2Beat, reputable post-mortems. Do not cite social media or forums.',
+    'STEP 2 - FACTS. Fill in: issuer, underlying, backing, redemption, price_oracle, admin_controls, liquidity, regulatory. Also list audits and incidents (depegs, exploits, redemption halts, regulatory actions). Do not cite social media or forums.',
+    '',
+    'ALLOWED SOURCES. Cite ONLY pages on these hosts; a source on any other host makes the whole answer invalid. Use search_web only to find your way, never cite its results.',
+    `- Block explorer and Blockscout (code, proxy and implementation, verification, holders): ${explorer}${blockscout ? `; https://${blockscout}.blockscout.com/api/v2/addresses/${token.address}; https://${blockscout}.blockscout.com/api/v2/tokens/${token.address}` : ''}`,
+    `- Sourcify (verified source): https://sourcify.dev/server/v2/contract/${token.chainId}/${token.address}`,
+    '- DefiLlama (api.llama.fi): https://api.llama.fi/protocol/<slug> gives the protocol category, site, audit_links and TVL; https://api.llama.fi/hacks lists incidents; https://coins.llama.fi/prices/current/<chain>:<address> gives the price',
+    '- Pendle (PT tokens): https://api-v2.pendle.finance/core/v1/<chain id>/markets/active',
+    '- Chainlink feeds (Ethereum): https://reference-data-directory.vercel.app/feeds-mainnet.json',
+    '- app.rwa.xyz/assets/<ticker> (RWA tokens: issuer, custodian, transfer agent), app.morpho.org (market page), github.com (audit reports and code)',
     '',
     'STEP 3 - SIGNALS. Two groups, each signal is true, false or null (null = unknown or not found) with the source ids that show it. token_signals describe ONLY the code and the rights on the token contract itself. system_signals describe what stands behind the token: the issuing protocol, the custodian, the redemption queue, the price feed. Never mix them: a protocol multisig or timelock is not a property of the token contract.',
     'token_signals: can_freeze_or_blacklist (an address can freeze or blacklist holders), can_mint_without_limit (an admin can mint without a hard cap), upgradeable_proxy (the token contract logic can be upgraded), has_timelock (admin actions on the token pass through a timelock), admin_multisig (the token contract admin keys are held by a multisig). For an immutable contract with no admin functions use upgradeable_proxy=false, can_freeze_or_blacklist=false, admin_multisig=false; has_timelock is false or null depending on the source. Do NOT set these to true because the protocol DAO has a multisig.',

@@ -232,7 +232,7 @@ export default {
       assert.deepEqual(r, { status: 'accepted', detail: '' });
       assert.equal(calls.agy, 1); assert.equal(calls.posts.length, 1);
       const p = calls.posts[0];
-      assert.deepEqual([p.runId, p.model, p.promptVersion, p.chainId, p.address, p.raw.category], ['run-1', 'M', 'research-prompt-4', 1, WETH, 'wrapped-crypto']);
+      assert.deepEqual([p.runId, p.model, p.promptVersion, p.chainId, p.address, p.raw.category], ['run-1', 'M', 'research-prompt-5', 1, WETH, 'wrapped-crypto']);
       assert.equal(p.checks.length, 7); assert.ok(p.checks.every(c => c.status === 200 && c.mentions));
       assert.equal(calls.saved.length, 1);
     }],

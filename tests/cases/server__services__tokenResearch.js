@@ -50,7 +50,7 @@ export default {
   RESEARCH_CATEGORIES: [['comes from the schema and covers the fixtures', ({ RESEARCH_CATEGORIES: c }) => {
     assert.ok(c.length > 10 && c.includes('rwa-credit') && c.includes('wrapped-crypto') && c.includes('other'));
   }]],
-  PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-4')]],
+  PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-5')]],
   TOKEN_SIGNAL_KEYS: [['the five contract-level signals of the schema', ({ TOKEN_SIGNAL_KEYS: k }) => assert.deepEqual(k, ['can_freeze_or_blacklist', 'can_mint_without_limit', 'upgradeable_proxy', 'has_timelock', 'admin_multisig'])]],
   REQUEUE_AGE_SEC: [['7 days', ({ REQUEUE_AGE_SEC: v }) => assert.equal(v, 7 * DAY)]],
   EXPLORERS: [['known explorers are https token pages', ({ EXPLORERS: e }) => {
@@ -68,17 +68,29 @@ export default {
     }],
   ],
 
+  SOURCE_HOSTS: [['plain lower-case hostnames, no duplicates', ({ SOURCE_HOSTS: h }) => { assert.equal(new Set(h).size, h.length); for (const x of h) assert.match(x, /^[a-z0-9.-]+\.[a-z]+$/); }]],
+  isAllowedSourceUrl: [['exact hosts, Blockscout instances and explorers pass; look-alikes and other sites do not', ({ isAllowedSourceUrl: f }) => {
+    for (const u of ['https://etherscan.io/token/0x1', 'https://optimistic.etherscan.io/token/0x1', 'https://base.blockscout.com/api/v2/tokens/0x1', 'https://api.llama.fi/hacks', 'https://github.com/a/b']) assert.ok(f(u), u);
+    for (const u of ['https://api.coingecko.com/x', 'https://evil-etherscan.io/x', 'https://etherscan.io.evil.com/x', 'https://blockscout.com.evil.com/x', 'https://notgithub.com/x', 'junk']) assert.ok(!f(u), u);
+  }]],
   validateResearch: [
     ['the real WETH answer is valid', ({ validateResearch: f }) => { const r = validate(f, base()); assert.deepEqual(r, { ok: true, errors: [], confidence: 'high', notes: [] }); }],
     ['the real syrupUSDC answer is valid once its redirects are resolved', ({ validateResearch: f }) => {
       const raw = JSON.parse(JSON.parse(SYRUP_OUT).response);
-      const checks = raw.sources.map(s => ({ id: s.id, url: s.url, finalUrl: s.url.includes('vertexaisearch') ? `https://docs.example.org/p${s.id}` : s.url, status: 200, mentions: true }));
+      const checks = raw.sources.map(s => ({ id: s.id, url: s.url, finalUrl: s.url.includes('vertexaisearch') ? `https://github.com/example/p${s.id}` : s.url, status: 200, mentions: true }));
       assert.deepEqual(validate(f, raw, checks, { chainId: 1, address: '0x80ac24aA929eaF5013f6436cdA2a7ba190f5Cc0b' }), { ok: true, errors: [], confidence: 'high', notes: [] });
     }],
     ['an unresolved search redirect is refused', ({ validateResearch: f }) => {
       const raw = JSON.parse(JSON.parse(SYRUP_OUT).response);
       const r = validate(f, raw, raw.sources.map(s => ({ id: s.id, url: s.url, finalUrl: null, status: 200, mentions: true })), { chainId: 1, address: raw.address });
       assert.ok(!r.ok && r.errors.some(e => /redirect was not resolved/.test(e)));
+    }],
+    ['a source on a host outside the allowlist is refused, also behind a search redirect', ({ validateResearch: f }) => {
+      assert.ok(withRaw(f, r => { r.sources[0].url = 'https://api.coingecko.com/x'; }).errors.some(e => /not on the allowlist/.test(e)));
+      const raw = base(); raw.sources[0].url = REDIRECT;
+      const via = host => validate(f, raw, okChecks(raw).map(c => (c.id === raw.sources[0].id ? { ...c, finalUrl: host } : c)));
+      assert.ok(via('https://medium.com/p').errors.some(e => /not on the allowlist/.test(e)));
+      assert.ok(!via('https://etherscan.io/p').errors.some(e => /allowlist/.test(e)));
     }],
     ['an extra key and a missing key break the schema', ({ validateResearch: f }) => {
       assert.ok(withRaw(f, r => { r.extra = 1; }).errors.some(e => /unexpected key/.test(e)));
@@ -199,9 +211,9 @@ export default {
     }],
     ['cited search redirects are replaced by the resolved URL', async ({ applyResearch: f }) => {
       const db = freshDb(); const raw = base(); raw.sources[3].url = REDIRECT;
-      const checks = okChecks(raw); checks[3].finalUrl = 'https://weth.io/';
+      const checks = okChecks(raw); checks[3].finalUrl = 'https://github.com/weth-io/weth';
       f(db, { chainId: 1, address: WETH, raw, checks, runId: 'r', model: 'm', promptVersion: 'p' }, NOW);
-      assert.equal(JSON.parse(row(db).sources_json)[3].url, 'https://weth.io/');
+      assert.equal(JSON.parse(row(db).sources_json)[3].url, 'https://github.com/weth-io/weth');
     }],
     ['history keeps the last 20 entries per token only', async ({ applyResearch: f }) => {
       const db = freshDb();
