@@ -1,0 +1,1965 @@
+
+
+<!DOCTYPE html>
+
+<html id="html" xmlns="http://www.w3.org/1999/xhtml" data-bs-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="format-detection" content="telephone=no">
+
+    <link rel="stylesheet" href="/assets/vendor/font-awesome/css/all.css?v=26.10.3.4">
+    <link rel="stylesheet" href="/assets/css/theme.min.css?v=26.10.3.4">
+    <link rel="stylesheet" href="/assets/base/css/base.min.css?v=26.10.3.4">
+    <link rel="shortcut icon" href='/assets/base/images/favicon.ico' />
+
+    <style type="text/css">
+        #overlay {
+            /*background: #ffffff;*/
+            background: rgba(255,255,255,.7);
+            color: #666666;
+            position: fixed;
+            height: 100%;
+            width: 100%;
+            z-index: 5000;
+            top: 0;
+            left: 0;
+            float: left;
+            text-align: center;
+            padding-top: 10%;
+            display: none;
+        }
+
+        /* Custom Tooltip */
+        [data-bs-theme=light] .custom-tooltip {
+            --bs-tooltip-bg: #19293D;
+        }
+        [data-bs-theme=dim] .custom-tooltip {
+            --bs-tooltip-bg: #606165;
+        }
+        [data-bs-theme=dark] .custom-tooltip {
+            --bs-tooltip-bg: #313131;
+        }
+
+        /* Read Function */
+        #js-read-contract-function-container .accordion-button::after,
+        #js-write-contract-function-container .accordion-button::after {
+            display: none !important;
+        }
+
+        #js-read-contract-function-container .accordion-button,
+        #js-write-contract-function-container .accordion-button {
+            --bs-accordion-btn-padding-y: 0.5rem;
+            --bs-accordion-btn-padding-x: 0.75rem;
+        }
+
+        #js-read-contract-function-container .accordion-body,
+        #js-write-contract-function-container .accordion-body {
+            --bs-accordion-body-padding-x: 0.75rem;
+            --bs-accordion-body-padding-y: 0.75rem;
+        }
+
+        #js-read-contract-function-container .accordion-button.collapsed .js-accordion-arrow,
+        #js-write-contract-function-container .accordion-button.collapsed .js-accordion-arrow {
+            transform: rotate(180deg);
+        }
+
+        /* Hide function name tags by default */
+        .contract-fn-tags {
+            display: none !important;
+        }
+
+        /* Show function name tags when toggle is active */
+        .js-function-names-visible .contract-fn-tags {
+            display: flex !important;
+        }
+
+        /* Contract Function Container */
+        .contract-function-container .accordion-button::after {
+            display: none !important;
+        }
+
+        .contract-function-container .accordion-button {
+            --bs-accordion-btn-padding-y: 0.5rem;
+            --bs-accordion-btn-padding-x: 0.75rem;
+        }
+
+        .contract-fn-header {
+            display: flex;
+            flex-wrap: nowrap !important;
+            gap: 0.5rem;
+            width: 100%;
+            min-width: 0;
+        }
+
+        .contract-fn-header .contract-fn-main {
+            display: flex;
+            flex: 1 1 auto;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .contract-fn-header .contract-fn-title {
+            display: inline-block;
+            flex: 0 1 auto;
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .contract-fn-header .contract-fn-tags {
+            display: flex;
+            align-items: start;
+            gap: 0.25rem;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+
+        .contract-fn-header .contract-fn-actions {
+            display: flex;
+            flex: 0 0 auto;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 0.25rem;
+            white-space: nowrap;
+            margin-left: auto;
+        }
+
+        @media (max-width: 767.98px) {
+            .contract-fn-header {
+                flex-wrap: wrap !important;
+            }
+
+            .contract-fn-header .contract-fn-main {
+                /* !important needed to beat Bootstrap's .d-flex on the same element */
+                display: contents !important;
+            }
+
+            .contract-fn-header .contract-fn-title {
+                flex: 1 1 0;
+            }
+
+            .contract-fn-header .contract-fn-tags {
+                flex-basis: 100%;
+                order: 1;
+            }
+        }
+
+        .contract-function-container .accordion-body {
+            --bs-accordion-body-padding-x: 0.75rem;
+            --bs-accordion-body-padding-y: 0.75rem;
+        }
+
+        .contract-function-container .accordion-button.collapsed .js-accordion-arrow {
+            transform: rotate(180deg);
+        }
+    </style>
+     <script>
+         function getParameterByName(name) {
+             var url = window.location.href;
+             name = name.replace(/[\[\]]/g, "\\$&");
+             var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+                 results = regex.exec(url);
+             if (!results) return null;
+             if (!results[2]) return '';
+             return decodeURIComponent(results[2].replace(/\+/g, " "));
+         }
+
+         var contractframe = "";
+         var loadingcontractframe = "";
+         var mode = getParameterByName("m");
+         var customParam = getParameterByName("c");
+         if (window.name === "readcustomcontractiframe" || (customParam !== null && customParam !== "") || (window.parent && window.parent.location && window.parent.location.hash.indexOf('readCustomContract') !== -1)) {
+             contractframe = "readcustomcontractiframe";
+             loadingcontractframe = "loadingReadCustomContractframe";
+         } else if (window.name === "readproxycontractiframe" || (window.parent && window.parent.location && window.parent.location.hash.indexOf('readProxyContract') !== -1)) {
+             contractframe = "readproxycontractiframe";
+             loadingcontractframe = "loadingReadProxyContractframe";
+         } else {
+             contractframe = "readcontractiframe";
+             loadingcontractframe = "loadingReadContractframe";
+         }
+
+         
+     </script>
+</head>
+<body style="overflow-y:hidden;">      
+    <!-- Spinner --><div id="overlay" class="text-center py-10 "><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><div class="small text-muted mt-1">Loading</div></div><!-- End Spinner -->
+    
+    <!-- Read Contract Actions -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2"><h6 class="mb-0"><i class="far fa-file-code text-muted me-1"></i> Read Contract</h6><div class="d-flex flex-wrap gap-2"><button class="btn btn-sm btn-soft-primary py-1.5 rounded" id='connectStatus' onclick='openModal(); return false;'><i id='connector' class="far fa-wallet me-1"></i> Connect Wallet</button><div class="d-flex justify-content-lg-end align-items-center bg-light cursor-pointer border rounded small"><label class="cursor-pointer py-1.5 px-2" for="checkboxSwitchShowFunctionNames">Params</label><div class="form-check form-switch mx-0.5 mb-n1"><input type="checkbox" role="switch" class="form-check-input cursor-pointer" id="checkboxSwitchShowFunctionNames" checked></div></div><button id="js-btn-read-contract-function" class="btn btn-sm btn-white py-1.5" onclick="expandCollapseAll('read')" style="min-width: 102px;"><i class="far fa-plus me-1"></i> Expand All</button><a class="btn btn-sm btn-white py-1.5"  href='/readcontract?m=light&n=base&a=0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf&v=0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf'><i class="far fa-rotate me-1"></i> Reset</a></div></div>   
+    <!-- End Read Contract Actions -->
+    <div class="d-flex flex-column justify-content-between">
+        <!-- Read Contract Function Accordion -->
+        <div id="js-read-contract-function-container" class="contract-function-container">
+            <div class="accordion mb-2"><div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button bg-white link-dark collapsed" type="button" data-bs-target="#readFunction1" aria-expanded="True" aria-controls="readFunction1" onclick="read_contract.triggerClickAccordion(event)"><div class="contract-fn-header d-flex flex-wrap align-items-start justify-content-between gap-2 w-100"><div class="contract-fn-main d-flex flex-wrap align-items-center gap-1"><span class="contract-fn-title small py-1.5 me-1">1. admin<span class="text-muted ms-1">(0xf851a440)</span></span></div><div class="contract-fn-actions d-flex align-items-center gap-1"><a class="js-clipboard js-prevent-collapse link-dark rounded p-1.5" href="javascript:;" data-clipboard-text="admin (0xf851a440)" data-bs-toggle="tooltip" title="Copy Method Name" data-hs-clipboard-options='{"type": "tooltip","successText": "Copied!","classChangeTarget": "#copyIcon-1","defaultClass": "fa-copy","successClass": "fa-check"}'><i id="copyIcon-1" class="far fa-copy fa-fw fa-sm"></i></a><a class="js-clipboard js-prevent-collapse link-dark rounded p-1.5" href="javascript:;" data-counter="1" data-bs-toggle="tooltip" title="Copy Permalink" data-hs-clipboard-options='{"type": "tooltip","successText": "Copied!","classChangeTarget": "#linkIcon-1","defaultClass": "fa-link","successClass": "fa-check"}'><i id="linkIcon-1" class="far fa-link fa-fw fa-sm"></i></a><div class="js-accordion-arrow link-dark transition-all link-dark rounded p-1.5 me-n1"><i class="far fa-chevron-up fa-fw fa-sm"></i></div></div></div></button></h2><div id="readFunction1" class="js-read-contract-function accordion-collapse collapse"><div class="accordion-body bg-light border-top small rounded-bottom-2"><div id='divfunctionexplain1'></div><div class="row gx-1"></div><a class='me-1' href='/address/0x42D90b3faF2287475cdc863706Bd7cc3E938C2Af' target='_parent'>0x42D90b3faF2287475cdc863706Bd7cc3E938C2Af</a> <span class="badge bg-white border text-muted text-nowrap fw-medium py-1 px-1.5" style="--bs-badge-font-size: 0.85em;">address</span><hr>
+                                <h6 class="text-dark mb-1">Return:</h6>
+                                <p class="text-dark mb-0">The address of the proxy admin.</p></div></div></div></div><div class="accordion mb-2"><div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button bg-white link-dark collapsed" type="button" data-bs-target="#readFunction2" aria-expanded="True" aria-controls="readFunction2" onclick="read_contract.triggerClickAccordion(event)"><div class="contract-fn-header d-flex flex-wrap align-items-start justify-content-between gap-2 w-100"><div class="contract-fn-main d-flex flex-wrap align-items-center gap-1"><span class="contract-fn-title small py-1.5 me-1">2. implementation<span class="text-muted ms-1">(0x5c60da1b)</span></span></div><div class="contract-fn-actions d-flex align-items-center gap-1"><a class="js-clipboard js-prevent-collapse link-dark rounded p-1.5" href="javascript:;" data-clipboard-text="implementation (0x5c60da1b)" data-bs-toggle="tooltip" title="Copy Method Name" data-hs-clipboard-options='{"type": "tooltip","successText": "Copied!","classChangeTarget": "#copyIcon-2","defaultClass": "fa-copy","successClass": "fa-check"}'><i id="copyIcon-2" class="far fa-copy fa-fw fa-sm"></i></a><a class="js-clipboard js-prevent-collapse link-dark rounded p-1.5" href="javascript:;" data-counter="2" data-bs-toggle="tooltip" title="Copy Permalink" data-hs-clipboard-options='{"type": "tooltip","successText": "Copied!","classChangeTarget": "#linkIcon-2","defaultClass": "fa-link","successClass": "fa-check"}'><i id="linkIcon-2" class="far fa-link fa-fw fa-sm"></i></a><div class="js-accordion-arrow link-dark transition-all link-dark rounded p-1.5 me-n1"><i class="far fa-chevron-up fa-fw fa-sm"></i></div></div></div></button></h2><div id="readFunction2" class="js-read-contract-function accordion-collapse collapse"><div class="accordion-body bg-light border-top small rounded-bottom-2"><div id='divfunctionexplain2'></div><div class="row gx-1"></div><a class='me-1' href='/address/0x7458bfDC30034EB860B265E6068121D18Fa5Aa72' target='_parent'>0x7458bfDC30034EB860B265E6068121D18Fa5Aa72</a> <span class="badge bg-white border text-muted text-nowrap fw-medium py-1 px-1.5" style="--bs-badge-font-size: 0.85em;">address</span><hr>
+                                <h6 class="text-dark mb-1">Return:</h6>
+                                <p class="text-dark mb-0">The address of the implementation.</p></div></div></div></div>
+        </div>       
+        <!-- End Read Contract Function Accordion -->
+        <span class="d-flex align-items-baseline fs-sm text-muted gap-1">
+                                <i class="far fa-square-info"></i><span>Descriptions included above are taken from the contract source code <a href="https://docs.soliditylang.org/en/v0.8.11/natspec-format.html" target="_blank">NatSpec</a>. BaseScan does not provide any guarantees on their safety or accuracy.</span>
+                            </span>
+    </div>                 
+</body>
+
+<script src="/assets/vendor/jquery/dist/jquery.min.js?v=26.10.3.4"></script>
+<script src="/assets/vendor/popper.js/dist/umd/popper.min.js?v=26.10.3.4""></script>
+<script src="/assets/vendor/bootstrap/bootstrap.bundle.min.js?v=26.10.3.4"></script>
+<script src="/assets/vendor/clipboard/dist/clipboard.min.js?v=26.10.3.4"></script>
+<script src="/assets/js/app.min.js?v=26.10.3.4"></script>
+<script src="/assets/js/custom/web3.min.js?v=26.10.3.4"></script>
+<script src="/assets/js/custom/web3-providers-http.min.js?v=26.10.3.4"></script>
+<script src="/assets/vendor/bignumber.js/bignumber.min.js?v=26.10.3.4"></script>
+<script src="/assets/vendor/xss.min.js?v=26.10.3.4"></script>
+<script src="/jss/blockies.js"></script>
+<!-- Wallet Connect V2 2.10.5 -->
+<script src="/assets/vendor/web3modal-1.9.8.min.js"></script>
+<script src="/assets/vendor/walletlink_bundle.js"></script>
+<script src="/assets/js/custom/validateinputreadwrite.js?v=23.8.2.2"></script>
+<script src="/assets/js/custom/wallet-handling-connect.js?v=26.10.3.4"></script>
+<script src="/assets/js/custom/coinbase-wallet-sdk.js?v=26.10.3.4"></script>
+
+
+<script type="module" src="/assets/js/custom/reown-helper.js?v=26.10.3.4"></script>
+
+<script>
+    var isTestnet = 'false';
+    var acceptedChainId = '0x2105';
+    var mainnetName = 'Base';
+    var strNetId = '8453';
+    var strSiteName = 'BaseScan';
+    var strRpcUrl = 'https://mainnet.base.org/';
+    var strSymbol = 'ETH';
+    var strExplorerUrl = 'https://basescan.org';
+    var strFavIcon = '/assets/base/images/favicon.ico';
+    var colorHyperLink = '#7342DC';
+
+    var counter = 1;
+
+    var net = getParameterByName("n");
+    var isTestnet = 'false';
+    var netWC = 'base';
+
+    var nonBrowserWallet = false;
+    var proxyABI = '';
+    var provide;
+    var iseip6963 = false;
+    var reownInitModal;
+
+    let connectedWalletType = '';
+    let walletDetails = {};
+
+    const strMessage = 'Please take note that this is a beta version feature and is provided on an "as is" and "as available" basis. ' + strSiteName + ' does not give any warranties and will not be liable for any loss, direct or indirect through continued use of this feature.';
+
+
+
+    function openModal() {
+        parent.openWalletDisclaimerModal({ location: window.location, source: "read" });
+    }
+
+    function closeModal() {
+        try {
+            if (window.parent.document.URL.indexOf('readProxyContract') != -1) {
+                parent.closeProxyModal();
+            } else {
+                var isInIFrame = (window.location != window.parent.location);
+                if (isInIFrame) {
+                    parent.closeModal();
+                } else {
+                    $('#WalletModalProxyIframeNew').modal('hide');
+                }
+            }
+        } catch (err) { }
+    }
+
+    function setParentTab(tabId) {
+        parent.location.hash = tabId;
+
+        var doc = parent.document;
+        var target = "#" + tabId;
+
+        var trigger =
+            doc.querySelector('[data-bs-toggle="pill"][data-bs-target="' + target + '"]') ||
+            doc.querySelector('[data-bs-toggle="tab"][data-bs-target="' + target + '"]')
+
+        if (!trigger) return;
+
+        trigger.click();
+    }
+
+    function initFunctionNamesToggle() {
+        const readToggle = document.getElementById('checkboxSwitchShowFunctionNames');
+        const writeToggle = document.getElementById('checkboxSwitchShowFunctionNamesWrite');
+        const readContainer = document.getElementById('js-read-contract-function-container');
+        const writeContainer = document.getElementById('js-write-contract-function-container');
+
+        if (readToggle && readContainer) {
+            // Set initial state based on checked attribute
+            if (readToggle.checked) {
+                readContainer.classList.add('js-function-names-visible');
+            }
+
+            readToggle.addEventListener('change', function () {
+                if (this.checked) {
+                    resizeHeightFull()
+                    readContainer.classList.add('js-function-names-visible');
+                } else {
+                    readContainer.classList.remove('js-function-names-visible');
+                    resizeHeightFull()
+                }
+            });
+        }
+
+        if (writeToggle && writeContainer) {
+            // Set initial state based on checked attribute
+            if (writeToggle.checked) {
+                writeContainer.classList.add('js-function-names-visible');
+            }
+
+            writeToggle.addEventListener('change', function () {
+                if (this.checked) {
+                    writeContainer.classList.add('js-function-names-visible');
+                    resizeHeightFull()
+                } else {
+                    writeContainer.classList.remove('js-function-names-visible');
+                    resizeHeightFull()
+                }
+            });
+        }
+    }
+
+    function resizeHeightFull() {
+        var obj = window.parent.document.getElementById(contractframe);
+        obj.style.height = (document.body.scrollHeight) + "px";
+    }
+
+    // Initialize function names toggle
+    initFunctionNamesToggle();
+
+    // ACCORDION TRIGGER
+    // =======================================================
+    let isCollapsedRead = true;
+    let isCollapsedWrite = true;
+    function expandCollapseAll(type) {
+        let isCollapsed = type === 'read' ? isCollapsedRead : isCollapsedWrite;
+        const accordions = document.querySelectorAll(`.js-${type}-contract-function.accordion-collapse`);
+
+        accordions.forEach(accordion => {
+            const collapseInstance = new bootstrap.Collapse(accordion, {
+                toggle: false
+            });
+
+            if (isCollapsed) {
+                collapseInstance.show();
+                document.getElementById(`js-btn-${type}-contract-function`).innerHTML = '<i class="far fa-plus me-1"></i> Collapse All';
+            } else {
+                collapseInstance.hide();
+                document.querySelector(`button[data-bs-target="#${collapseInstance._element.id}"]`).classList.add('collapsed');
+                document.getElementById(`js-btn-${type}-contract-function`).innerHTML = '<i class="far fa-plus me-1"></i> Expand All';
+            }
+        });
+
+        // Toggle the isCollapsed state
+        if (type === 'read') {
+            isCollapsedRead = !isCollapsedRead;
+        } else {
+            isCollapsedWrite = !isCollapsedWrite;
+        }
+    }    
+
+    var cardHeightDict = {};
+    $('.js-read-contract-function').on('shown.bs.collapse', function (x) {
+        var id = $(x.target).attr('id');
+        var obj = window.parent.document.getElementById(contractframe);
+
+        var cardBodyHeight = $($(x.target)).height();
+
+        $(obj).height(($(obj).height() + cardBodyHeight) + "px")
+
+        cardHeightDict[id] = cardBodyHeight;
+    });
+
+    $('.js-read-contract-function').on('hidden.bs.collapse', function (x) {
+        var id = $(x.target).attr('id');
+        var obj = window.parent.document.getElementById(contractframe);
+        $(obj).height(($(obj).height() - cardHeightDict[id]) + "px");
+    });
+
+    //$('#overlay', window.parent.document).hide();
+    $(document).ready(function () {    
+        //if (mode === "dark") {
+        //    var src = $('body');                     
+        //    src.addClass('dark-mode');
+        //}
+
+        (function () {
+            setTimeout(function () {
+                var obj = window.parent.document.getElementById(contractframe);
+                if (obj)
+                    parent.resizeIframe(obj, 0);
+            }, 300);
+        })();
+
+        try {
+            if (loadingcontractframe && window.parent && window.parent.document) {
+                var loadingEl = window.parent.document.getElementById(loadingcontractframe);
+                if (loadingEl) loadingEl.style.display = "none";
+            }
+        } catch (e) { }
+
+        try {
+            if (window.parent && window.parent.document) {
+                var overlayEl = window.parent.document.getElementById('overlayMain');
+                if (overlayEl) overlayEl.style.display = 'none';
+            }
+        } catch (e) { }
+
+        ListenProviderList();
+    });
+
+    String.prototype.escape = function () {
+        var tagsToReplace = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;'
+        };
+        return this.replace(/[&<>]/g, function (tag) {
+            return tagsToReplace[tag] || tag;
+        });
+    };
+   
+    function getcontractabi(contractaddress) {
+        $.post("https://api.basescan.org",        
+        {
+            module: "contract",
+            action: "getabit",
+            address: contractaddress
+        },
+        function (data, status) {
+            //console.log("contractAbi = " + data)
+        });
+    }
+
+    var node = strRpcUrl;
+    var web3obj_eth = new Web3(new Web3HttpProvider(node));
+    var web3obj;
+    var MyContract;
+    var myContractInstance;
+    var abi;
+    var contractAddress;
+
+    try {
+        //use variables to retain formatting for abi
+        abi = [{"inputs":[{"internalType":"address","name":"implementationContract","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"previousAdmin","type":"address"},{"indexed":false,"internalType":"address","name":"newAdmin","type":"address"}],"name":"AdminChanged","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"implementation","type":"address"}],"name":"Upgraded","type":"event"},{"stateMutability":"payable","type":"fallback"},{"inputs":[],"name":"admin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"newAdmin","type":"address"}],"name":"changeAdmin","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"implementation","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"}],"name":"upgradeTo","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"upgradeToAndCall","outputs":[],"stateMutability":"payable","type":"function"}];
+        contractAddress = "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf";
+        //myContractInstance = new web3obj.eth.Contract(abi, address);
+    }
+    catch (err) {
+    }
+
+    function ethcall2(strMethodName, strInputElementName, strOutputElementName, strOutputtype, strOutputFieldNames, strBtnName) {
+
+        if (typeof web3obj !== 'undefined') { // use metamask or wallet
+            myContractInstance = new web3obj.eth.Contract(abi, contractAddress);
+            if (proxyABI)
+                myContractInstance = new web3obj.eth.Contract(proxyABI, contractAddress);
+            executeQuery(myContractInstance, strMethodName, strInputElementName, strOutputElementName, strOutputtype, strOutputFieldNames, strBtnName);
+        }
+        else { // use server node
+            myContractInstance = new web3obj_eth.eth.Contract(abi, contractAddress);
+            if (proxyABI)
+                myContractInstance = new web3obj_eth.eth.Contract(proxyABI, contractAddress);
+            if (counter <= 50) {
+                counter = counter + 1;
+                executeQuery(myContractInstance, strMethodName, strInputElementName, strOutputElementName, strOutputtype, strOutputFieldNames, strBtnName);
+            }
+        }
+    }
+
+    function executeQuery(myContractInstance, strMethodName, strInputElementName, strOutputElementName, strOutputtype, strOutputFieldNames, strBtnName) {
+
+        var functionNametoCall = 'myContractInstance.methods[\'' + strMethodName + '\']';
+        var result;
+        try {
+            var inputs = [];
+            var elms = document.querySelectorAll("[name=" + strInputElementName + "]");
+            for (var i = 0; i < elms.length; i++) {
+                var type = elms[i].getAttribute('data-bs-type');
+                var grp = elms[i].getAttribute('data-bs-grp');
+                var values = [];
+                
+                if (elms[i].value == '' && grp === null) {
+                    document.getElementById(strInputElementName).focus();
+                    alert('Input value cannot be empty');
+                    return false;
+                }
+
+                var value = "";
+                if (type == "tuple" || type == "tuple[]") {
+                    // don't strip tuple input - retain formatting
+                    value = elms[i].value;
+                } else {
+                    if (type.indexOf('[') !== -1) {
+                        // don't strip empty array - retain value as "[]"
+                        value = elms[i].value;
+                    }
+                    else {
+                        value = strip(elms[i].value);
+                    }
+                }
+
+                if (value) {
+                    if (type.indexOf('[') !== -1 && type.indexOf(']') !== -1) values.push(value.split(','));
+                    else values.push(value);
+                } else values.push('');
+
+                inputs.push({ type: type, value: values, grp: grp });
+
+            }
+
+            var params = encodeParams(inputs);
+            showLoading(true, strBtnName);
+
+            if (typeof params == 'undefined') {
+                new Function(functionNametoCall + "().call(function(err, res){ if (err) {result = err; console.log(result); showError('" + strBtnName + "','" + strOutputElementName + "',err); } else { result = res; console.log(result); showMessage('"
+                    + strMethodName + "',result,'" + strOutputElementName + "','" + strOutputFieldNames + "','" + strBtnName + "');  }});")();
+            } else {
+                //hard coded address 0x0 - some function calls won't work without this
+                new Function(functionNametoCall + "(" + params + ").call({from: '0x0000000000000000000000000000000000000000'}, function(err, res){ if (err) {result = err; showError('" + strBtnName + "','" + strOutputElementName + "',err);} else { result = res; console.log(result);showMessage('"
+                    + strMethodName + "',result,'" + strOutputElementName + "','" + strOutputFieldNames + "','" + strBtnName + "');  }  });")();
+            }
+        }
+        catch (err) {
+            showError(strBtnName, strOutputElementName, err)
+        }
+    }
+    var isTupleLike = (v) =>
+        Array.isArray(v) && Object.keys(v).some((k) => Number.isNaN(Number(k)));
+
+    var isBNLike = (v) =>
+        v !== null && v !== undefined && (
+            typeof v === "bigint" ||
+            (typeof v === "number" && Number.isSafeInteger(v)) ||
+            (typeof v === "string" && /^\d+$/.test(v)) ||
+            (v && v._isBigNumber === true) ||
+            (typeof v === "object" && typeof v.toString === "function" && v.constructor?.name === "BN")
+        );
+
+    function prettifyWeb3WithABI(value, functionName, contractABI, key = "", indent = 0) {
+        const strContractABIJson = contractABI || (typeof proxyABI !== 'undefined' ? proxyABI : null) || (typeof abi !== 'undefined' ? abi : null);
+        const typeInfo = getABITypeInfo(functionName, strContractABIJson, key);
+        return prettifyWeb3(value, typeInfo, key, indent, strContractABIJson, functionName);
+    }
+
+   function prettifyWeb3(value, typeInfo = null, key = "", indent = 0, strContractABIJson = null, functionName = null) {
+    if (value == null) return value;
+    const space = "  ".repeat(indent);
+    var isArray = Array.isArray(value);
+    var isObject = typeof value === 'object' && value !== null && !isArray && !(value instanceof Uint8Array);
+
+    //Handle unnamed Object
+        if (
+            isObject &&
+            typeInfo?.outputs &&
+        Object.keys(value).every(k => !isNaN(Number(k))) &&
+        Object.keys(value).length === typeInfo.outputs.length
+    ) {
+        return typeInfo.outputs.map((out, i) => {
+            const displayType = out.type || "unknown";
+            // ──────── key fix ────────
+            const rawValue = value[String(i)];
+            const displayVal = prettifyWeb3(rawValue, out, "", indent, strContractABIJson, functionName);
+            const space = " ".repeat(indent);
+            return `${space}(${displayType}) : ${displayVal}`;
+        }).join('\n');
+    }
+
+    // Get all named keys (non-numeric)
+    var namedKeys = isObject ? Object.keys(value).filter(k => isNaN(Number(k))) : [];
+
+    // Multi-output or unnamed root tuple
+    // IMPORTANT: exclude tuple[] here
+    if (((typeInfo?.type === "tuple" && typeInfo?.components?.length > 0) || typeInfo?.type === 'multi-output') && !key) {
+        let components = typeInfo.components || typeInfo.outputs || [];
+        let values = [];
+        if (Array.isArray(value)) {
+            values = value;
+        } else if (typeof value === 'object' && value !== null) {
+            values = components.map((comp, i) => (comp.name && value[comp.name] !== undefined) ? value[comp.name] : value[i]);
+        } else {
+            values = [value];
+        }
+
+        const fields = components.map((comp, i) => {
+            const fieldName = comp.name || (typeInfo.type === 'multi-output' ? `output${i}` : `field${i}`);
+            return prettifyWeb3(values[i], comp, fieldName, indent + 1, strContractABIJson, functionName);
+        }).join('\n');
+
+        //check item label name when key empty
+        if ((!key || key === "") && typeInfo?.name) {
+            key = typeInfo.name;
+        }
+
+        //if check info name empty, use internal type as naming
+        if ((!key || key === "") && typeInfo?.internalType) {
+            key = typeInfo.internalType.replace(/\[[0-9]*\]/g, "");
+        }
+
+       return key ? `${space}${filterXSS(key)} {\n${fields}\n${space}}` : `{\n${fields}\n}`;
+    }
+
+    // Primitives 
+    if (typeof value !== "object" || isBNLike(value) || value instanceof Uint8Array) {
+        let type = typeInfo?.type || typeof value;
+        let displayVal = value;
+        if (isBNLike(value)) {
+            displayVal = value.toString();
+            if (typeInfo?.type) type = typeInfo.type;
+        } else if (value instanceof Uint8Array) {
+            type = "bytes";
+            let hex = typeof toHex === 'function' ? toHex(value) : "0x" + Array.from(value).map(b => b.toString(16).padStart(2, '0')).join('');
+            displayVal = filterXSS(hex);
+        } else if (typeof value === "string") {
+            if (!typeInfo?.type && /^0x[0-9a-fA-F]{40}$/i.test(value)) type = "address";
+
+            let formattedValue = value
+                .replace(/\u00A0/g, ' ')
+                .replace(/\r\n/g, '\n')
+                .replace(/^(\s*-)\s*\n/gm, '$1 ')
+                .replace(/([^;:.\n])\n(?!\s*-)/g, '$1 ')
+                .replace(/;(\s*)-\s/g, ';\n- ')
+                .replace(/([^\n])\n\s*-\s/g, '$1\n- ')
+                .replace(/[ ]+/g, ' ')
+                .trim();
+            displayVal = (typeof filterXSS === 'function') ? filterXSS(formattedValue) : formattedValue;
+
+            // Add address placeholders AFTER value is filtered.
+            // when showMessage should replace these placeholders with hyperlink/copy button.
+            if (typeInfo?.type === "address" && typeof displayVal === "string" && /^0x[0-9a-fA-F]{40}$/i.test(displayVal)) {
+                displayVal =
+                    `[[ADDR_LINK_START:${displayVal}]]` +
+                    `${displayVal}` +
+                    `[[ADDR_LINK_END]]` +
+                    `[[ADDR_COPY:${displayVal}]]`;
+            }
+
+        } else if (typeof value === "boolean") {
+            type = "bool";
+        }
+        return key ? `${space}${filterXSS(key)} (${type}) : ${displayVal}` : `${displayVal}`;
+    }
+
+    // Single ABI tuple
+    // IMPORTANT: This must run BEFORE generic array handling, so web3.js tuple arrays are not mistaken as tuple[]
+    if (typeInfo?.type === "tuple" && typeInfo?.components?.length > 0 ) {
+        const fields = typeInfo.components.map((comp, idx) => {
+            const fieldValue =(comp.name && value[comp.name] !== undefined) ? value[comp.name] : value[idx];
+            const displayKey = comp.name || `field${idx}`;
+
+            return prettifyWeb3(fieldValue, comp, displayKey, indent + 1, strContractABIJson, functionName);
+        }).join('\n');
+
+        let type = typeInfo?.type || typeof value;
+        return key ? `${space}${filterXSS(key)} (${type}) {\n${fields}\n${space}}`: `{\n${fields}\n}`;
+    }
+
+    // ABI array check: supports [], [2], [][] etc.
+    const isABIArray = !!typeInfo?.type && /\[[0-9]*\]$/.test(typeInfo.type);
+    const childType = isABIArray ? { ...typeInfo, type: typeInfo.type.replace(/\[[0-9]*\]$/, '') } : null;
+
+    // ABI array handling
+    // IMPORTANT: this must be before Structs
+    if (isArray || isABIArray) {
+        const arr = Array.isArray(value) ? value: Object.values(value);
+        let itemLabel = key || "item";
+
+        //recheck item label name when key empty
+        if ((!key || key === "") && typeInfo?.name) {
+            itemLabel = typeInfo.name;
+        }
+
+        //if recheck info name empty, use internal type as naming
+        if (itemLabel === "item" && typeInfo?.internalType) {
+            itemLabel = typeInfo.internalType.replace(/\[[0-9]*\]/g, "");
+        }
+
+        const items = arr.map((item) => {
+            if (childType?.type === "tuple" && childType?.components?.length > 0) {
+                const fields = childType.components.map((comp, idx) => {
+                    const fieldValue = (comp.name && item[comp.name] !== undefined) ? item[comp.name] : item[idx];
+
+                    const displayKey = comp.name || `field${idx}`;
+
+                    return prettifyWeb3(fieldValue, comp, displayKey, indent + 2, strContractABIJson, functionName);
+                }).join('\n');
+
+                return `${space}  ${filterXSS(itemLabel)}: {\n${fields}\n${space}  }`;
+            }
+
+            return prettifyWeb3(item, childType, "",indent + 1, strContractABIJson, functionName);
+
+        });
+        let type = typeInfo?.type || typeof value;
+        let result = key ? `${space}${filterXSS(key)} (${type}) : [\n  ${space}` : `[\n  ${space}`;
+        return result + items.map(x => x.replace(/\n/g, `\n  ${space}`)).join(`\n  ${space}`) + `\n${space}]`;
+    }
+
+    // Structs
+    if (isTupleLike(value) || (isObject && namedKeys.length > 0) || typeInfo?.type === 'multi-output') {
+        let fields;
+        if (typeInfo?.type === 'multi-output' && typeInfo?.outputs) {
+            fields = typeInfo.outputs.map((output, idx) => {
+                const fieldValue = (output.name && value[output.name] !== undefined) ? value[output.name] : value[idx];
+                const displayKey = output.name || `output${idx}`;
+                return prettifyWeb3(fieldValue, output, displayKey, indent + 1, strContractABIJson, functionName);
+            }).join('\n');
+        }
+        else if (typeInfo?.components) {
+            fields = typeInfo.components.map((comp, idx) => {
+                const fieldValue = (comp.name && value[comp.name] !== undefined) ? value[comp.name] : value[idx];
+                const displayKey = comp.name || `field${idx}`;
+                return prettifyWeb3(fieldValue, comp, displayKey, indent + 1, strContractABIJson, functionName);
+            }).join('\n');
+        } else {
+            const tupleKeys = namedKeys.length > 0 ? namedKeys : Object.keys(value).filter(k => isNaN(Number(k)));
+            fields = tupleKeys.map((k) => prettifyWeb3(value[k], null, k, indent + 1, strContractABIJson, functionName)).join('\n');
+        }
+
+        return key ? `${space}${filterXSS(key)} {\n${fields}\n${space}}` : `{\n${fields}\n}`;
+    }
+
+    return filterXSS(String(value));
+}
+
+    function getABITypeInfo(functionName, strContractABIJson, key) {
+        try {
+            const cleanFunctionName = functionName.includes('(')
+                ? functionName.substring(0, functionName.indexOf('('))
+                : functionName;
+
+            const contractABI = Array.isArray(strContractABIJson) ? strContractABIJson : JSON.parse(strContractABIJson);
+            const functionABI = contractABI.find(item => item.type === 'function' && item.name === cleanFunctionName);
+
+            if (!functionABI || !functionABI.outputs || functionABI.outputs.length === 0) {
+                console.log('No function ABI found:', cleanFunctionName);
+                return null;
+            }
+
+            console.log('Number of outputs:', functionABI.outputs.length);
+
+            if (functionABI.outputs.length > 1) {
+                console.log('Multi-output function detected');
+
+                if (key) {
+                    const output = functionABI.outputs.find(o => o.name === key);
+                    if (output) {
+                        console.log(`Found output for key "${key}": ${output.type}`);
+                        return output;
+                    }
+                    console.warn(` Output NOT found for key "${key}"`);
+                    return null;
+                }
+                return {
+                    type: 'multi-output',
+                    outputs: functionABI.outputs
+                };
+            }
+
+            const firstOutput = functionABI.outputs[0];
+
+            // If we have a key, try to find it in the components (for tuple types)
+            if (key && firstOutput.components) {
+                const component = firstOutput.components.find(c => c.name === key);
+                if (component) {
+                    console.log(`Found component for key "${key}": ${component.type}`);
+                    return component;
+                }
+                console.warn(`Component NOT found for key "${key}"`);
+                return null;
+            }
+
+            if (firstOutput.components) {
+                console.log('Returning tuple structure');
+                return firstOutput;
+            }
+
+            return firstOutput;
+        } catch (e) {
+            console.error('Error parsing ABI:', e);
+            return null;
+        }
+    }
+
+    async function connectWeb3(type, providers = null) {
+
+        var cont = false;
+        if ((contractAddress !== undefined) || (net !== undefined)) {
+            if (type === 'web3') {
+                var objProvider = await initweb3walletProvider("MetaMask");
+                web3obj = objProvider.web3obj;
+                provide = objProvider.provider;
+                iseip6963 = objProvider.iseip6963;
+                typeOfLogin = "MetaMask";
+            } else {
+                // for walletConnect we need to preemptively close the modal
+                closeModal();
+                var wcChainId = parseInt(strNetId);
+                switch (type) {
+                    case 'walletConnect':
+                    case 'walletLink':
+
+                        // is there a way for us to catch the qrmodal rejection and flush the object? TODO
+                        try {
+                            web3Modal = await initwalletLink(wcChainId, mainnetName, strExplorerUrl, strFavIcon);
+                            web3obj = await connectWalletLink(type.toLowerCase(), web3Modal, wcChainId, acceptedChainId, mainnetName, strSymbol, strRpcUrl, strExplorerUrl);
+                            nonBrowserWallet = true;
+                            typeOfLogin = type;
+                            iseip6963 = false;
+
+                            break;
+                        } catch (err) {
+                            alert('Failed to establish a connection to ' + type + '.');
+                            var isInIFrame = (window.location != window.parent.location);
+                            if (isInIFrame) {
+                                var element = window.parent.document.getElementById("readcontractiframe");
+                                element.style.removeProperty("min-height");
+                            }
+                            await resetPage();
+                            return;
+                        }
+                    case 'walletConnect_reown':
+                        try {
+                            let nativeToken = getNativeChainTokenDetails(strNetId);
+                            reownInitModal = await initReownConnect(strNetId, strRpcUrl, strSiteName, strExplorerUrl, strFavIcon, nativeToken.tokenTicker,
+                                                                    nativeToken.tokenName, nativeToken.decimals);
+                            web3obj = await getObjectReownConnect(reownInitModal);
+                            nonBrowserWallet = true;
+                            typeOfLogin = type;
+                            iseip6963 = false;
+
+                            break;
+                        } catch (err) {
+                            alert('Failed to establish a connection to ' + type + '.');
+                            console.error(err);
+                            await resetPage();
+                            return;
+                        }
+                    case 'rabby':
+                        try {
+                            let objProvider = await connectWithRabby(type);
+                            if (objProvider.web3obj == null || objProvider.provider == null || objProvider.iseip6963 == null) {
+                                alert('Failed to establish a connection to Rabby Wallet.\nNo Rabby wallet detected!');
+                                return;
+                            } else {
+                                web3obj = objProvider.web3obj;
+                                provide = objProvider.provider;
+                                iseip6963 = objProvider.iseip6963;
+                                nonBrowserWallet = objProvider.nonBrowserWallet;
+                                typeOfLogin = type;
+                            }
+                            break;
+                        } catch (err) {
+                            alert('Failed to establish a connection to ' + type + '.');
+                            console.error(err);
+                            await resetPage();
+                            return;
+                        }
+                    default:
+                        try {
+                            let objProvider = await connectWithOther(type, providers);
+                            if (objProvider.web3obj == null || objProvider.provider == null || objProvider.iseip6963 == null) {
+                                alert('Failed to establish a connection to ' + type + ' Wallet.\nNo ' + type + ' wallet detected!');
+                                return;
+                            } else {
+                                web3obj = objProvider.web3obj;
+                                provide = objProvider.provider;
+                                iseip6963 = objProvider.iseip6963;
+                                nonBrowserWallet = objProvider.nonBrowserWallet;
+                                typeOfLogin = type;
+                            }
+                        } catch (err) {
+                            alert('Failed to establish a connection to ' + type + '.');
+                            console.error(err);
+                            await resetPage();
+                            return;
+                        }  
+                }
+            }
+        }
+
+        if (typeof web3obj !== 'undefined') {
+
+            var network = 0;
+            network = await web3obj.eth.getChainId();//web3ojb.eth.net.getId();
+            netID = network.toString();
+
+            if (netID != strNetId) {
+                switchOrAddEthereumChainWithProvider(web3obj.currentProvider, acceptedChainId, mainnetName, strSymbol, strRpcUrl, strExplorerUrl, 18).then(() => {
+                    if (nonBrowserWallet == true || iseip6963) {
+                        getWeb3Accounts();
+                    } else if (typeof parent.ethereum !== 'undefined') {
+                        parent.ethereum.enable().then(function () {
+                            getWeb3Accounts();
+                        });
+                    } else if (typeof ethereum !== 'undefined') {
+                        ethereum.enable().then(function () {
+                            getWeb3Accounts();
+                        });
+                    } else {
+                        getWeb3Accounts();
+                    }
+                    parent.closeModal();
+                }).catch((ex) => {
+                    console.error('Failed to switch or add the requested network.', ex);
+                    alert('Failed to switch to the ' + net + ' network.');
+                });
+
+                //alert("Please connect your Web3 to " + net + ' network');
+                return false;
+            } else {
+                if (nonBrowserWallet == true || iseip6963) {
+                    getWeb3Accounts();
+                } else if (typeof parent.ethereum !== 'undefined') {
+                    parent.ethereum.enable().then(function () {
+                        getWeb3Accounts();
+                    });
+                } else if (typeof ethereum !== 'undefined') {
+                    ethereum.enable().then(function () {
+                        getWeb3Accounts();
+                    });
+                } else {
+                    getWeb3Accounts();
+                }
+            }
+
+            setTimeout(function () {
+                if (contractframe == "readproxycontractiframe") {
+                    window.parent.readProxyContractLoaded = true;
+                } else {
+                    window.parent.readContractLoaded = true;
+                }
+
+                var obj = window.parent.document.getElementById(contractframe);
+
+                if (obj !== null) {
+                    parent.resizeIframe(obj, 0);
+                    window.parent.isFrameLoading = false;
+                    window.parent.document.getElementById('overlayMain').style.display = 'none';
+                }
+
+            }, 50);
+
+            closeModal();
+        } else {
+            alert('Unable to locate a compatible web3 browser!');
+        }
+    }
+
+    function registerWalletConnectEvents(provider) {
+        // Subscribe to accounts change
+        provider.on("accountsChanged", (accounts) => {
+            window.location.reload(true);
+        });
+
+        // Subscribe to chainId change
+        provider.on("chainChanged", async (chainId) => {
+            await exitProvider();
+        });
+
+        // Subscribe to networkId change
+        provider.on("networkChanged", async (networkId) => {
+            await exitProvider();
+        });
+
+        // Subscribe to provider connection
+        provider.on("connect", (info) => {
+        });
+
+        // Subscribe to provider disconnection
+        provider.on("disconnect", (error) => {
+            window.location.reload(true);
+        });
+    }
+
+    async function resetPage() {
+        if (nonBrowserWallet == true) {
+            switch (typeOfLogin) {
+                case 'walletConnect':
+                case 'walletLink':
+                    await disconnectWalletLink(web3Modal);
+                    break;
+                case 'walletConnect_reown':
+                    await disconnectReownWallet(reownInitModal);
+                    break;
+                case 'rabby':
+                    await disconnectMmAndRabby(provide);
+                    window.location.reload(true);
+                    break;
+                default:
+                    await revokeConnection(provide);
+                    window.location.reload(true);
+                    break;
+            }
+        } else if (provide != null) {
+            // MetaMask exit block
+            await disconnectMmAndRabby(provide);
+            window.location.reload(true);
+        } else {
+            // refresh to logout
+            window.location.reload(true);
+        }
+    }
+
+    async function exitProvider() {
+        if (provider) {
+            // Some bundled providers (e.g. the Coinbase SDK / Reown provider) expose
+            // disconnect() but no close(). Calling close() unconditionally throws and
+            // aborts before the reload, leaving the page stale. Guard both.
+            try {
+                if (provider.close) await provider.close();
+                else if (provider.disconnect) await provider.disconnect();
+            } catch (e) {
+                console.warn('exitProvider: provider teardown errored', e);
+            }
+            // If the cached provider is not cleared,
+            // WalletConnect will default to the existing session
+            // and does not allow to re-scan the QR code with a new wallet.
+            // Depending on your use case you may want or want not his behavir.
+            //await web3Modal.clearCachedProvider();
+            provider = null;
+            window.location.reload(true);
+        }
+    }
+
+
+    async function getWeb3Accounts() {
+        if (iseip6963) {
+            var accounts = await getDetailsFromMetamaskWithProvider(provide);
+            if (accounts != null) {
+                parseAccount(accounts.account);
+                registerEventsWithProvider(web3obj.currentProvider);
+            } else {
+                alert('Please connect to your Web3 provider!');
+            }
+        }
+        else {
+            await web3obj.eth.getAccounts(function (err, accounts) {
+                if (err) alert(err + '. Are you sure you are on a secure (SSL / HTTPS) connection?');
+
+                if (accounts.length > 0) {
+                    parseAccount(accounts[0]);
+                    registerEventsWithProvider(web3obj.currentProvider);
+                } else {
+                    alert('Please connect to your Web3 provider!');
+                }
+            });
+        }
+    }
+
+    function parseAccount(address) {
+        var isAddress = isInputAddress(web3obj, address);
+
+        var strAddressHyperlink;
+        if (net == 'mainnet' || net == 'base') {
+            strAddressHyperlink = strExplorerUrl + "/address/" + address;
+        } else {
+            strAddressHyperlink = strExplorerUrl + "/address/" + address;
+        }
+
+        if (isAddress) {
+            var connectorID = document.getElementById('connectStatus');
+
+            connectorID.className = "btn btn-sm btn-soft-primary d-flex align-items-center gap-1 py-1.5"
+            var blockiesData = blockies.create({ seed: address.toLowerCase(), size: 8, scale: 16 }).toDataURL();
+            connectorID.innerHTML = '<img src="' + blockiesData + '" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:6px;" />' +
+                '<u>' + address.substring(0, 6) + '....' + address.substring(address.length - 4) + '</u>' +
+                '(' + typeOfLogin.charAt(0).toUpperCase() + typeOfLogin.slice(1) + ')';
+            connectorID.setAttribute('onclick', 'window.open("' + strAddressHyperlink + '","_blank"); return false;');
+            connectorID.removeAttribute('href');
+            $("#connectStatus").removeClass('disabled');
+            web3obj.eth.defaultAccount = address;
+
+            isAccount = true;
+
+            document.querySelectorAll(".cFunctionInputTypeAddress").forEach(el => {
+                updateFunctionInputSelfUI(el, address);
+            });
+        }
+    }
+
+    function encodeParams(values) {
+        var params = '';
+
+        if (values.length === 0)
+            return undefined;
+
+        for (i = 0; i < values.length; i++) {
+            var param = values[i];
+
+            if (param.value !== '') {
+                if (param.grp !== null) {
+                    var _grp = values.filter(function (x) { return x.grp == param.grp });
+                    var _grpParam = '';
+
+                    for (g = 0; g < _grp.length; g++) {
+                        param = _grp[g];
+
+                        if (param.value[0] !== '') {
+                            if (g == 0)
+                                if (param.type == "tuple" || param.type == "tuple[]") {
+                                    _grpParam = param.value[0];
+                                } else {
+                                    _grpParam = toHex(param.type, Escape(param.value[0]));
+                                }
+                            else
+                                if (param.type == "tuple" || param.type == "tuple[]") {
+                                    _grpParam = _grpParam + ',' + param.value[0];
+                                } else {
+                                    _grpParam = _grpParam + ',' + toHex(param.type, Escape(param.value[0]));
+                                }
+                        }
+                        else {
+                            _grpParam += ',' + "''";
+                        }
+                    }
+                    // _grpParam += ']';
+
+                    if (i == 0)
+                        params += _grpParam;
+                    else
+                        params += ',' + _grpParam;
+
+                    i += _grp.length - 1;
+                }
+                else {
+                    if (i == 0)
+                        if (param.type == "tuple" || param.type == "tuple[]") {
+                            params = param.value[0];
+                        } else {
+                            params = toHex(param.type, Escape(param.value[0]));
+                        }
+                    else
+                        if (param.type == "tuple" || param.type == "tuple[]") {
+                            if (param.type == "tuple" || param.type == "tuple[]") {
+                                params = param.value[0];
+                            } else {
+                                params = toHex(param.type, Escape(param.value[0]));
+                            }
+                        } else {
+                            params = params + ',' + toHex(param.type, Escape(param.value[0]));
+                        }
+                }
+            }
+            else {
+                if (i == 0) {
+                    params = "''";
+                }
+                else {
+                    params += ',' + "''";
+                }
+            }
+        }
+
+        return params;
+    }
+
+    function toHex(type, val) {
+        if (type.indexOf('bool') !== -1)
+            if (type.indexOf('[') !== -1) {
+                return val;
+            } else {
+                return JSON.parse(val);
+            }
+        else if (type.indexOf('address') !== -1)
+            if (type.indexOf('[') !== -1) {
+                // check for address[] - Convenience parsing to wrap with double quotes
+                // multidimensional arrays will rely on the user providing the correct input (brackets, double quotes on the correct places)
+                var tmp = val.toString().replace("[", "").replace("]", "").split(",");
+                var toReturn = "";
+                for (var i = 0; i < tmp.length; i++) {
+                    if (tmp[i].length == 0)
+                        toReturn = toReturn + " ," //let it error
+                    else
+                        toReturn = toReturn + "'" + add0xforAddress(tmp[i].toString().replace("\"", "").replace("'", "").replace("\"", "").replace("'", "")) + "',"
+                }
+                toReturn = toReturn.slice(0, -1);
+                toReturn = "[" + toReturn + "]";
+                return toReturn;
+            } else {
+                // strip any existing double quotes or single quotes
+                val = val.replace("\"", "").replace("'", "");
+                // needed to do it twice
+                val = val.replace("\"", "").replace("'", "");
+                return "'" + add0xforAddress(val) + "'";
+            }
+        else if (type == 'string')
+            // which also means if you double quote your strings, it'll follow suit ;)
+            return "'" + val + "'"
+        else if (type.indexOf('uint') !== -1 || type.indexOf('int') !== -1)
+            if (type.indexOf('[') !== -1) {
+                // check for uint[] - Convenience parsing to wrap with double quotes
+                // multidimensional arrays will rely on the user providing the correct input (brackets, double quotes on the correct places), exit if it is
+                if (type.split(/[[1-9]]/).length == 2) {
+                    var tmp = val.toString().replace("[", "").replace("]", "").split(",");
+                    var toReturn = "";
+
+                    // specifically handle empty array
+                    if (tmp.length == 1) {
+                        if (tmp[0].toString() == "") {
+                            return "[]";
+                        }
+                    }
+
+                    for (var i = 0; i < tmp.length; i++) {
+                        toReturn = toReturn + "'" + tmp[i].toString() + "',"
+                    }
+                    toReturn = toReturn.slice(0, -1);
+                    toReturn = "[" + toReturn + "]";
+                    return toReturn;
+                } else {
+                    // avoid handling complex data types, rely on user to enter them as appropriate
+                    return val;
+                }
+            }
+            else {
+                // strip any existing double quotes or single quotes
+                val = val.replace("\"", "").replace("'", "");
+                // needed to do it twice
+                val = val.replace("\"", "").replace("'", "");
+                return "'" + val + "'";
+            }
+        else if (type.indexOf('byte') !== -1)
+            if (type.indexOf('[') !== -1) {
+                // multidimensional arrays will rely on the user providing the correct input (brackets, double quotes on the correct places), exit if it is
+                if (type.split(/[[1-9]]/).length == 2) {
+                    var tmp = val.toString().replace("[", "").replace("]", "").split(",");
+                    var toReturn = "";
+
+                    // specifically handle empty array
+                    if (tmp.length == 1) {
+                        if (tmp[0].toString() == "") {
+                            return "[]";
+                        }
+                    }
+
+                    for (var i = 0; i < tmp.length; i++) {
+                        toReturn = toReturn + "'" + tmp[i].toString() + "',"
+                    }
+                    toReturn = toReturn.slice(0, -1);
+                    toReturn = "[" + toReturn + "]";
+                    return toReturn;
+                } else {
+                    // avoid handling complex data types, rely on user to enter them as appropriate - including quote wrapping
+                    return val;
+                }
+            }
+            else {
+                // strip any existing double quotes or single quotes
+                val = val.replace("\"", "").replace("'", "");
+                // needed to do it twice
+                val = val.replace("\"", "").replace("'", "");
+                return "'" + val + "'";
+            }
+        else
+            return val
+    };
+
+    //function toHex(type, val) {
+
+    //    if (Array.isArray(val)) {
+    //        var param = "[";
+
+    //        var i;
+    //        for (i = 0; i < val.length; i++) {
+    //            if (i == 0)
+    //                param += toHex(type, val[i]);
+    //            else
+    //                param = param + ',' + toHex(type, val[i]);
+    //        }
+    //        param += "]";
+
+    //        return param;
+
+    //    } else {
+    //        if (type.indexOf('bool') !== -1)
+    //            return JSON.parse(val);
+    //        else if (type.indexOf('address') !== -1)
+    //            return "'" + add0xforAddress(val) + "'"
+    //        else
+    //            return "'" + val + "'"
+    //    }
+
+    //};
+
+     function strip(val) {
+        val = val.replace(/"/g, '');
+        val = val.replace('[', '');
+        val = val.replace(']', '');
+
+        return val;
+    }
+    function showError(strBtnName, strOutputElementName, errResult) {
+        result = "" + filterXSS(errResult.toString()) + "";
+        htmlEncoded = htmlEncode(result);
+
+        var html = '<div class="card shadow-none border-secondary border-opacity-50 dark:border-opacity-25 rounded mt-3">'
+        html += '<div class="card-body p-3">'
+        html += '<label class="mb-1 d-flex align-items-center gap-1">'
+        html += 'Result:'
+        html += document.getElementById('type_' + strOutputElementName).innerHTML
+        html += '</label>'
+        html += '<div class="text-danger mb-1">'
+        html += htmlEncoded
+        html += '</div>'
+        html += '</div>'
+        html += '</div>'
+
+        document.getElementById(strOutputElementName).innerHTML = html;
+        showLoading(false, strBtnName);
+
+        var height = $('#' + strOutputElementName).height() + 20;
+        var id = $('#' + strOutputElementName).attr('id');
+        var obj = window.parent.document.getElementById(contractframe);
+
+        if (cardHeightDict[id]) {
+            $(obj).height(($(obj).height() - cardHeightDict[id] + height) + "px")
+            cardHeightDict[id] = height;
+        } else {
+            $(obj).height(($(obj).height() + height) + "px")
+            cardHeightDict[id] = height;
+        }
+    }
+    function showMessage(strMethodName, result, strOutputElementName, strOutputFieldNames, strBtnName) {
+        var formattedOutput;
+
+        var html = '<div class="card shadow-none border-secondary border-opacity-50 dark:border-opacity-25 rounded mt-3">'
+        html += '<div class="card-body p-3">'
+        html += '<label class="mb-1 d-flex align-items-center gap-1">'
+        html += 'Result:'
+        html += '<span class="badge bg-white border text-muted text-nowrap fw-medium py-1 px-1.5" style="--bs-badge-font-size: 0.85em;">' + strMethodName + ' method Response</span>'
+        html += document.getElementById('type_' + strOutputElementName).innerHTML
+        html += '</label>'
+        html += '<div class="">'
+        // object
+        if (typeof result === 'object' && result !== null) {
+            formattedOutput = prettifyWeb3WithABI(result, strMethodName)
+                .replace(/ /g, '&nbsp;')
+                .replace(/\n/g, '<br>');
+
+            // counter to avoid duplicate copy id
+            let counter = 0;
+            // replace hyperlink and copy clipboard button
+            formattedOutput = formattedOutput
+                .replace(/\[\[ADDR_LINK_START:(0x[0-9a-fA-F]{40})\]\]/g, function (_, address) {
+                    return `<a href="/address/${address}" target="_blank">`;
+                })
+                .replace(/\[\[ADDR_LINK_END\]\]/g, `</a>`)
+                .replace(/\[\[ADDR_COPY:(0x[0-9a-fA-F]{40})\]\]/g, function (_, address) {
+                    var iconid = `copyIcon-${address}-${strBtnName}-${counter++}`;
+                    return `<a class="js-clipboard link-dark rounded p-1.5" href="javascript:;" data-clipboard-text="${address}"  data-bs-toggle="tooltip" title="Copy Address" data-hs-clipboard-options='{"type": "tooltip","successText": "Copied!","classChangeTarget": "#${iconid}","defaultClass": "fa-copy","successClass": "fa-check"}'><i id="${iconid}" class="far fa-fw fa-sm fa-copy"></i></a>`;
+                });
+
+        } else {
+            // Fallback to old formatter for strings
+            formattedOutput = formatmultipleoutputs(result, strOutputFieldNames);
+        }
+        html += formattedOutput
+        html += '</div>'
+        html += '</div>'
+        html += '</div>'
+
+        document.getElementById(strOutputElementName).innerHTML = html;
+        showLoading(false, strBtnName);
+
+        var height = $('#' + strOutputElementName).height() + 20;
+        var id = $('#' + strOutputElementName).attr('id');
+        var obj = window.parent.document.getElementById(contractframe);
+
+        if (cardHeightDict[id]) {
+            $(obj).height(($(obj).height() - cardHeightDict[id] + height) + "px")
+            cardHeightDict[id] = height;
+        } else {
+            $(obj).height(($(obj).height() + height) + "px")
+            cardHeightDict[id] = height;
+        }
+
+        // reinit the HSClipboard
+        HSCore.components.HSClipboard.init('.js-clipboard');
+    }
+
+    function formatmultipleoutputs(strVal, strOutputFieldNames) {
+        var strAnswer = '';
+        if (strOutputFieldNames.includes(';') == true) {
+            var res_2 = strOutputFieldNames.split(';');
+            if (Object.keys(strVal).length > 0) {
+                for (var i = 0; i < res_2.length; i++) {
+                    var tmparray = res_2[i].toString().split('|');
+                    strAnswer += '<div>'
+                    strAnswer += "<span class='text-success me-1'><i class='fa fa-angle-double-right'></i></span>";
+
+                    if (res_2[i] != null && res_2[i].toString() != '') {
+                        if (filterXSS(tmparray[0])) {
+                            strAnswer += '<span class="fw-medium me-1">' + filterXSS(tmparray[0]) + "</span>"
+                        }
+                        strAnswer += "<span class='text-monospace text-muted'><i>" + filterXSS(tmparray[1]) + '</i></span><span class="fw-medium me-1">:</span>';
+                    }
+
+                    if (strVal[i] === null) {
+                        strAnswer += '<div class="d-flex text-break">'
+                        strAnswer += formatresult("", filterXSS(tmparray[1]));
+                        strAnswer += '</div>'
+                    } else {
+                        var strOutputValue = strVal[i];
+
+                        //moving into formatresult
+                        /*if (/\r|\n/.exec(strOutputValue)) {
+                            strOutputValue = strOutputValue.replaceAll(/\r|\n/g, "xxxspacexxx");
+                        }*/
+                        strOutputValue = formatresult(strOutputValue, filterXSS(tmparray[1]));
+                        strOutputValue = strOutputValue.replaceAll("xxxspacexxx", "<br/>");
+
+                        strAnswer += '<div class="d-flex text-break">'
+                        strAnswer += strOutputValue;
+                        strAnswer += '</div>'
+                    }
+                    strAnswer += '</div>'
+                }
+            }
+        } else {
+            strAnswer += '<div>'
+            strAnswer += "<span class='text-success me-1'><i class='fa fa-angle-double-right'></i></span>";
+
+            if (strOutputFieldNames != '') {
+                var tmparray = strOutputFieldNames.toString().split('|');
+
+                if (filterXSS(tmparray[0])) {
+                    strAnswer += '<span class="fw-medium me-1">' + filterXSS(tmparray[0]) + "</span>"
+                }
+                strAnswer += "<span class='text-muted'><i>" + filterXSS(tmparray[1]) + '</i></span><span class="fw-medium me-1">:</span>';
+
+                //moving into formatresult
+                /*strVal = (Array.isArray(strVal) ? strVal.join("") : strVal);                
+                if (/\r|\n/.exec(strVal)) {
+                    strVal = strVal.replaceAll(/\r|\n/g, "xxxspacexxx");
+                }*/
+
+                strVal = formatresult(strVal, filterXSS(tmparray[1]))
+                strVal = strVal.replaceAll("xxxspacexxx", "<br/>");
+            }
+            strAnswer += '<div class="d-flex text-break">'
+            strAnswer += strVal.toString();
+            strAnswer += '</div>'
+
+            strAnswer += '</div>'
+        }
+
+        return strAnswer;
+    }
+    function showLoading(isShow, strBtnName) {
+
+        if (isShow) {
+            $(" <img id='waiting_" + strBtnName + "' class='waitingImg' src='/images/ajax-loader2.gif' style='margin-left:5px;' alt='Loading' />").insertAfter($('#' + strBtnName));
+            $('#' + strBtnName).prop('disabled', true);
+        } else {
+            $('#' + strBtnName).prop('disabled', false);
+            $('#waiting_' + strBtnName).remove();
+        }
+    }
+    function Escape(val) {
+
+        if (typeof val === 'string' || val instanceof String)
+            return val.replace(/'/g, "\\u0027");
+        else
+            return val;
+
+    }   
+    function htmlEncode(value) {
+        return $('<div/>').text(value).html();
+    }
+
+    function replaceAll(str, find, replace) {
+        return str.replace(new RegExp(find, 'g'), replace);
+    }
+
+    function isInt(value) {
+        if (isNaN(value)) {
+            return false;
+        }
+        return parseInt(value);
+    }
+
+    function getBool(val) {
+        try {
+            //to check the val is INT or not.
+            let intVal = isInt(val);
+            if (intVal) {
+                //!! is to cast the result into boolean
+                return !!JSON.parse(String(intVal).toLowerCase());
+            } else {
+                return !!JSON.parse(String(val).toLowerCase());
+            }
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function formatresult(strResult, resulttype) {
+        temp = strResult;
+        // cleansing
+        strResult = filterXSS(strResult);
+
+        if (resulttype.startsWith('uint')) {
+            if (strResult.indexOf(',') !== -1) {
+                var r = strResult.split(',');
+                var a = '';
+                for (i = 0; i < r.length; i++) {
+                    a = a + toFixed(r[i].toString()) + ',';
+                }
+                return a.substring(0, a.length - 1);
+            } else {
+                return toFixed(strResult);
+            }
+        } else if (resulttype == 'string') {
+            return strResult;
+            //return hex_to_ascii(strResult);
+        } else if (resulttype == 'address') {
+            if (strResult != '0x0000000000000000000000000000000000000000') {
+                return "<a href='/address/" + strResult + "' target='_blank'>" + strResult + "</a>";
+            } else {
+                return strResult;
+            }
+        } else if (resulttype == 'bool') {
+            return getBool(remove0x(strResult)).toString();
+        } else {
+            //code to handle if it is array or normal string
+            strResult = (Array.isArray(temp) ? JSON.stringify(temp) : temp);
+            if (/\r|\n/.exec(strResult)) {
+                strResult = strResult.replaceAll(/\r|\n/g, "xxxspacexxx");
+            }
+            strResult = filterXSS(strResult);
+            return strResult;
+        }
+    }
+
+    function hex_to_ascii(str1) {
+        var hex = str1.toString();
+        var str = '';
+        for (var n = 0; n < hex.length; n += 2) {
+            str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
+        }
+        return str;
+    }
+
+    function extractaddress(str1) {
+        if (str1.length > 40) {
+            str1.substr(str1.length - 40)
+        }
+        return str1;
+    }
+
+    function remove0x(str1) {
+        if (str1.startsWith("0x") == true) {
+            str1 = str1.substr(str1.length - str1.length + 2);
+        }
+        return str1;
+    }
+
+    function add0xforAddress(straddress) {
+        straddress = straddress.trim();
+        if (straddress.startsWith("0x") == false && straddress.length == 40) {
+            straddress = "0x" + straddress;
+        }
+        return straddress;
+    }
+
+    function toFixed(x) {
+        if (x.indexOf("e+") !== -1) {
+            var value = new BigNumber(x);
+            x = value.toString(10);
+        }
+
+        var reg = new RegExp('^[0-9]+$'); //ensuring that the result is a number before linking it to unitconverter page
+
+        if (reg.test(x) && x.length > 10) {
+            return "<a target='_blank' href='/unitconverter?wei=" + x + "'>" + x + "</a>"
+        }
+
+        return x;
+    }     
+    setTimeout(function () {
+       
+    }, 0);
+
+    $(document).ready(function () {
+        $(window).keydown(function (event) {
+            if (event.keyCode == 13) {
+                event.preventDefault();
+                return false;
+            }
+        });
+
+        $('[data-bs-toggle="tooltip"]').tooltip();
+
+        var funcId = getParameterByName("F");
+        if (funcId) {
+            setTimeout(function () {
+                var targetId = "readFunction"
+                var targetQId = "#" + targetId
+                var closestTargetId = ".accordion"
+
+                $(targetQId + funcId).collapse('show');
+                $(targetQId + funcId).closest(closestTargetId).addClass("blinking-bg");
+                setTimeout(function () {
+                    document.getElementById(targetId + funcId).scrollIntoView({
+                        behavior: 'smooth', block: "center", inline: "nearest", callback: function () {
+                            evt.preventDefault();
+                            evt.stopPropagation();
+                        }
+                    });
+                    setTimeout(function () {
+                        $(targetQId + funcId).closest(closestTargetId).addClass("blinking-bg");
+                        setTimeout(function () {
+                            $(targetQId + funcId).closest(closestTargetId).removeClass("border-primary_r");
+                            $(targetQId + funcId).closest(closestTargetId).removeClass("blinking-bg");
+                        }, 3000);
+                    }, 500);
+                }, 500);
+            }, 1000);
+        }
+    });
+
+    function generatePermalink(number) {
+        var currentUrl = window.parent.location.href;
+        let prefix = "";
+
+        if (window.parent.location.href.indexOf("#writeProxyContract") > -1)
+            prefix = "#writeProxyContract";
+        if (window.parent.location.href.indexOf("#readProxyContract") > -1)
+            prefix = "#readProxyContract";
+        if (window.parent.location.href.indexOf("#writeContract") > -1)
+            prefix = "#writeContract";
+        if (window.parent.location.href.indexOf("#readContract") > -1)
+            prefix = "#readContract";
+
+        var baseUrl = currentUrl.split("#")[0] + prefix;
+        baseUrl = baseUrl + "#F" + number;
+
+        return baseUrl
+    }
+
+    var read_contract = {
+        triggerClickAccordion: function (event) {
+            if (!event.target.closest('.js-prevent-collapse')) {
+                let targetElem = event.target.closest('.accordion-item');
+                let collapseInstance = new bootstrap.Collapse(targetElem.querySelector('.accordion-collapse'));
+                collapseInstance.toggle();
+                targetElem.querySelector('.accordion-button').classList.toggle('collapsed');
+            }
+        },
+    };
+
+    //code reader
+    function renderAlertBox(type, msg) {
+        return `<div class="alert alert-${type} text-break alert-dismissible fade show mt-2" role="alert">
+        <div class="d-flex align-items-baseline gap-2">
+            ${msg}
+        </div>
+        <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+    </div>`
+    }
+
+    function renderFunctionExplain(html) {
+        return ` <div class="card shadow-none border-secondary border-opacity-50 dark:border-opacity-25 rounded mb-1">
+       <div class="card-body p-3">
+         <div class="fw-medium mb-2">
+           <i class="far fa-sparkles text-primary me-1"></i>Function Explained
+         </div>
+         <div>` + html + `</div>
+       </div>
+     </div>
+     <div class="small text-muted mb-4">*Al can make mistakes, be sure to double-check the responses it generates.</div>`
+    }
+
+    function htmlEnc(s) {
+        if (s != null) {
+            return s.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, '&#39;')  // Single quote
+                .replace(/"/g, '&quot;') // Double quote
+                .replace(/`/g, '&#96;')  // Backtick
+                .replace(/\//g, '&#x2F;') // Forward slash
+                .replace(/\\/g, '&#x5C;') // Backslash
+        } else {
+            return ""
+        }
+    }
+
+    const ssid = '94e63e66db08452cb91d082d4c8e8413'
+    var isFunctionExplain = {}
+    function myfnAIExplanationContract(element, event, count) {
+        event.preventDefault()
+        event.stopPropagation()
+        read_contract.triggerClickAccordion(event)
+
+        if (!isFunctionExplain["divfunctionexplain" + count]) {
+            var $button = $(element)
+            $button.addClass('disabled');
+            $button.html('<i class="fa fa-spin fa-spinner"></i>');
+
+            isFunctionExplain["divfunctionexplain" + count] = 1
+
+            const contractfunction = element.getAttribute('data-contractfunction');
+            var divAiAnswer = $("#divfunctionexplain" + count)
+
+            $.ajax({
+                type: "POST",
+                url: "/code-readerHandler.ashx",
+                dataType: 'json',
+                data: {
+                    ssid: ssid,
+                    address: contractAddress,
+                    action: "reader_ContractFunction",
+                    contractfunction: contractfunction,
+                },
+                success: function (response) {
+                    if (typeof response !== 'object') {
+                        response = JSON.parse(response)
+                    }
+                    var html = ""
+                    if (response['error']) {
+                        if (response['error']['message']) {
+                            if (response['error']['message'] == "The model: `gpt-4` does not exist") {
+                                html = renderAlertBox('danger', "The provided API key does not have access to GPT-4. Please change to a different key or use GPT-3.5.")
+                            } else {
+                                html = renderAlertBox('danger', response['error']['message'])
+                            }
+                        } else {
+                            html = renderAlertBox('danger', response['error']['code'])
+                        }
+                    } else {
+                        var html = ""
+                        var choices = response['choices']
+                        Object.entries(choices).forEach(([key, value]) => {
+                            html += value['message']['content']
+                        });
+                        html = htmlEnc(html).replace(/\n/g, '<br/>')
+                    }
+                    divAiAnswer.html(renderFunctionExplain(html))
+
+                    var obj = window.parent.document.getElementById(contractframe);
+                    var newHeight = divAiAnswer.height();
+                    $(obj).height(($(obj).height() + newHeight) + "px")
+                },
+                error: function (xhr, status, error) {
+                    var html = ""
+                    if (xhr['responseJSON']['error']['message']) {
+                        if (xhr['responseJSON']['error']['message'] == "The model: `gpt-4` does not exist") {
+                            html = renderAlertBox('danger', "The provided API key does not have access to GPT-4. Please change to a different key or use GPT-3.5.")
+                        } else {
+                            html = renderAlertBox('danger', xhr['responseJSON']['error']['message'])
+                        }
+                    } else {
+                        html = renderAlertBox('danger', xhr['responseJSON']['error']['code'])
+                    }
+                    divAiAnswer.html(renderFunctionExplain(html))
+
+                    var obj = window.parent.document.getElementById(contractframe);
+                    var newHeight = divAiAnswer.height();
+                    $(obj).height(($(obj).height() + newHeight) + "px")
+                },
+                complete: function () {
+                    $button.html('<i class="far fa-sparkles"></i>');
+                    $button.removeClass('disabled');
+                }
+            });
+        }
+    }
+    //end code reader
+
+    function getCookie(cname) {
+        var name = cname + "=";
+        var ca = document.cookie.split(';');
+        for (var i = 0; i < ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) === ' ') {
+                c = c.substring(1);
+            }
+            if (c.indexOf(name) === 0) {
+                return c.substring(name.length, c.length);
+            }
+        }
+        return "";
+    }
+
+    var themeMode = localStorage.getItem('theme');
+    if (themeMode === null) {
+        themeMode = 'light';
+    }
+
+    var cThemeMode = getCookie('displaymode');
+
+    (function () {
+        if (cThemeMode === 'light' || themeMode === 'light') {
+            document.documentElement.setAttribute('data-bs-theme', 'light');
+        } else if (cThemeMode === 'dim' || themeMode === 'dim') {
+            document.documentElement.setAttribute('data-bs-theme', 'dim');
+        } else if (cThemeMode === 'dark' || themeMode === 'dark') {
+            document.documentElement.setAttribute('data-bs-theme', 'dark');
+        } else if (cThemeMode === 'auto' || themeMode === 'auto') {
+            document.documentElement.setAttribute('data-bs-theme', getCookie('site_auto_theme'));
+        }
+
+        // INITIALIZATION OF CLIPBOARD
+        // =======================================================
+        document.querySelectorAll('.js-clipboard[data-counter]').forEach(function (el) {
+            var counter = el.getAttribute('data-counter');
+            el.setAttribute('data-clipboard-text', generatePermalink(counter));
+        });
+
+        HSCore.components.HSClipboard.init('.js-clipboard');
+    })();
+
+    // POWER-OF-10 MULTIPLIER
+    // =======================================================
+    (function () {
+        document.querySelectorAll('.js-power-option').forEach(function (option) {
+            option.addEventListener('click', function (e) {
+                e.preventDefault();
+                const power = parseInt(this.dataset.power, 10);
+                const input = this.closest('.js-power-container').querySelector('.js-power-input');
+                if (!input) return;
+
+                const inputValue = input.value.trim();
+                const baseValue = inputValue === '' ? 1 : parseFloat(inputValue);
+                if (isNaN(baseValue)) return;
+
+                // Multiply by 10^power and handle floating point precision
+                const result = baseValue * Math.pow(10, power);
+                input.value = parseFloat(result.toPrecision(15));
+                input.dispatchEvent(new Event('input'));
+            });
+        });
+    })();
+
+    // CLEAR INPUT FUNCTIONALITY
+    // =======================================================
+    function initClearableInputs(container) {
+        const scope = container || document;
+        scope.querySelectorAll('.js-clearable-input').forEach(function (input) {
+            const clearBtn = input.parentElement.querySelector('.js-clear-btn');
+            if (!clearBtn) return;
+
+            // Check if already initialized to avoid duplicate listeners
+            if (input.dataset.clearableInit === 'true') return;
+            input.dataset.clearableInit = 'true';
+
+            function toggleClearBtn() {
+                const inputValue = input.value || '';
+                clearBtn.classList.toggle('d-none', !inputValue.trim());
+            }
+
+            input.addEventListener('input', toggleClearBtn);
+            toggleClearBtn();
+
+            clearBtn.addEventListener('click', function () {
+                input.value = '';
+                toggleClearBtn();
+                input.focus();
+            });
+        });
+    }
+
+    // Initialize on page load
+    (function () {
+        initClearableInputs();
+    })();
+
+    function updateFunctionInputSelfUI(el, straddress) {
+        // el is the <div class="cFunctionInputTypeAddress"></div>
+        // Get the parent container
+        const parentContainer = el.closest('.position-relative');
+        if (!parentContainer) return;
+
+        // Find the input element (sibling)
+        const input = parentContainer.querySelector('.js-clearable-input');
+        if (!input) return;
+
+        // Find existing wrapper span and button
+        let wrapperSpan = el.querySelector('span');
+        let selfBtn;
+
+        if (wrapperSpan) {
+            // Destroy old tooltip if exists
+            const tooltipInstance = bootstrap?.Tooltip?.getInstance(wrapperSpan);
+            if (tooltipInstance) {
+                tooltipInstance.dispose();
+            }
+
+            selfBtn = wrapperSpan.querySelector('.btn-white');
+
+            // Remove old event listeners by cloning
+            const newSelfBtn = selfBtn.cloneNode(true);
+            selfBtn.replaceWith(newSelfBtn);
+            selfBtn = newSelfBtn;
+
+        } else {
+            // Create wrapper span
+            wrapperSpan = document.createElement('span');
+
+            // Create self button (first load)
+            selfBtn = document.createElement('button');
+            selfBtn.type = 'button';
+            selfBtn.className = 'btn btn-sm btn-white';
+            selfBtn.textContent = 'Self';
+
+            // Add button to wrapper, then wrapper to el
+            wrapperSpan.appendChild(selfBtn);
+            el.appendChild(wrapperSpan);
+        }
+
+        // Check if straddress has a valid value (safe check)
+        const hasAddress = straddress && typeof straddress === 'string' && straddress.trim() !== '';
+
+        // Update button state based on straddress
+        if (hasAddress) {
+            // Has address - button is enabled
+            selfBtn.disabled = false;
+            wrapperSpan.removeAttribute('data-bs-toggle');
+            wrapperSpan.removeAttribute('title');
+            wrapperSpan.removeAttribute('data-bs-original-title');
+
+            // Add click functionality to paste address
+            selfBtn.addEventListener('click', function () {
+                input.value = straddress;
+                input.focus();
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+
+        } else {
+            // No address - button is disabled with tooltip on wrapper
+            selfBtn.disabled = true;
+            wrapperSpan.setAttribute('data-bs-toggle', 'tooltip');
+            wrapperSpan.setAttribute('title', 'Connect wallet to paste your address');
+
+            // Initialize tooltip on wrapper (Bootstrap 5)
+            setTimeout(() => {
+                if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+                    new bootstrap.Tooltip(wrapperSpan);
+                }
+            }, 0);
+        }
+    }
+
+    document.querySelectorAll(".cFunctionInputTypeAddress").forEach(el => {
+        updateFunctionInputSelfUI(el, "");
+    });
+</script>
+</html>

@@ -1,0 +1,2408 @@
+{
+ "data": {
+  "markets": {
+   "items": [
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771833987,
+     "collateralAsset": {
+      "address": "0x69F9EeeDc28b036B2f2F78Fd562D7C69b2c5F630",
+      "symbol": "960GUY",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771985405,
+     "collateralAsset": {
+      "address": "0x051ba1b4c179EB2ECD641cFC1c9bE4be43289D9a",
+      "symbol": "PHANTO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1753224027,
+     "collateralAsset": {
+      "address": "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452",
+      "symbol": "wstETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771492227,
+     "collateralAsset": {
+      "address": "0x1Af968AA883Ec0875213a83DAF12AF8624F24103",
+      "symbol": "MINITIMEBOTALPHAXXXXXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771879003,
+     "collateralAsset": {
+      "address": "0x3CbB3aB682b7973d0423DCAAb14bcbD440FcE93a",
+      "symbol": "TSCAN",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1781812731,
+     "collateralAsset": {
+      "address": "0xcffF797f32b407e5ECe27aC7629DE5673575D6Dd",
+      "symbol": "WHP",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771880819,
+     "collateralAsset": {
+      "address": "0xa9eF1EB74EcAfeE8E06ff77425e93693c0FD5472",
+      "symbol": "SADIE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771485841,
+     "collateralAsset": {
+      "address": "0x17d327EE50889f2779e4d1d3e0441F8aE4E190fF",
+      "symbol": "BTCXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771192947,
+     "collateralAsset": {
+      "address": "0x8AEdBb5f485f51De8dF9502eee83655fe53347D7",
+      "symbol": "DIIISCO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1752045417,
+     "collateralAsset": {
+      "address": "0xDbf9F254C365ABe4294884d1249c7a2388f70911",
+      "symbol": "RST0001-UAE-DUBAI-BAYZ BY DANUBE-01",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771984385,
+     "collateralAsset": {
+      "address": "0x51140a5A14D087431fb3A55Ef31e6D75F80EB2dE",
+      "symbol": "xyz",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1791415287,
+     "collateralAsset": {
+      "address": "0xa4c21C8C01392Fa5bcfFFdD9C7E8AC3BA3f070Cf",
+      "symbol": "UNKNOWN",
+      "decimals": 0
+     }
+    },
+    {
+     "creationTimestamp": 1745356289,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771969999,
+     "collateralAsset": {
+      "address": "0xC8f7C01504a812Bcf291BF584bae4a1Ec870e381",
+      "symbol": "CLANKER",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771178665,
+     "collateralAsset": {
+      "address": "0x1300e22Cb9a23005EEA0B53c0e93fCF52A818E8C",
+      "symbol": "ICEFROST",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771841043,
+     "collateralAsset": {
+      "address": "0xc8392D7f882c92F1FF769E5480dF88466577C80D",
+      "symbol": "HSD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1739903483,
+     "collateralAsset": {
+      "address": "0x35E5dB674D8e93a03d814FA0ADa70731efe8a4b9",
+      "symbol": "USR",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771283083,
+     "collateralAsset": {
+      "address": "0x3E6BE21Ca4A7F42423149dA9cf71278A37eAADeC",
+      "symbol": "XIAOC",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771491207,
+     "collateralAsset": {
+      "address": "0xBAFBAb82a74C5eBa5C38Bf608e2f59998aFb40BD",
+      "symbol": "SUPRO10XXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771835533,
+     "collateralAsset": {
+      "address": "0x68Fc790CCe4E432fd8f6F35b0Db6C788977293CD",
+      "symbol": "EON56",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1788764281,
+     "collateralAsset": {
+      "address": "0xb20000000000000000000078ee7ce2fE4908108C",
+      "symbol": "NVDAc",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1771476783,
+     "collateralAsset": {
+      "address": "0xCB8fF304b87F315353227901EF64c7b37c71487b",
+      "symbol": "HYPPE21XX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771574671,
+     "collateralAsset": {
+      "address": "0x4D56a490FEc713E4F4f26dC13e9095719253eD05",
+      "symbol": "BLUEBEAMX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771972777,
+     "collateralAsset": {
+      "address": "0xD79567C6113c7deafB89A77deDcB55105b339FFA",
+      "symbol": "PMPR",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771581799,
+     "collateralAsset": {
+      "address": "0x68DA90fd8259e9f059A1E5810cb1635F988ED1EE",
+      "symbol": "WHITEALIENX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771489389,
+     "collateralAsset": {
+      "address": "0xfB9C911DD63d621f9C51F130CaF46F3B9Cb3CbE4",
+      "symbol": "YOLOXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771979793,
+     "collateralAsset": {
+      "address": "0x370977A2508f98E083Bfd76710728906e55D7a15",
+      "symbol": "UNLEASH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1791907805,
+     "collateralAsset": {
+      "address": "0xbeef0e0834849aCC03f0089F01f4F1Eeb06873C9",
+      "symbol": "steakUSDC",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1734034525,
+     "collateralAsset": {
+      "address": "0xecAc9C5F704e954931349Da37F60E39f515c11c1",
+      "symbol": "LBTC",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1771478659,
+     "collateralAsset": {
+      "address": "0x63F3Ca2B0D3730c7f2869B9551977aFC0c56DDd7",
+      "symbol": "MINITIMEBOTALPHAXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771484925,
+     "collateralAsset": {
+      "address": "0x174c953d46cC313E137687EFb6e5876B8dF29331",
+      "symbol": "MOGRAXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771981699,
+     "collateralAsset": {
+      "address": "0x3BB5d27766f0a1677dA15Af76bAf6d01232DFf0E",
+      "symbol": "Call of Duty ",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771491943,
+     "collateralAsset": {
+      "address": "0xC465A7FfDEcee3630D66248c5658D67D52Fb01a7",
+      "symbol": "HYPPE21XXXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771972727,
+     "collateralAsset": {
+      "address": "0x5A486450dB58E377f518877F497a992D7151bec5",
+      "symbol": "ENERGY",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1759991601,
+     "collateralAsset": {
+      "address": "0x7D214438D0F27AfCcC23B3d1e1a53906aCE5CFEa",
+      "symbol": "reUSD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356323,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356323,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771478777,
+     "collateralAsset": {
+      "address": "0x6a7E864e1ef5D797B3200C802c180D862Cc21A40",
+      "symbol": "CLAWX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771504623,
+     "collateralAsset": {
+      "address": "0x2d374f51190118734a9d712d52ffe444BB91e368",
+      "symbol": "WOLF75X",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771852871,
+     "collateralAsset": {
+      "address": "0x839EB2d61b573b6CeB72a5071B00F79D8aBB1B18",
+      "symbol": "THERIAN",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771953713,
+     "collateralAsset": {
+      "address": "0xEBc7506b4FCF23c9D68401fE458B73F7C9b4D507",
+      "symbol": "SAAS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1760111177,
+     "collateralAsset": {
+      "address": "0xcb585250f852C6c6bf90434AB21A00f02833a4af",
+      "symbol": "cbXRP",
+      "decimals": 6
+     }
+    },
+    {
+     "creationTimestamp": 1771587277,
+     "collateralAsset": {
+      "address": "0x7492618EdC6cf96FF1aFd17f7C9dC4aBFcB36F11",
+      "symbol": "CHILLALIENX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771526129,
+     "collateralAsset": {
+      "address": "0x1bcF05eD2EdF3aeB7b5C635FA4EF6b831ECe9726",
+      "symbol": "CLAWNCHER",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771478595,
+     "collateralAsset": {
+      "address": "0x9b28FEf333e29C2288c3079c2e3cfD61eb1dA2A5",
+      "symbol": "DSEEKXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1732094781,
+     "collateralAsset": {
+      "address": "0x4200000000000000000000000000000000000006",
+      "symbol": "WETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771850219,
+     "collateralAsset": {
+      "address": "0xAd5B0087e2C053d590b9291C2741bdfE50B998e7",
+      "symbol": "NAT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771478643,
+     "collateralAsset": {
+      "address": "0x39E585546B9756E35390D5Ad72db6eE616a8Fb46",
+      "symbol": "CLWECOX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771187723,
+     "collateralAsset": {
+      "address": "0x4ef00cfDB293974e3822e52B17A438BaDDefe219",
+      "symbol": "MELON",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771859101,
+     "collateralAsset": {
+      "address": "0xC2100fef2f0962a27Ef70b08Cc84c1A8EaE45Ab2",
+      "symbol": "VOLE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771822375,
+     "collateralAsset": {
+      "address": "0x3d72FD9695a2fFaFaD95D0CA978b979Ae4fB4Cff",
+      "symbol": "BREEZE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771893529,
+     "collateralAsset": {
+      "address": "0x45425Af873a2C05E9dD09ab4993ed94613936Ca1",
+      "symbol": "GO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771193085,
+     "collateralAsset": {
+      "address": "0x10C36A9FE6Ed6c2c0c294E9eAed1dB512FaE8EEe",
+      "symbol": "ALEXA",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771185803,
+     "collateralAsset": {
+      "address": "0x1239e192A553De5Eb1D43372d3cd602ed1D40EF9",
+      "symbol": "JMEASSISTAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771492077,
+     "collateralAsset": {
+      "address": "0xdc233cccC33d00B7d8204D99316bEE16808951fb",
+      "symbol": "BULLETCATXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771548447,
+     "collateralAsset": {
+      "address": "0x7304cFFa441192Cf81789b0b8dBc0226C99240B7",
+      "symbol": "AUTUMNAMBEMOLT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1747090669,
+     "collateralAsset": {
+      "address": "0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A",
+      "symbol": "weETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771188707,
+     "collateralAsset": {
+      "address": "0x223D7063FE82bFDB275812400945064AD24bF7AE",
+      "symbol": "BOLDFORGE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771822929,
+     "collateralAsset": {
+      "address": "0x43FE3dADc0Cb56FDb126475033696cbd59eF22F0",
+      "symbol": "TRASHBACK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1791457793,
+     "collateralAsset": {
+      "address": "0x42eE0d929b83d6Ad53bf928845AC953cc0Ba3021",
+      "symbol": "tCOLL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771182325,
+     "collateralAsset": {
+      "address": "0x9825E8E1Ad759e7114D91236e960bDda7fAcAF65",
+      "symbol": "MOLTMINDMEMORYAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771829409,
+     "collateralAsset": {
+      "address": "0xA1b09be08209B6D442d584B566A408d420765aFe",
+      "symbol": "960GUY",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1754794733,
+     "collateralAsset": {
+      "address": "0xbFd5206962267c7b4b4A8B3D76AC2E1b2A5c4d5e",
+      "symbol": "OSAK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771878105,
+     "collateralAsset": {
+      "address": "0x6aB3102A73F389eacFE2865422217BaE19F027A2",
+      "symbol": "LIA",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771948303,
+     "collateralAsset": {
+      "address": "0x8A014eAc47A4ef573C88267D36E1af32fB21FA8a",
+      "symbol": "MAD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771184885,
+     "collateralAsset": {
+      "address": "0x7c23158682c07e482eC5eCE7ed141e9262E49B30",
+      "symbol": "DOREL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771591791,
+     "collateralAsset": {
+      "address": "0xb3499d673b7d56EF7ffCCe7072DA11346a04AD2E",
+      "symbol": "FATEX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771498129,
+     "collateralAsset": {
+      "address": "0x7C67A438D26F5FB2861e8fad21Df7A515260CBdf",
+      "symbol": "HASEX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771492093,
+     "collateralAsset": {
+      "address": "0x9f769f76c9a255b21ec33E5575a27e3aa046af26",
+      "symbol": "BTCXXXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1784045151,
+     "collateralAsset": {
+      "address": "0x4200000000000000000000000000000000000006",
+      "symbol": "WETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771979077,
+     "collateralAsset": {
+      "address": "0x6DBD3393D55C55Ac5362c29b6dAf98b2eB856465",
+      "symbol": "WOL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771828513,
+     "collateralAsset": {
+      "address": "0x0c37d9aD8c966Fc7956aFa01A91CAF9351eb4D08",
+      "symbol": "MOSS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771583603,
+     "collateralAsset": {
+      "address": "0xB497CC2a4B1a2c636794E22DB6bB4B321e23f5c6",
+      "symbol": "BRAINTWINX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771196707,
+     "collateralAsset": {
+      "address": "0xEC95eFaDD4BD86BAa08F606D48c34Bce53667b0a",
+      "symbol": "CLAUDE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771973579,
+     "collateralAsset": {
+      "address": "0xE8C4C63d0Db9a496885B1EF30724ff853aE7e742",
+      "symbol": "TUNA",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1718805855,
+     "collateralAsset": {
+      "address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
+      "symbol": "cbETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771479281,
+     "collateralAsset": {
+      "address": "0x4B3057F019f8d6aCF48Da935c1a41A1DfF060fED",
+      "symbol": "MINITIMEBOTALPHAXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1782277581,
+     "collateralAsset": {
+      "address": "0x9C8cd8d3961F445D653713dE65C6578bE11668e7",
+      "symbol": "SINC",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1771186055,
+     "collateralAsset": {
+      "address": "0xcdC215fd9Cf80B2AD74934847555f8ED7Ae4b56C",
+      "symbol": "SERIK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771927537,
+     "collateralAsset": {
+      "address": "0x0FAcB8EbFe0a5822DeB08078012825e88b897E81",
+      "symbol": "JACK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771245245,
+     "collateralAsset": {
+      "address": "0x3aBC710685445fc65aE3BBfA761278faE5f5dA77",
+      "symbol": "OZONCHECKBOTAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771517119,
+     "collateralAsset": {
+      "address": "0xdaffFD2C2dDA87660d6B0be059E7078c5d2619e6",
+      "symbol": "RIVAIRYX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771953747,
+     "collateralAsset": {
+      "address": "0xE9C59941f22bf60829E0F4990e5898bF5F4206Df",
+      "symbol": "CLAWLESS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771193021,
+     "collateralAsset": {
+      "address": "0xf6Db04a957F99d1029505c5DE179D482f1B96297",
+      "symbol": "ECORESOURCEHUBAGENT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745355831,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771901531,
+     "collateralAsset": {
+      "address": "0xFB16178bC09d7103E58e75b7C1cC1cbFe0B1DD87",
+      "symbol": "BALDI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771186919,
+     "collateralAsset": {
+      "address": "0xCD2BAC3038A2411735c9f6fA9c3EeEb18D7C6C4b",
+      "symbol": "MANUS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771180675,
+     "collateralAsset": {
+      "address": "0x968eD866664D2eFbb104eB04ad0f35969e2501C5",
+      "symbol": "LUIZ",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771485759,
+     "collateralAsset": {
+      "address": "0xe22b99480068D5cA075B5923027C325F2A5672b5",
+      "symbol": "AI16BXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771485989,
+     "collateralAsset": {
+      "address": "0x2D3f3AA98F6dBa64c2aE7d799539D654dB81513E",
+      "symbol": "THECOMPANYXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771575603,
+     "collateralAsset": {
+      "address": "0x75936Cb01ec00C4A5Cb74682d5E37eAE91327488",
+      "symbol": "ALIENSX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771599847,
+     "collateralAsset": {
+      "address": "0xc67FCF8c90cBE0eF528F88EE395a50dE235F6fE8",
+      "symbol": "CHAMONKIX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771190603,
+     "collateralAsset": {
+      "address": "0x0B76b8040f5e09EF56F1a1Afd4Ae0443224a2B05",
+      "symbol": "FLUXNODE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771193943,
+     "collateralAsset": {
+      "address": "0xf03eF82E651447cCc4688c101b73F816e1dC37A1",
+      "symbol": "DIIISCOBOTAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771981667,
+     "collateralAsset": {
+      "address": "0x9fC76696Cce0974B1B97FFf8Fa7acFFd4A400273",
+      "symbol": "Ichimaru",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771893479,
+     "collateralAsset": {
+      "address": "0x0ef7C5B30AdFF82aEE81d2745C9ACAa57B375367",
+      "symbol": "KET",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771645909,
+     "collateralAsset": {
+      "address": "0x690A4EAb36808399Fd259286b660bc5542D493ad",
+      "symbol": "MONEYX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771988823,
+     "collateralAsset": {
+      "address": "0x0c43508235540feb59168cFeE19247f3662e0004",
+      "symbol": "Boobcoin",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1720297909,
+     "collateralAsset": {
+      "address": "0xCb327b99fF831bF8223cCEd12B1338FF3aA322Ff",
+      "symbol": "bsdETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771886079,
+     "collateralAsset": {
+      "address": "0x1008710DC0fd1f17bBDCF218a6FAd5e68635c70e",
+      "symbol": "SHORTCOIN",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771582797,
+     "collateralAsset": {
+      "address": "0xF805bbF5E129d2B82036708bb179c364C04c8cee",
+      "symbol": "SKETCHX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771989749,
+     "collateralAsset": {
+      "address": "0xE338Ab2f6f566b03067F60e4e8a325151F5E9eA3",
+      "symbol": "CHAOS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771873513,
+     "collateralAsset": {
+      "address": "0x5147f3ac0a5dB16Fb2c3EbC3B4C5D68BEC6d3a61",
+      "symbol": "STRAWBERRY",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356289,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771909517,
+     "collateralAsset": {
+      "address": "0x29Cc490aE439a454BD141d0C8a053268e9B80a4a",
+      "symbol": "VIB34",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771286649,
+     "collateralAsset": {
+      "address": "0x33769E8045DA4187224cd5eC8F2ADC07FB3761f7",
+      "symbol": "COGITO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771475639,
+     "collateralAsset": {
+      "address": "0x5b86C7FD33e02b11FD784375388C9907d1AD3D6A",
+      "symbol": "DAGIX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771193863,
+     "collateralAsset": {
+      "address": "0x87f374a4E95a4A5d3780EC3D3295275211A5D629",
+      "symbol": "CLAWADMINAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771193959,
+     "collateralAsset": {
+      "address": "0x4f5f3Aff124ef1bc2E796FE77F45f814aB697FD0",
+      "symbol": "CURI0US",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1776026917,
+     "collateralAsset": {
+      "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      "symbol": "cbBTC",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1745355831,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771482187,
+     "collateralAsset": {
+      "address": "0xeC618426dC0D96215594151Dfa5B68528f5790bb",
+      "symbol": "HYPPE21XXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771565881,
+     "collateralAsset": {
+      "address": "0x679d3b41f9fCdA9308981cbC652b7d60e39C9dE4",
+      "symbol": "QUITTER",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1774632705,
+     "collateralAsset": {
+      "address": "0x02acc74c0Ce367a7C289387f0b2457DAf6C2cEd2",
+      "symbol": "eqBLOCK-SLOBR12",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1740150897,
+     "collateralAsset": {
+      "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      "symbol": "cbBTC",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1771954663,
+     "collateralAsset": {
+      "address": "0x862290B8b99D449Ec7dd561243FF0CEEb7eE6F05",
+      "symbol": "CLAWXMTP",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745355831,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771508205,
+     "collateralAsset": {
+      "address": "0xe59995eE1730ed3EF346C55225dabC6228770B43",
+      "symbol": "BACKROOMSX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771960657,
+     "collateralAsset": {
+      "address": "0x7a5b487cFc9A5bA3F6755174E3De1d5FacCf1072",
+      "symbol": "JANE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771250735,
+     "collateralAsset": {
+      "address": "0xE41e8748051F0410A12B50DF976C1D8F9cae35fA",
+      "symbol": "THENVOISDJAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771478577,
+     "collateralAsset": {
+      "address": "0x2Ee66e1181eD1d63896D2a9075a44F1204B8d51b",
+      "symbol": "SAFSA33XXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771827597,
+     "collateralAsset": {
+      "address": "0xa0b028A7e4714d39bd35c8597e5E4c7BFbeabB71",
+      "symbol": "MICHI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771893397,
+     "collateralAsset": {
+      "address": "0xdfd3e1CF044aB9F19b64D1841Ee20Fb72D7F50de",
+      "symbol": "KARACLAW",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771249883,
+     "collateralAsset": {
+      "address": "0xee1aAc6b50Ea8152Db46b82E1a6a8960620a68e1",
+      "symbol": "CORBINAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771562043,
+     "collateralAsset": {
+      "address": "0xFfA6cEDBa34d1977e7C176E7BB68B275D2D0B1D5",
+      "symbol": "PRINCE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771572887,
+     "collateralAsset": {
+      "address": "0xc53cdB2AcD147E4C1e7a27Dd20130e50BB2C0924",
+      "symbol": "DEMALIENSX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771583635,
+     "collateralAsset": {
+      "address": "0x76289B26d91d6AE43C29d26Ea53b397B4F8cb317",
+      "symbol": "ZOGZX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771482203,
+     "collateralAsset": {
+      "address": "0x3ed0286EC61AA9D220955158023D779D65f738FF",
+      "symbol": "BFARTXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771874397,
+     "collateralAsset": {
+      "address": "0x31B2a97FC3C353c159fB61Ae604BDe17080e3Cd8",
+      "symbol": "HP",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771192401,
+     "collateralAsset": {
+      "address": "0xBD27957E5CBB455eE5D591Cbb263EB3C6B6075dC",
+      "symbol": "VECTOR",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745355009,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771986397,
+     "collateralAsset": {
+      "address": "0xa5002b458a6ac7e0Aef6040338e6F557f3AF35bE",
+      "symbol": "Neyclaw",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1725966137,
+     "collateralAsset": {
+      "address": "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452",
+      "symbol": "wstETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771973811,
+     "collateralAsset": {
+      "address": "0x8af917C655c23cDF972db3b3846673889600A351",
+      "symbol": "clawedin",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771190635,
+     "collateralAsset": {
+      "address": "0x265eE76547b1160Fd529e145dDDF3f6b1Dc3F8eD",
+      "symbol": "VEELOBSTERAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771986365,
+     "collateralAsset": {
+      "address": "0x05c0941C5cEbE5b89F9F3876166DD0391267528a",
+      "symbol": "SOD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771186855,
+     "collateralAsset": {
+      "address": "0x17588b83f9DF44a5C68c0565eBeE28d358352B20",
+      "symbol": "MONTRX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1718962585,
+     "collateralAsset": {
+      "address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
+      "symbol": "cbETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771820557,
+     "collateralAsset": {
+      "address": "0x9b7263D23AfD73AA67E22785FBBf09E0c0190941",
+      "symbol": "TRUMPSTEIN",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771638517,
+     "collateralAsset": {
+      "address": "0x5e045d66D33cc8c6e4F742745e96c2d961616917",
+      "symbol": "CLAWDAI177AGENT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771480219,
+     "collateralAsset": {
+      "address": "0x3c842316728C461E13B63E9e385Ea90B332057bb",
+      "symbol": "LAXAIXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771966261,
+     "collateralAsset": {
+      "address": "0xa2c1b05040F7fd283D7584A60e420544069Cb02B",
+      "symbol": "SHOGGOTH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356289,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1784373679,
+     "collateralAsset": {
+      "address": "0x532f27101965dd16442E59d40670FaF5eBB142E4",
+      "symbol": "BRETT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771831437,
+     "collateralAsset": {
+      "address": "0xD8E8BeF27B6f7deCC19e07978Be6ee37623A7b77",
+      "symbol": "BASILISK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1773453853,
+     "collateralAsset": {
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "symbol": "USDC",
+      "decimals": 6
+     }
+    },
+    {
+     "creationTimestamp": 1773566627,
+     "collateralAsset": {
+      "address": "0x4bcaf180df5b13c0441FE41A66e9638A2a410C6D",
+      "symbol": "HERMES",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771979713,
+     "collateralAsset": {
+      "address": "0x92fBFaad2f8fCBC283B91821Eb408c1DFB847D08",
+      "symbol": "EZ",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771833199,
+     "collateralAsset": {
+      "address": "0x03912a6Edf1c96B37A275D5468436A307b3f90f7",
+      "symbol": "SLC",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356339,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771825091,
+     "collateralAsset": {
+      "address": "0x7ccD1192A98ddd7556644356e919350799c4E98f",
+      "symbol": "MEMES",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771574655,
+     "collateralAsset": {
+      "address": "0x9750A01580DD9151a301fF47dc09414455EE14B6",
+      "symbol": "ALIENSX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771479199,
+     "collateralAsset": {
+      "address": "0x285BBFD97aD9A1b719848Cd4eb9E33684eEC543c",
+      "symbol": "BTCXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771186839,
+     "collateralAsset": {
+      "address": "0x411Ac757256f2310C55a39596c02b0116F9fD784",
+      "symbol": "NOA",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771247077,
+     "collateralAsset": {
+      "address": "0x207C21672d1eEbE55e9bf534e93b0Be7a7272161",
+      "symbol": "TURKIAGENTAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771901693,
+     "collateralAsset": {
+      "address": "0xeEfa218eEe0DA27d0d9093C5916E4C26d8f8BdC7",
+      "symbol": "LC",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1736170449,
+     "collateralAsset": {
+      "address": "0xfDF73F61146B9050FFe4b755364B9CAC670ea5b2",
+      "symbol": "WWFUSDC",
+      "decimals": 6
+     }
+    },
+    {
+     "creationTimestamp": 1771892529,
+     "collateralAsset": {
+      "address": "0x98178Bca1d313F8800bd85567f143C4AF3458275",
+      "symbol": "CCONFCLAW",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771864631,
+     "collateralAsset": {
+      "address": "0x7b30e01deb915762Bb7951374A7CC495D37787d9",
+      "symbol": "USPD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771899627,
+     "collateralAsset": {
+      "address": "0xC3E1fa08eFF898B43124068c2F285A3D2da4FBcC",
+      "symbol": "NOTHING",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771566759,
+     "collateralAsset": {
+      "address": "0x2AfC518Fc88335d792985a531084231BE8F81dc1",
+      "symbol": "CHADX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771567785,
+     "collateralAsset": {
+      "address": "0x28315DCbF8552EdE7B2a64C92624089DD01A768B",
+      "symbol": "JAUNALIENX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1764630469,
+     "collateralAsset": {
+      "address": "0x109A100c88096b2c00275A516A1545d67b92cD77",
+      "symbol": "MDLP",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356289,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1780527779,
+     "collateralAsset": {
+      "address": "0xb9f23c33FfD2213f31C0cFb6c9e2fDf525a9Dd2D",
+      "symbol": "wstDIEM",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1740123449,
+     "collateralAsset": {
+      "address": "0xC484D83F667b779cc9907248101214235642258B",
+      "symbol": "aprUSR",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771184179,
+     "collateralAsset": {
+      "address": "0xc0c646cC14Ae9A42F506d9DC91BD80A0eD649F8F",
+      "symbol": "KESTRELGDPAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771180707,
+     "collateralAsset": {
+      "address": "0x0D4FE8a73c494e3e0AEaDaB07f3b39eFAC384ad7",
+      "symbol": "BOT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771480477,
+     "collateralAsset": {
+      "address": "0x55f47011a9271bDF92c3888622501dC39551d88f",
+      "symbol": "BTCXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771967191,
+     "collateralAsset": {
+      "address": "0x9bc87998015BE94e26dD5515Fd74CE2cEb9f5f7E",
+      "symbol": "PUSSYCOIN",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771967157,
+     "collateralAsset": {
+      "address": "0x984c8dBb8cbcD5Ee89c669c126E08EF83e899939",
+      "symbol": "DEEP",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771279591,
+     "collateralAsset": {
+      "address": "0xB82CA48bC88aD5ddE7C494e5bE9F6C95DfCA29d3",
+      "symbol": "COURASDEVAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771885983,
+     "collateralAsset": {
+      "address": "0x072Bd755A44bc864182D5d9582118712ef8fe50f",
+      "symbol": "GROK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771644899,
+     "collateralAsset": {
+      "address": "0xA70Db7202D4E8B54A57879af19eA7131748C04DA",
+      "symbol": "TOPOLOGY",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1756329501,
+     "collateralAsset": {
+      "address": "0x6921B130D297cc43754afba22e5EAc0FBf8Db75b",
+      "symbol": "doginme",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745355831,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771949851,
+     "collateralAsset": {
+      "address": "0x685519E6cC0C850E2c18a6500D5e19F223B5ba27",
+      "symbol": "CLIPGOD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771951849,
+     "collateralAsset": {
+      "address": "0x13484038958a2F384fB26edfbEB2E09C6Fa15b5B",
+      "symbol": "ADHD",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771951867,
+     "collateralAsset": {
+      "address": "0x73d295A6650576976AA936CC63C06E8300d95aea",
+      "symbol": "ZOE",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771490053,
+     "collateralAsset": {
+      "address": "0x4546F6cf48E387a95C3adCBC700cD83B9e4FEF55",
+      "symbol": "CLWECOXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771468597,
+     "collateralAsset": {
+      "address": "0x284FcB33eCe521379e60fC547B54276Cfbad7fC6",
+      "symbol": "CLAWNAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745355831,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771888823,
+     "collateralAsset": {
+      "address": "0xf383a970399Af0F69A0615E156E0edd3d77c16B1",
+      "symbol": "SURVIVOR",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771279463,
+     "collateralAsset": {
+      "address": "0x0d52d9Bcb165B14Ef818899164F50215db4Ec002",
+      "symbol": "GENESISXTT",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771505539,
+     "collateralAsset": {
+      "address": "0x7Cb58494ca0C1d730a884B2b83D84a24Aaf207d1",
+      "symbol": "GAMBLINGX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771489531,
+     "collateralAsset": {
+      "address": "0x116fE5C14aB7Caf5E07e7cDB4938F1CeFAB954D3",
+      "symbol": "CLWECOXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771189609,
+     "collateralAsset": {
+      "address": "0xf8BeDE4C0cA74C417aCd71EA2f8a2744A4E5C2d1",
+      "symbol": "BERNALAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771282153,
+     "collateralAsset": {
+      "address": "0x234eAE6C3044471CAb364d10A7A75E4a787f16ed",
+      "symbol": "ANDYSPERSONALCLAWAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771886031,
+     "collateralAsset": {
+      "address": "0x0815524Fec0c961e060b398E37672b0CC6467747",
+      "symbol": "AUREL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771910467,
+     "collateralAsset": {
+      "address": "0xB194bdE62F7d8F66287CC64687058db43c3dAAb6",
+      "symbol": "APU",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771596379,
+     "collateralAsset": {
+      "address": "0xCef92fFeD7C766c27003d7143326a2639c73ef1a",
+      "symbol": "GOLEMX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771840081,
+     "collateralAsset": {
+      "address": "0x9667297E72B51232c322F979601eAF36F80349d2",
+      "symbol": "PARTYEL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771978891,
+     "collateralAsset": {
+      "address": "0xa380e7F81Be7f82151D9F25f9e8Ee471335165E7",
+      "symbol": "CLANKERAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771479233,
+     "collateralAsset": {
+      "address": "0x187481b34dA0CbF4307c36A589C33ab8B601a8E8",
+      "symbol": "MOGRAXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771476717,
+     "collateralAsset": {
+      "address": "0x251155EbC8898F255dD87662CFc6A9D3dCEE5E8E",
+      "symbol": "CLWECOX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1763072961,
+     "collateralAsset": {
+      "address": "0x66b2b7a8532d1CaF54ac95E736e0d9034C76523D",
+      "symbol": "MOCK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771491031,
+     "collateralAsset": {
+      "address": "0xb32542f116115c79c8d8d310d0199F219C381331",
+      "symbol": "HYPPE21XXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771681699,
+     "collateralAsset": {
+      "address": "0x9766eabEB4987F453211ECa0B5B4970fAFCf0755",
+      "symbol": "CHM34",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1760112217,
+     "collateralAsset": {
+      "address": "0xcbADA732173e39521CDBE8bf59a6Dc85A9fc7b8c",
+      "symbol": "cbADA",
+      "decimals": 6
+     }
+    },
+    {
+     "creationTimestamp": 1745356271,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356307,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1750858819,
+     "collateralAsset": {
+      "address": "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452",
+      "symbol": "wstETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1763072979,
+     "collateralAsset": {
+      "address": "0xA2E865f655Fa8678139eB094f099Eb7f955627C4",
+      "symbol": "MOCK",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1717262823,
+     "collateralAsset": {
+      "address": "0x2416092f143378750bb29b79eD961ab195CcEea5",
+      "symbol": "ezETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771819355,
+     "collateralAsset": {
+      "address": "0x380121F131E2308748Fd5A4308f6fF56152C315E",
+      "symbol": "A2A",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771587261,
+     "collateralAsset": {
+      "address": "0x9B86eFee6D566098a3C32Cd50C198FEEc49c2807",
+      "symbol": "FINALEX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771285933,
+     "collateralAsset": {
+      "address": "0x3A1219fC95b327Ca9FE1dcc10a35bf589e176DF8",
+      "symbol": "ZALUPA12",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771283165,
+     "collateralAsset": {
+      "address": "0x8704DdCCa289CBac9719e9dd53EE8013bc1F948B",
+      "symbol": "HELLO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771249835,
+     "collateralAsset": {
+      "address": "0x18923a30D6cEe2D5a4f7c2b9e1732fcE19f756Ed",
+      "symbol": "EOSIWEONWDAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1728028959,
+     "collateralAsset": {
+      "address": "0x4200000000000000000000000000000000000006",
+      "symbol": "WETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771978051,
+     "collateralAsset": {
+      "address": "0xC890f97eaEBCc122668E704F0Fa127e57Bd3d0BD",
+      "symbol": "CGU08",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1778862401,
+     "collateralAsset": {
+      "address": "0x97bE14Dd8f994A5364573BC035D85309E7CB34de",
+      "symbol": "JitoSOL",
+      "decimals": 9
+     }
+    },
+    {
+     "creationTimestamp": 1791844627,
+     "collateralAsset": {
+      "address": "0xbeef0e0834849aCC03f0089F01f4F1Eeb06873C9",
+      "symbol": "steakUSDC",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771975531,
+     "collateralAsset": {
+      "address": "0xf40094d1Da1c77d01247c4578D0588b58F771E39",
+      "symbol": "CASH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771988543,
+     "collateralAsset": {
+      "address": "0x16844b50Fae5e28E53f01cDb98a696De2a5Dc28d",
+      "symbol": "Insider",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771177911,
+     "collateralAsset": {
+      "address": "0x3bbfd92C15286078A24F790060aD265E66E281E7",
+      "symbol": "NODEUB",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771193911,
+     "collateralAsset": {
+      "address": "0xf17f77C04Cae3403C50Dd0bddF5B1912f23f21A5",
+      "symbol": "KAHUNAAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771976371,
+     "collateralAsset": {
+      "address": "0x74B84f5162872Df06E3f310a7531812E39125b5d",
+      "symbol": "XALERTS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771974479,
+     "collateralAsset": {
+      "address": "0x647d30d3Dbf30e95DFa7179be5b8166f5aF25432",
+      "symbol": "DM",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771571915,
+     "collateralAsset": {
+      "address": "0x597b085Fce5698725194d39c438C3E6C2801307d",
+      "symbol": "XX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1732094931,
+     "collateralAsset": {
+      "address": "0x4200000000000000000000000000000000000006",
+      "symbol": "WETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771988145,
+     "collateralAsset": {
+      "address": "0xF19e217E9d8bB6b1e3DDc75e7798C7bC873B9232",
+      "symbol": "aze",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771192311,
+     "collateralAsset": {
+      "address": "0x2320067C2491f8a147a1D373A7e7c711Eb7F1762",
+      "symbol": "CLARWIN",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1733252985,
+     "collateralAsset": {
+      "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      "symbol": "cbBTC",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1774205115,
+     "collateralAsset": {
+      "address": "0x1E2EfD0918f323Ef4AE440d2c6156779Fee32EA7",
+      "symbol": "eqBLOCK-PL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1774205107,
+     "collateralAsset": {
+      "address": "0x85CC739130de8C3083d80eFf0DC7c31AaD506a15",
+      "symbol": "eqBLOCK-VF-BR3",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771510637,
+     "collateralAsset": {
+      "address": "0xb78F87C4e0BfaafFEBb8e4B8e0994420C58fE38A",
+      "symbol": "ROYALGAME",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1758202449,
+     "collateralAsset": {
+      "address": "0xA88594D404727625A9437C3f886C7643872296AE",
+      "symbol": "WELL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771509777,
+     "collateralAsset": {
+      "address": "0x48DEb29db83Ad8dffBE5d62688c20832730455f9",
+      "symbol": "LULUX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1773565851,
+     "collateralAsset": {
+      "address": "0x4bcaf180df5b13c0441FE41A66e9638A2a410C6D",
+      "symbol": "HERMES",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1763892341,
+     "collateralAsset": {
+      "address": "0x6aB33A86B72E1d343730c6030FFdA992CD43035e",
+      "symbol": "PT-wcgUSD-18DEC2025",
+      "decimals": 6
+     }
+    },
+    {
+     "creationTimestamp": 1771184145,
+     "collateralAsset": {
+      "address": "0xcb2edE23AD02A6E6d2b16a722Cbf60F46f7012F6",
+      "symbol": "THEWHITESTBOTX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771973891,
+     "collateralAsset": {
+      "address": "0x445a153281dC58Fe5b02666702Cb6D6d8C3900e5",
+      "symbol": "BUSA",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1779263543,
+     "collateralAsset": {
+      "address": "0xf023c7f1F68F91D7960aaD40085Bcd0eDA69aA15",
+      "symbol": "mWETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771830325,
+     "collateralAsset": {
+      "address": "0xD0cC8399B7415Ce3194F93A613eB20DA5c367AdF",
+      "symbol": "SLC",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771518057,
+     "collateralAsset": {
+      "address": "0x76aB4692D6bC492Feb60a8034B455C8cb06De3dD",
+      "symbol": "EILEENX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1773571929,
+     "collateralAsset": {
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "symbol": "USDC",
+      "decimals": 6
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356289,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771487611,
+     "collateralAsset": {
+      "address": "0x99Eb267f39de3BAF9b5928883BB8dDe38C5D1fFC",
+      "symbol": "BTCXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771488533,
+     "collateralAsset": {
+      "address": "0x5cd205Ad576262B5D45FF96603982216AEEa6b30",
+      "symbol": "MINITIMEBOTALPHAXXXXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1780097029,
+     "collateralAsset": {
+      "address": "0x4200000000000000000000000000000000000006",
+      "symbol": "WETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771891635,
+     "collateralAsset": {
+      "address": "0x3EfAAb55277F419Eb3014817D24aAFFDB5daBb70",
+      "symbol": "VIBECLAW",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1721221979,
+     "collateralAsset": {
+      "address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
+      "symbol": "cbETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771878055,
+     "collateralAsset": {
+      "address": "0x12944FB9A32183Daa06B0325db9C5c8e8E53A98C",
+      "symbol": "FANS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771975481,
+     "collateralAsset": {
+      "address": "0x356F43A003A4aA634abb16D2630E86b074b2784A",
+      "symbol": "KERO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771633677,
+     "collateralAsset": {
+      "address": "0x98c51C8E958ccCD37F798b2B9332d148E2c05D57",
+      "symbol": "DAIMON",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771489481,
+     "collateralAsset": {
+      "address": "0x600311bF7442Dda0D9FF292910EeDc06470dD32c",
+      "symbol": "SUPRO10XXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771986463,
+     "collateralAsset": {
+      "address": "0xea164c6765a8d4A64acFc7798BBac00598813957",
+      "symbol": "ANODECLAW",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1792523195,
+     "collateralAsset": null
+    },
+    {
+     "creationTimestamp": 1771861823,
+     "collateralAsset": {
+      "address": "0x4c7F632B93069Cb3724B8A4B99E40F403B31Ff18",
+      "symbol": "CLAWSWARM",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771859151,
+     "collateralAsset": {
+      "address": "0xA25bEeBC860634DAb0DcE3d13FD4168Ed6c8fB6F",
+      "symbol": "PUNCH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1746781227,
+     "collateralAsset": {
+      "address": "0x091A5A1e3aa8B96Ab0FB0bC217F5E60Ec4C611a0",
+      "symbol": "LevETH",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771902317,
+     "collateralAsset": {
+      "address": "0x4257c34eCB3350e5A06b50754EE39EfD6de53B4f",
+      "symbol": "MOON",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771875377,
+     "collateralAsset": {
+      "address": "0xF32DC0d8E083F48DF691b036d5C01E6A70389Ec7",
+      "symbol": "ZCAPY",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771590835,
+     "collateralAsset": {
+      "address": "0x33CCcfDBE2605913f813F9278D24D8f6612ea99D",
+      "symbol": "FINALDOGX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1776526677,
+     "collateralAsset": {
+      "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      "symbol": "cbBTC",
+      "decimals": 8
+     }
+    },
+    {
+     "creationTimestamp": 1771188725,
+     "collateralAsset": {
+      "address": "0xEccA6F22a8719E7BE7844F4Ed750F792209Ac179",
+      "symbol": "FERNWREN66",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771634045,
+     "collateralAsset": {
+      "address": "0x1C121DD9C46076966F26215827D1c6D12B0DBFba",
+      "symbol": "ALPHA9EXECLAW",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771463043,
+     "collateralAsset": {
+      "address": "0xF7538388D5bA8D3AD86d9B94fB1fc36F731d343a",
+      "symbol": "POLYS",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771821425,
+     "collateralAsset": {
+      "address": "0x0565c0556602af4aD55D1CdcD415993C62f95a25",
+      "symbol": "TARIFF",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771486497,
+     "collateralAsset": {
+      "address": "0x517338eFb16BCC751cB09C0682A017eA20080c7F",
+      "symbol": "DORAEXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771492889,
+     "collateralAsset": {
+      "address": "0xe1bD56Ad5776182ca28B8bC78e66590Ed6F62C55",
+      "symbol": "HYPPE21XXXXXXXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1786447935,
+     "collateralAsset": {
+      "address": "0x050cE30b927Da55177A4914EC73480238BAD56f0",
+      "symbol": "gtusdcp",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771902167,
+     "collateralAsset": {
+      "address": "0x6f181034B4A04edF60B0000cAB6d1D95B90e498c",
+      "symbol": "CORAL",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356289,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771281605,
+     "collateralAsset": {
+      "address": "0x75d7305E588C008687293d857571C4310f6EE15e",
+      "symbol": "LORDTHERMIDORAI",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771568407,
+     "collateralAsset": {
+      "address": "0xcE2a7724cb1Be72BC9B0faB5b87d401D066E1708",
+      "symbol": "TAKEZOAIMOLTX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1771489425,
+     "collateralAsset": {
+      "address": "0x93E9931664fC2d377934e1729c5fC7b55adeFEd8",
+      "symbol": "SHADOWXXXXXX",
+      "decimals": 18
+     }
+    },
+    {
+     "creationTimestamp": 1745356357,
+     "collateralAsset": {
+      "address": "0xDa1C2c3C8FaD503662e41E324FC644Dc2c5e0CCD",
+      "symbol": "GMORPHO",
+      "decimals": 18
+     }
+    }
+   ]
+  }
+ },
+ "extensions": {
+  "complexity": 19500,
+  "maximumComplexity": 1000000
+ }
+}

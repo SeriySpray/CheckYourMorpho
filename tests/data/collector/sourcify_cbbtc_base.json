@@ -1,0 +1,56 @@
+{
+ "abi": [
+  {
+   "name": "admin",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "changeAdmin",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "implementation",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "upgradeTo",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "upgradeToAndCall",
+   "stateMutability": "payable",
+   "inputs": 2
+  }
+ ],
+ "compilation": {
+  "name": "FiatTokenProxy",
+  "compilerVersion": "0.6.12+commit.27d51765"
+ },
+ "proxyResolution": {
+  "isProxy": true,
+  "proxyType": "ZeppelinOSProxy",
+  "implementations": [
+   {
+    "address": "0x7458bfDC30034EB860B265E6068121D18Fa5Aa72",
+    "name": "FiatTokenV2_1"
+   }
+  ]
+ },
+ "deployment": {
+  "transactionHash": "0xea266eb1cec7aa4962d6168041d7180b89b77ac407a167ab03fc2bb8a29a26af",
+  "blockNumber": "18688094",
+  "transactionIndex": "2",
+  "deployer": "0xCE97003ea2E0a565A9a0b6e36209c6ddaaa14B05"
+ },
+ "matchId": "5325773",
+ "creationMatch": "exact_match",
+ "runtimeMatch": "exact_match",
+ "verifiedAt": "2025-04-10T07:54:37Z",
+ "match": "exact_match",
+ "chainId": "8453",
+ "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"
+}

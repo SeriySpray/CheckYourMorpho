@@ -1,0 +1,439 @@
+{
+ "items": [
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2",
+    "implementations": [],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": {
+     "tags": [
+      {
+       "meta": {
+        "tooltipUrl": "https://www.ethena.fi/"
+       },
+       "name": "Ethena: sUSDe Bridge",
+       "ordinal": 10,
+       "slug": "ethena-susde-bridge",
+       "tagType": "name"
+      },
+      {
+       "meta": {},
+       "name": "Bridge",
+       "ordinal": 0,
+       "slug": "bridge",
+       "tagType": "generic"
+      },
+      {
+       "meta": {
+        "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "textColor": "#C163D4",
+        "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+        "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "tooltipDescription": "Provided by OLI"
+       },
+       "name": "StakedUSDeOFTAdapter",
+       "ordinal": 0,
+       "slug": "stakedusdeoftadapter",
+       "tagType": "name"
+      },
+      {
+       "meta": {
+        "appActionButtonText": "Ethena",
+        "appID": "ethena"
+       },
+       "name": "Ethena",
+       "ordinal": 0,
+       "slug": "ethena",
+       "tagType": "protocol"
+      }
+     ]
+    },
+    "name": "StakedUSDeOFTAdapter",
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "250691837368962000000000000"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x9eA38e09F41A9DE53972a68268BA0Dcc6d2fAdf8",
+    "implementations": [],
+    "is_contract": false,
+    "is_scam": false,
+    "is_verified": false,
+    "metadata": null,
+    "name": null,
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "111909601332397152411509636"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x4579a27aF00A62C0EB156349f31B345c08386419",
+    "implementations": [
+     {
+      "address_hash": "0xadC45Df3cf1584624C97338BEF33363BF5b97AdA",
+      "name": "ATokenInstance"
+     }
+    ],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": {
+     "tags": [
+      {
+       "meta": {
+        "tooltipUrl": "https://aave.com/"
+       },
+       "name": "Aave: aEthsUSDe Token",
+       "ordinal": 10,
+       "slug": "aave-aethsusde-token",
+       "tagType": "name"
+      },
+      {
+       "meta": {},
+       "name": "Token Contract",
+       "ordinal": 0,
+       "slug": "token-contract",
+       "tagType": "generic"
+      },
+      {
+       "meta": {
+        "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "textColor": "#C163D4",
+        "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+        "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "tooltipDescription": "Provided by OLI"
+       },
+       "name": "AsUSDe",
+       "ordinal": 0,
+       "slug": "asusde",
+       "tagType": "name"
+      },
+      {
+       "meta": {
+        "appActionButtonText": "Aave",
+        "appID": "aave"
+       },
+       "name": "Aave",
+       "ordinal": 0,
+       "slug": "aave",
+       "tagType": "protocol"
+      }
+     ]
+    },
+    "name": "InitializableImmutableAdminUpgradeabilityProxy",
+    "private_tags": [],
+    "proxy_type": "eip1967",
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "97567771390282150226634735"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+    "implementations": [],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": {
+     "tags": [
+      {
+       "meta": {
+        "appID": "morpho",
+        "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "textColor": "#C163D4",
+        "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+        "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "tooltipDescription": "An efficient, secure & flexible lending protocol on Base.",
+        "tooltipUrl": "https://morpho.org/"
+       },
+       "name": "Morpho: Morpho Blue",
+       "ordinal": 10,
+       "slug": "morpho-morpho-blue",
+       "tagType": "name"
+      },
+      {
+       "meta": {
+        "appActionButtonText": "Morpho Aave App",
+        "appID": "morpho"
+       },
+       "name": "Morpho",
+       "ordinal": 0,
+       "slug": "morpho",
+       "tagType": "protocol"
+      }
+     ]
+    },
+    "name": "Morpho",
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "93206760882465741515993406"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x8979e976D211Fd9ab99A1f769b7E0e0645fb80a8",
+    "implementations": [],
+    "is_contract": false,
+    "is_scam": false,
+    "is_verified": false,
+    "metadata": null,
+    "name": null,
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "43847171000000000000000000"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0xBF98480425A29197e5d99D003017f63a1e595D02",
+    "implementations": [],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": null,
+    "name": "PendleSUSDESY",
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "22573165796757189246933930"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0xa8687A15D4BE32CC8F0a8a7B9704a4C3993D9613",
+    "implementations": [],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": null,
+    "name": "OlympusTreasury",
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "22032596139986470354312268"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x5C454f5526e41fBE917b63475CD8CA7E4631B147",
+    "implementations": [],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": {
+     "tags": [
+      {
+       "meta": {
+        "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "textColor": "#C163D4",
+        "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+        "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "tooltipDescription": "Provided by OLI"
+       },
+       "name": "Daily Instant Redemption Vault",
+       "ordinal": 0,
+       "slug": "daily-instant-redemption-vault",
+       "tagType": "name"
+      }
+     ]
+    },
+    "name": "RedemptionVault",
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "19130927458416812215000359"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0xdbf4FB6C310C1C85D0b41B5DbCA06096F2E7099F",
+    "implementations": [
+     {
+      "address_hash": "0x2B9796606c8480312a572742C00F606ef4ADB107",
+      "name": "sUSDeStrategy"
+     }
+    ],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": null,
+    "name": "TransparentUpgradeableProxy",
+    "private_tags": [],
+    "proxy_type": "eip1967",
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "17466440395300561623305614"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x295F67Fdb21255A3Db82964445628a706FBe689E",
+    "implementations": [],
+    "is_contract": false,
+    "is_scam": false,
+    "is_verified": false,
+    "metadata": {
+     "tags": [
+      {
+       "meta": {
+        "tooltipUrl": "https://re.xyz/"
+       },
+       "name": "Re Protocol:  reUSD ICL Custodial Wallet",
+       "ordinal": 10,
+       "slug": "re-protocol-reusd-icl-custodial-wallet",
+       "tagType": "name"
+      },
+      {
+       "meta": {},
+       "name": "Re Protocol",
+       "ordinal": 0,
+       "slug": "re-protocol",
+       "tagType": "protocol"
+      }
+     ]
+    },
+    "name": null,
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "14472282160326768780850586"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x15Bb5D31048381c84a157526cEF9513531b8BE1e",
+    "implementations": [],
+    "is_contract": false,
+    "is_scam": false,
+    "is_verified": false,
+    "metadata": null,
+    "name": null,
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "13728907815671741495781892"
+  },
+  {
+   "address": {
+    "ens_domain_name": null,
+    "hash": "0x744793B5110f6ca9cC7CDfe1CE16677c3Eb192ef",
+    "implementations": [],
+    "is_contract": true,
+    "is_scam": false,
+    "is_verified": true,
+    "metadata": {
+     "tags": [
+      {
+       "meta": {
+        "tooltipUrl": "https://curve.fi"
+       },
+       "name": "Curve: DOLA-sUSDe Pool",
+       "ordinal": 10,
+       "slug": "curve-dolasusde-pool",
+       "tagType": "name"
+      },
+      {
+       "meta": {
+        "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "textColor": "#C163D4",
+        "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+        "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+        "tooltipDescription": "Provided by OLI"
+       },
+       "name": "CurveStableSwapNG",
+       "ordinal": 0,
+       "slug": "curvestableswapng",
+       "tagType": "name"
+      },
+      {
+       "meta": {
+        "alertStatus": "info",
+        "data": "Curve's DOLA-sUSDe (DOLA/sUSDe) pool contract. This nametag was submitted by Kleros Scout.\""
+       },
+       "name": "note_0",
+       "ordinal": 0,
+       "slug": "note0",
+       "tagType": "note"
+      },
+      {
+       "meta": {
+        "appActionButtonText": "Curve",
+        "appID": "curve"
+       },
+       "name": "Curve",
+       "ordinal": 0,
+       "slug": "curve",
+       "tagType": "protocol"
+      }
+     ]
+    },
+    "name": "CurveStableSwapNG",
+    "private_tags": [],
+    "proxy_type": null,
+    "public_tags": [],
+    "reputation": "ok",
+    "watchlist_names": []
+   },
+   "token_id": null,
+   "value": "11730877827093764009850914"
+  }
+ ],
+ "next_page_params": {
+  "value": "1289789059725971920727004",
+  "address_hash": "0xbdac2215b0730919ca1810831f16c363eebad9af",
+  "items_count": 50
+ }
+}

@@ -1,0 +1,311 @@
+{
+ "abi": [
+  {
+   "name": "DEFAULT_ADMIN_ROLE",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "DOMAIN_SEPARATOR",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "MAX_COOLDOWN_DURATION",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "acceptAdmin",
+   "stateMutability": "nonpayable",
+   "inputs": 0
+  },
+  {
+   "name": "addToBlacklist",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "allowance",
+   "stateMutability": "view",
+   "inputs": 2
+  },
+  {
+   "name": "approve",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "asset",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "balanceOf",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "convertToAssets",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "convertToShares",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "cooldownAssets",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "cooldownDuration",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "cooldownShares",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "cooldowns",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "decimals",
+   "stateMutability": "pure",
+   "inputs": 0
+  },
+  {
+   "name": "decreaseAllowance",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "deposit",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "eip712Domain",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "getRoleAdmin",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "getUnvestedAmount",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "grantRole",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "hasRole",
+   "stateMutability": "view",
+   "inputs": 2
+  },
+  {
+   "name": "increaseAllowance",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "lastDistributionTimestamp",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "maxDeposit",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "maxMint",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "maxRedeem",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "maxWithdraw",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "mint",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "name",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "nonces",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "owner",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "permit",
+   "stateMutability": "nonpayable",
+   "inputs": 7
+  },
+  {
+   "name": "previewDeposit",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "previewMint",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "previewRedeem",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "previewWithdraw",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "redeem",
+   "stateMutability": "nonpayable",
+   "inputs": 3
+  },
+  {
+   "name": "redistributeLockedAmount",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "removeFromBlacklist",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "renounceRole",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "rescueTokens",
+   "stateMutability": "nonpayable",
+   "inputs": 3
+  },
+  {
+   "name": "revokeRole",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "setCooldownDuration",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "silo",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "supportsInterface",
+   "stateMutability": "view",
+   "inputs": 1
+  },
+  {
+   "name": "symbol",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "totalAssets",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "totalSupply",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "transfer",
+   "stateMutability": "nonpayable",
+   "inputs": 2
+  },
+  {
+   "name": "transferAdmin",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "transferFrom",
+   "stateMutability": "nonpayable",
+   "inputs": 3
+  },
+  {
+   "name": "transferInRewards",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "unstake",
+   "stateMutability": "nonpayable",
+   "inputs": 1
+  },
+  {
+   "name": "vestingAmount",
+   "stateMutability": "view",
+   "inputs": 0
+  },
+  {
+   "name": "withdraw",
+   "stateMutability": "nonpayable",
+   "inputs": 3
+  }
+ ],
+ "compilation": {
+  "name": "StakedUSDeV2",
+  "compilerVersion": "0.8.19+commit.7dd6d404"
+ },
+ "proxyResolution": {
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": []
+ },
+ "deployment": {
+  "transactionHash": "0x9b099ba3c8e64ea8904cc6de83f2245e309e0f91c3ce1f976328b601e4dda314",
+  "blockNumber": "18571359",
+  "transactionIndex": "26",
+  "deployer": "0x8dE54b1cefEdeAB1766b947c7D9A9963436E8FaE"
+ },
+ "matchId": "2048219",
+ "creationMatch": "exact_match",
+ "runtimeMatch": "exact_match",
+ "verifiedAt": "2024-08-08T14:27:53Z",
+ "match": "exact_match",
+ "chainId": "1",
+ "address": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497"
+}
