@@ -38,6 +38,3 @@ nginx_checkyourmorpho.conf
 # Development documentation, design notes, and reference photos
 docs/*
 !docs/time_audit.html
-
-# Generated reports (scripts/token-ranking.mjs)
-reports/

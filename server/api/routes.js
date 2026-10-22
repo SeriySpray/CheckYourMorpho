@@ -15,8 +15,7 @@ import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
 import { getBotInfo, upsertSubscription } from '../services/telegramService.js';
-import { getTokenData, listTokenData } from '../services/tokenCollector.js';
-import { evaluateToken, rankTokens, assetAddressOf, RISK_MODEL, STABILITY_LEVELS } from '../engine/tokenRisk.js';
+import { getTokenData } from '../services/tokenCollector.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,16 +35,10 @@ let vaultCatalog = null;
 
 export const DEFAULT_VAULTS_LIMIT = 500;
 
-// Token ranking over every token_data record, recomputed at most once a minute (the collector writes in the background)
-const TOKEN_RANKING_TTL_MS = 60000;
-const TOKEN_RANKING_LEVELS = STABILITY_LEVELS;
-let tokenRanking = null;
-
 // Every successful sync (manual or scheduled) invalidates both caches
 onSyncSuccess(() => {
   vaultAuditCache.clear();
   vaultCatalog = null;
-  tokenRanking = null;
 });
 
 // Sliding-window counter per client IP for /api/* (two fixed windows, weighted): O(1) memory per IP
@@ -584,54 +577,17 @@ export function getVaultCatalog() {
  * and dispatches lightweight non-blocking revalidation for the latest 10 transactions.
  */
 /**
- * GET /api/tokens/:chainId/:address: the public facts collected about one collateral token (404 until it has been collected),
- * plus `risk`, the rating of the facts by server/engine/tokenRisk.js (a vault share is compared with its asset's stored price).
+ * GET /api/tokens/:chainId/:address: the public facts collected about one collateral token (404 until it has been collected).
  */
 export function handleGetToken(req, res, chainId, address) {
   try {
     const db = getDatabase();
     const found = getTokenData(db, chainId, address);
     if (!found) { sendJson(res, 404, { error: 'No data has been collected for this token yet' }, req); return; }
-    const asset = assetAddressOf(found);
-    const assetPriceUsd = asset ? getTokenData(db, chainId, asset)?.data?.price?.usd ?? null : null;
-    sendJson(res, 200, { ...found, risk: evaluateToken(found, { assetPriceUsd }) }, req);
+    sendJson(res, 200, found, req);
   } catch (err) {
     console.error('[API] Token data failed:', err);
     sendJson(res, 500, { error: 'Failed to read the token data' }, req);
-  }
-}
-
-/** Ranked list of every collected token, safest first; cached for TOKEN_RANKING_TTL_MS. */
-function getTokenRanking() {
-  if (tokenRanking && Date.now() - tokenRanking.timestamp < TOKEN_RANKING_TTL_MS) return tokenRanking.list;
-  const list = rankTokens(listTokenData(getDatabase()));
-  tokenRanking = { timestamp: Date.now(), list };
-  return list;
-}
-
-/**
- * GET /api/tokens/ranking?limit=&offset=&chainId=&stability=: tokens from the steadiest to the least stable, those without enough data last.
- * `rank` is the place in the whole ranking, so it stays the same when a filter is applied.
- */
-export function handleGetTokenRanking(req, res, url) {
-  try {
-    const rawLimit = parseInt(url.searchParams.get('limit') || '100', 10);
-    const limit = Number.isFinite(rawLimit) ? Math.min(500, Math.max(1, rawLimit)) : 100;
-    const rawOffset = parseInt(url.searchParams.get('offset') || '0', 10);
-    const offset = Number.isFinite(rawOffset) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, rawOffset)) : 0;
-    const rawChainId = parseInt(url.searchParams.get('chainId') || '', 10);
-    const chainId = Number.isFinite(rawChainId) && rawChainId > 0 ? rawChainId : null;
-    const rawLevel = url.searchParams.get('stability');
-    const level = rawLevel ? rawLevel.trim().toLowerCase() : null;
-    if (level !== null && !TOKEN_RANKING_LEVELS.includes(level)) {
-      sendJson(res, 400, { error: `Invalid stability parameter (one of ${TOKEN_RANKING_LEVELS.join(', ')})` }, req);
-      return;
-    }
-    const matches = getTokenRanking().filter(t => (chainId === null || t.chainId === chainId) && (level === null || t.stability === level));
-    sendJson(res, 200, { model: RISK_MODEL, total: matches.length, limit, offset, tokens: matches.slice(offset, offset + limit) }, req);
-  } catch (err) {
-    console.error('[API] Token ranking failed:', err);
-    sendJson(res, 500, { error: 'Failed to build the token ranking' }, req);
   }
 }
 
@@ -1148,12 +1104,6 @@ export function handleRequest(req, res) {
 
   if (pathname === '/api/vaults' && isRead) {
     handleGetVaults(req, res, parsedUrl);
-    return;
-  }
-
-  // Before the :chainId/:address pattern, so the literal path is never read as a token
-  if (pathname === '/api/tokens/ranking' && isRead) {
-    handleGetTokenRanking(req, res, parsedUrl);
     return;
   }
 
