@@ -43,6 +43,7 @@ export const CONFIG = {
     budgetMs: 480000, // a tick stops starting new tokens after 8 minutes
     firstDelayMs: 60000,
     refreshSec: 86400, // a good record is collected again after a day
+    stableRefreshSec: 7 * 86400, // identity, contract, controllers and RWA facts of a good record are read again after a week
     retrySec: 3600 // a partial or failed one after an hour
   },
   sync: {

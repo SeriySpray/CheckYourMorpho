@@ -171,6 +171,11 @@ async function initApp() {
   });
 }
 
+const CATEGORY_LABELS = {
+  native_or_wrapped: 'ETH / BTC assets', stablecoin: 'Stablecoins', pendle_pt: 'Pendle PT', real_world_asset: 'Real-world assets',
+  vault_or_lp_share: 'Vault / LP shares', other_crypto: 'Other crypto', unclassified: 'Unclassified'
+};
+
 let livePollingTimer = null;
 let visibilityPollingBound = false;
 let isPollingActive = false;
@@ -1973,6 +1978,16 @@ function populateAuditModal(data, isQuietRefresh = false) {
   if (DOM.riskCollateralList) {
     DOM.riskCollateralList.innerHTML = '';
     const breakdown = mixTokens.map(c => ({ label: c.symbol || 'Unknown', usd: c.usd, sharePercent: c.percent }));
+    const categories = Object.entries(mix.categoryShares || {}).filter(([, pct]) => pct > 0).sort((a, b) => b[1] - a[1]);
+    if (categories.length) {
+      const shade = i => (1 - i * 0.17).toFixed(2);
+      const bar = categories.map(([cat, pct], i) => `<span class="category-seg" style="flex:${pct}; opacity:${shade(i)};"></span>`).join('');
+      const rows = categories.map(([cat, pct], i) => `<li class="category-row"><span class="category-swatch" style="opacity:${shade(i)};"></span><span class="category-name">${escapeHtml(CATEGORY_LABELS[cat] || cat)}</span><span class="category-pct">${pct}%</span></li>`).join('');
+      const box = document.createElement('div');
+      box.className = 'category-shares';
+      box.innerHTML = `<div class="category-bar" role="img" aria-label="Collateral by category">${bar}</div><ul class="category-list">${rows}</ul>`;
+      DOM.riskCollateralList.appendChild(box);
+    }
     if (breakdown.length === 0) {
       DOM.riskCollateralList.innerHTML = '<span style="color:var(--text-muted); font-size:11px;">No active collateral backing recorded.</span>';
     } else {

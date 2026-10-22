@@ -2797,3 +2797,58 @@ button:focus-visible,
   }
 }
 
+/* Share of the collateral per category: one bar, one row per category (shade steps carry rank, the label and the number carry the value) */
+.category-shares {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.category-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+
+.category-seg {
+  min-width: 2px;
+  background: var(--text-primary);
+  border-radius: 1px;
+}
+
+.category-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.category-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.category-swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 1px;
+  background: var(--text-primary);
+}
+
+.category-name {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.category-pct {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

@@ -901,7 +901,7 @@ export default {
         .run(1, A, 'TKN', Math.floor(Date.now() / 1000), 'ok', 0.8, JSON.stringify({ identity: { symbol: 'TKN' } }));
       const { status, body } = getJson(mod, '/api/tokens/1/' + A);
       assert.equal(status, 200); assert.deepEqual([body.chainId, body.address, body.status, body.coverage, body.stale, body.data.identity.symbol], [1, A, 'ok', 0.8, false, 'TKN']);
-      assert.deepEqual([body.risk.model, body.risk.grade, body.risk.not_rated_reason], ['token-risk-3', 'NR', 'no price'], 'the rating rides along; a record without a price is not rated');
+      assert.deepEqual([body.risk.model, body.risk.stability, body.risk.not_rated_reason], ['token-risk-4', 'insufficient_data', 'no price'], 'the rating rides along; a record without a price is not rated');
       assert.equal(getJson(mod, '/api/tokens/1/0xnothex').status, 404); assert.equal(getJson(mod, '/api/tokens/x/' + A).status, 404);
     })],
     ['a vault share is rated against the stored price of its asset', async mod => sandbox(async db => {
@@ -910,7 +910,7 @@ export default {
       assert.equal(getJson(mod, '/api/tokens/1/' + susde.address).body.risk.flags.find(f => f.id === 'share_price_gap').state, 'unknown');
       putToken(db, { chainId: 1, address: '0x4c9edd5852cd905f086c759e8383e09bff1e68b3', symbol: 'USDe', status: 'ok', coverage: 0.9, data: { price: { usd: 0.9997 } } });
       const r = getJson(mod, '/api/tokens/1/' + susde.address).body.risk;
-      assert.deepEqual([r.grade, r.flags.find(f => f.id === 'share_price_gap').state], ['A', 'clear']);
+      assert.deepEqual([r.stability, r.flags.find(f => f.id === 'share_price_gap').state], ['high', 'clear']);
     })],
     ['a broken database -> 500 without details', async mod => sandbox(async db => {
       db.exec('DROP TABLE token_data');
@@ -919,18 +919,18 @@ export default {
     })]
   ],
   handleGetTokenRanking: [
-    ['safest first, NR last; pagination, chain and grade filters keep the global rank; an unknown grade is 400', async mod => sandbox(async db => {
+    ['steadiest first, insufficient data last; pagination, chain and stability filters keep the global rank; an unknown stability is 400', async mod => sandbox(async db => {
       for (const name of ['1_WETH', '1_USDC', '1_kBTC', '4663_USDe', '8453_cbBTC']) putToken(db, riskRecord(name));
       const all = getJson(mod, '/api/tokens/ranking').body;
-      assert.deepEqual([all.model, all.total, all.limit, all.offset], ['token-risk-3', 5, 100, 0]);
+      assert.deepEqual([all.model, all.total, all.limit, all.offset], ['token-risk-4', 5, 100, 0]);
       assert.deepEqual(all.tokens.map(t => t.symbol), ['USDC', 'cbBTC', 'WETH', 'kBTC', 'USDe']);
-      assert.deepEqual(all.tokens.map(t => t.rank), [1, 2, 3, 4, 5]); assert.equal(all.tokens.at(-1).grade, 'NR');
+      assert.deepEqual(all.tokens.map(t => t.rank), [1, 2, 3, 4, 5]); assert.equal(all.tokens.at(-1).stability, 'insufficient_data');
       const page = getJson(mod, '/api/tokens/ranking?limit=2&offset=1').body;
       assert.deepEqual([page.total, page.limit, page.offset, page.tokens.map(t => t.symbol)], [5, 2, 1, ['cbBTC', 'WETH']]);
       assert.deepEqual(getJson(mod, '/api/tokens/ranking?chainId=8453').body.tokens.map(t => [t.symbol, t.rank]), [['cbBTC', 2]]);
-      assert.deepEqual(getJson(mod, '/api/tokens/ranking?grade=nr').body.tokens.map(t => t.symbol), ['USDe']);
+      assert.deepEqual(getJson(mod, '/api/tokens/ranking?stability=insufficient_data').body.tokens.map(t => t.symbol), ['USDe']);
       assert.equal(getJson(mod, '/api/tokens/ranking?limit=9999').body.limit, 500); assert.equal(getJson(mod, '/api/tokens/ranking?limit=abc').body.limit, 100);
-      const bad = getJson(mod, '/api/tokens/ranking?grade=Z'); assert.equal(bad.status, 400); assert.match(bad.body.error, /grade/);
+      const bad = getJson(mod, '/api/tokens/ranking?stability=Z'); assert.equal(bad.status, 400); assert.match(bad.body.error, /stability/);
       const t = all.tokens[0];
       assert.ok(Array.isArray(t.top_flags) && 'stability_score' in t && 'control_score' in t && 'confidence' in t);
     })],

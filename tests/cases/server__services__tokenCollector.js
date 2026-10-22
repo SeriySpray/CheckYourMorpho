@@ -72,7 +72,7 @@ const withEnv = (v, fn) => {
 
 export default {
   CHAINS: [['ethereum, base and arbitrum with all source names', ({ CHAINS: c }) => {
-    assert.deepEqual(Object.keys(c).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 143, 999, 8453, 42161, 747474]);
+    assert.deepEqual(Object.keys(c).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 143, 999, 4663, 8453, 42161, 747474]);
     for (const id of [1, 8453, 42161]) { const v = c[id]; assert.ok(v.blockscout && v.llama && v.gecko && v.kyber && v.safe && v.explorer && v.n && v.feeds && /^0x[0-9a-fA-F]{40}$/.test(v.usdc), String(id)); }
     for (const v of Object.values(c)) assert.ok(v.llama, 'every listed chain has a price source');
     assert.equal(c[42161].safe, 'arb1');
@@ -100,7 +100,7 @@ export default {
       assert.ok(u.bsToken.startsWith('https://base.blockscout.com/api/v2/tokens/0xabcdef')); assert.ok(u.explorerImpl.endsWith('&v=' + impl));
       assert.ok(u.kyber.includes('/base/api/v1/routes') && u.kyber.includes('amountIn=5')); assert.ok(u.sourcify.includes('/contract/8453/') && u.sourcify.includes('fields=abi,compilation,proxyResolution,deployment'));
     }],
-    ['an unsupported chain gets only Sourcify', ({ sourceUrls: f }) => assert.deepEqual(Object.keys(f(4663, '0x' + '1'.repeat(40))), ['sourcify'])]
+    ['an unsupported chain gets only Sourcify', ({ sourceUrls: f }) => assert.deepEqual(Object.keys(f(5042, '0x' + '1'.repeat(40))), ['sourcify'])]
   ],
   createFetcher: [
     ['a host that is not allowed is refused without a request', async ({ createFetcher: f }) => {
@@ -264,9 +264,9 @@ export default {
     ['everything down -> failed with empty groups; an unsupported chain asks only Sourcify and is never ok', async mod => {
       const r = await run(mod, { chainId: 1, address: SUSDE }, [[/./, { status: 500, body: 'oops' }]]);
       assert.equal(r.status, 'failed'); assert.equal(r.data.identity.name, null); assert.equal(r.data.contract.fn.mint, null); assert.deepEqual(r.data.control.controllers, []);
-      const o = await run(mod, { chainId: 4663, address: SUSDE });
+      const o = await run(mod, { chainId: 5042, address: SUSDE });
       assert.equal(o.net.calls.length, 1); assert.equal(o.status, 'partial'); assert.equal(o.data.contract.sourcify_match, 'exact_match');
-      assert.equal((await run(mod, { chainId: 4663, address: SUSDE }, [[/./, { status: 500, body: '' }]])).status, 'partial');
+      assert.equal((await run(mod, { chainId: 5042, address: SUSDE }, [[/./, { status: 500, body: '' }]])).status, 'partial');
     }],
     ['Sourcify does not know the contract: name and ABI come from Blockscout, a Pendle PT is still recognised, the status stays ok', async mod => {
       const pt = '0xecfafdc7741323a945a163ed068b5a3c43483957';
@@ -287,8 +287,30 @@ export default {
       assert.ok(!r.net.calls.some(u => u.includes('kyberswap'))); assert.deepEqual(r.data.liquidity.kyber, {});
     }],
     ['an unsupported chain is marked, and a Sourcify 404 there is still an answer', async mod => {
-      const r = await run(mod, { chainId: 4663, address: SUSDE }, [[/sourcify\.dev/, { status: 404, body: '' }]]);
+      const r = await run(mod, { chainId: 5042, address: SUSDE }, [[/sourcify\.dev/, { status: 404, body: '' }]]);
       assert.deepEqual([r.status, r.data.meta.chain_supported, r.net.calls.length], ['partial', false, 1]);
+    }],
+    ['rwa.xyz is asked for every token, whatever its category', async mod => {
+      const asked = async (chainId, address) => (await run(mod, { chainId, address })).net.calls.some(u => u.includes('rwa.xyz'));
+      for (const a of ['0x238a700ed6165261cf8b2e544ba797bc11e466ba', '0x' + '5'.repeat(40), SUSDE, '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48']) assert.equal(await asked(1, a), true, a);
+    }],
+    ['a good record younger than a week with the same change signals keeps its slow facts: Sourcify, creation, controllers and rwa.xyz are not read again', async mod => {
+      const first = await run(mod, { chainId: 1, address: SUSDE });
+      const again = await run(mod, { chainId: 1, address: SUSDE, previous: first.data });
+      for (const part of ['sourcify.dev', 'api/v2/addresses/', 'api/v2/transactions/', 'safe.global', 'rwa.xyz']) assert.ok(!again.net.calls.some(u => u.includes(part)), part);
+      for (const part of ['coins.llama.fi', 'geckoterminal', 'kyberswap', '/holders', 'readContract', 'rpc']) assert.ok(again.net.calls.some(u => u.includes(part)), `${part} still fresh`);
+      assert.deepEqual(again.data.contract, first.data.contract); assert.deepEqual(again.data.control.controllers, first.data.control.controllers); assert.equal(again.data.rwa, first.data.rwa);
+      assert.equal(again.data.meta.stable_at, first.data.meta.stable_at); assert.equal(again.data.meta.stable_fp, first.data.meta.stable_fp);
+      assert.ok(again.net.calls.length < first.net.calls.length);
+    }],
+    ['the slow facts are read again when the record is a week old or a change signal moved', async mod => {
+      const first = await run(mod, { chainId: 1, address: SUSDE });
+      const old = { ...first.data, meta: { ...first.data.meta, stable_at: first.data.meta.stable_at - 8 * 86400 } };
+      assert.ok((await run(mod, { chainId: 1, address: SUSDE, previous: old })).net.calls.some(u => u.includes('sourcify.dev')), 'a week old');
+      const moved = { ...first.data, meta: { ...first.data.meta, stable_fp: '[null,null,null,[]]' } };
+      const r = await run(mod, { chainId: 1, address: SUSDE, previous: moved });
+      assert.ok(r.net.calls.some(u => u.includes('sourcify.dev')), 'signals differ');
+      assert.equal(r.data.meta.stable_fp, first.data.meta.stable_fp); assert.ok(r.data.meta.stable_at > old.meta.stable_at);
     }],
     ['an invalid address is refused before any request', async ({ collectTokenData: f }) => {
       await assert.rejects(f({ chainId: 1, address: '0xnope' }, { fetcher: { get: async () => { throw new Error('no request expected'); } } }), /invalid token address/);
@@ -363,6 +385,13 @@ export default {
       const db = freshDb(); for (let i = 0; i < 5; i++) seedMarket(db, `m${i}`, 1, '0x' + String(i).repeat(2), `T${i}`, 10 - i);
       let clock = 0; const out = await tick(db, { collect: async () => { clock += 100; return result(); }, now: () => clock, budgetMs: 250, log: () => {} });
       assert.equal(out.collected, 3);
+    }],
+    ['a good stored record is given to the collector as `previous`; a partial one is not', async ({ runTokenDataTick: tick }) => {
+      const db = freshDb(); seedMarket(db, 'm1', 1, '0xaa', 'A', 2); seedMarket(db, 'm2', 1, '0xbb', 'B', 1);
+      const rec = (status) => db.prepare('INSERT INTO token_data (chain_id, address, symbol, collected_at, status, coverage, data_json) VALUES (1, ?, ?, 0, ?, 0.9, ?)');
+      rec().run('0xaa', 'A', 'ok', JSON.stringify({ marker: 'good' })); rec().run('0xbb', 'B', 'partial', JSON.stringify({ marker: 'thin' }));
+      const seen = {}; await tick(db, { collect: async t => { seen[t.address] = t.previous; return result(); }, now: () => 200_000_000, log: () => {} });
+      assert.deepEqual(seen, { '0xaa': { marker: 'good' }, '0xbb': null });
     }],
     ['a second tick started while one is running is skipped', async ({ runTokenDataTick: tick }) => {
       const db = freshDb(); seedMarket(db, 'm1', 1, '0xaa', 'A', 1); let release; const gate = new Promise(r => { release = r; });

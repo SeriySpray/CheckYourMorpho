@@ -10,6 +10,12 @@ const with_ = (rec, fn) => { const r = structuredClone(rec); fn(r.data); return 
 
 export default {
   RISK_MODEL: [['a named version string', ({ RISK_MODEL: m }) => assert.match(m, /^token-risk-\d+$/)]],
+  STABILITY_LEVELS: [['four neutral levels, the last one for records that cannot be rated', ({ STABILITY_LEVELS: l }) => assert.deepEqual(l, ['high', 'medium', 'low', 'insufficient_data'])]],
+  STABILITY_LABELS: [['a label for every level, in the form "Stability: ..."', ({ STABILITY_LABELS: t, STABILITY_LEVELS: l }) => {
+    assert.deepEqual(Object.keys(t), l);
+    assert.deepEqual(Object.values(t), ['Stability: high', 'Stability: medium', 'Stability: low', 'Stability: insufficient data']);
+    assert.ok(Object.values(t).every(v => v.startsWith('Stability: ')));
+  }]],
   FLAG_RULES: [
     ['unique ids, a known pillar and a positive maximum for every rule', ({ FLAG_RULES: rules }) => {
       assert.equal(new Set(rules.map(r => r.id)).size, rules.length);
@@ -28,11 +34,12 @@ export default {
     for (const r of [g('1_WETH'), null, {}, { data: { control: { read_values: { asset: 'nope' } } } }]) assert.equal(f(r), null);
   }]],
   evaluateToken: [
-    ['golden grades: the rank is stability only, so WETH, sUSDe, USDC, USDe and cbBTC (Base) are A and kBTC B (control does not move it); WETH on Base B (no holder list), the $1.9M tokenized S&P 500 B; EIGEN, the 7702-controlled vault, stakedao and mF-ONE E', ({ evaluateToken: f }) => {
-      const grade = name => f(g(name)).grade;
-      assert.deepEqual(['1_WETH', '1_sUSDe', '1_USDC', '1_USDe', '8453_cbBTC', '1_kBTC', '8453_WETH', '8453_deSPXA', '1_EIGEN', '1_aguaUSDCgc', '1_stakedao-frxsUSDS', '1_mF-ONE'].map(grade),
-        ['A', 'A', 'A', 'A', 'A', 'B', 'B', 'B', 'E', 'E', 'E', 'E']);
-    }],
+    ['golden levels: the level follows the stability score only, so WETH, sUSDe, USDC, USDe, cbBTC (Base), kBTC, WETH on Base and the $1.9M tokenized S&P 500 are high (control does not move it); EIGEN, the 7702-controlled vault, stakedao and mF-ONE are low', ({ evaluateToken: f }) => {
+      const level = name => f(g(name)).stability;
+      assert.deepEqual(['1_WETH', '1_sUSDe', '1_USDC', '1_USDe', '8453_cbBTC', '1_kBTC', '8453_WETH', '8453_deSPXA', '1_EIGEN', '1_aguaUSDCgc', '1_stakedao-frxsUSDS', '1_mF-ONE'].map(level),
+        ['high', 'high', 'high', 'high', 'high', 'high', 'high', 'high', 'low', 'low', 'low', 'low']);
+      assert.equal(f(g('1_USDC')).stability_label, 'Stability: high'); assert.equal(f(g('4663_USDe')).stability_label, 'Stability: insufficient data');
+          }],
     ['live PT: the pool index does not see its Pendle AMM, so volume is not judged (na); the Pendle liquidity carries the exit on a curve', ({ evaluateToken: f }) => {
       const live = g('1_PT-sUSDE-26NOV2026');
       assert.equal(flag(f(live), 'volume_24h').state, 'na');
@@ -142,11 +149,11 @@ export default {
     }],
     ['a token on a chain without collector support and without a price is not rated, with the reason', ({ evaluateToken: f }) => {
       const r = f(g('4663_USDe'));
-      assert.deepEqual([r.score, r.grade, r.confidence], [null, 'NR', 'low']);
+      assert.deepEqual([r.score, r.stability, r.confidence], [null, 'insufficient_data', 'low']);
       assert.match(r.not_rated_reason, /chain not supported/); assert.match(r.not_rated_reason, /no price/);
       const noPrice = with_(g('1_WETH'), d => { d.price.usd = null; });
-      assert.deepEqual([f(noPrice).grade, f(noPrice).not_rated_reason], ['NR', 'no price']);
-      assert.equal(f({ ...g('1_WETH'), coverage: 0.3 }).grade, 'NR', 'low coverage');
+      assert.deepEqual([f(noPrice).stability, f(noPrice).not_rated_reason], ['insufficient_data', 'no price']);
+      assert.equal(f({ ...g('1_WETH'), coverage: 0.3 }).stability, 'insufficient_data', 'low coverage');
     }],
     ['Monad: no explorer, so the confidence is not high', ({ evaluateToken: f }) => assert.equal(f(g('143_cbBTC')).confidence, 'medium')],
     ['RWA: the market price is compared with the published NAV', ({ evaluateToken: f }) => {
@@ -180,9 +187,9 @@ export default {
       const noCtl = with_(g('1_WETH'), d => { d.contract.fn = Object.fromEntries(Object.keys(d.contract.fn).map(k => [k, null])); d.contract.is_proxy = null; });
       assert.ok(f(noCtl).control_score < f(g('1_WETH')).control_score); assert.equal(flag(f(noCtl), 'controller_eoa').state, 'unknown');
     }],
-    ['little data: low confidence and the score is capped below B', ({ evaluateToken: f }) => {
+    ['little data: low confidence, the score is capped and the level cannot be high', ({ evaluateToken: f }) => {
       const r = f({ ...g('1_WETH'), coverage: 0.45 });
-      assert.equal(r.confidence, 'low'); assert.ok(r.score <= 69.9 && r.score_before_cap > r.score, JSON.stringify([r.score, r.score_before_cap]));
+      assert.equal(r.confidence, 'low'); assert.equal(r.stability, 'medium'); assert.ok(r.score <= 69.9 && r.score_before_cap > r.score, JSON.stringify([r.score, r.score_before_cap]));
     }],
     ['every flagged rule carries evidence paths; pillars add up to the score; deterministic', ({ evaluateToken: f }) => {
       for (const name of Object.keys(golden)) {
@@ -196,7 +203,7 @@ export default {
       }
     }],
     ['an empty or broken record does not throw and is not rated', ({ evaluateToken: f }) => {
-      for (const rec of [{ data: {} }, {}, null, { data: { contract: 'x', control: { controllers: 'no' } } }]) assert.equal(f(rec).grade, 'NR');
+      for (const rec of [{ data: {} }, {}, null, { data: { contract: 'x', control: { controllers: 'no' } } }]) assert.equal(f(rec).stability, 'insufficient_data');
     }]
   ],
   rankTokens: [
@@ -204,10 +211,10 @@ export default {
       const out = f(Object.keys(golden).map(g));
       const pos = (chainId, symbol) => out.find(r => r.chainId === chainId && r.symbol === symbol).rank;
       assert.deepEqual(out.map(r => r.rank), out.map((_, i) => i + 1));
-      assert.deepEqual([out[0].symbol, out.at(-1).symbol, out.at(-1).grade], ['USDC', 'USDe', 'NR']);
+      assert.deepEqual([out[0].symbol, out.at(-1).symbol, out.at(-1).stability], ['USDC', 'USDe', 'insufficient_data']);
       assert.ok(pos(1, 'USDC') < pos(1, 'kBTC') && pos(1, 'kBTC') < pos(1, 'PT-sUSDE-26NOV2026'), 'control does not move the rank: the EOA-held USDC is on top');
       assert.ok(pos(1, 'PT-sUSDE-26NOV2026') < pos(1, 'PT-USDe-25SEP2025') && pos(1, 'kBTC') < pos(1, 'EIGEN') && pos(1, 'EIGEN') < pos(1, 'mF-ONE'));
-      for (let i = 1; i < out.length; i++) if (out[i].grade !== 'NR' && out[i - 1].grade !== 'NR') assert.ok(out[i - 1].score >= out[i].score);
+      for (let i = 1; i < out.length; i++) if (out[i].stability !== 'insufficient_data' && out[i - 1].stability !== 'insufficient_data') assert.ok(out[i - 1].score >= out[i].score);
     }],
     ['top flags: at most 3, the costliest first; the not rated carry their reason', ({ rankTokens: f }) => {
       const out = f(Object.keys(golden).map(g));
@@ -224,11 +231,12 @@ export default {
       assert.deepEqual(t.map(r => r.address), [twin.address, g('1_WETH').address]);
       assert.deepEqual(f([]), []); assert.deepEqual(f(null), []);
     }],
-    ['the CLI report (scripts/token-ranking.mjs) counts grades and lists the safest, the riskiest and the not rated with reasons', async ({ rankTokens: f }) => {
+    ['the CLI report (scripts/token-ranking.mjs) counts stability levels and lists the steadiest, the least stable and the ones without enough data', async ({ rankTokens: f }) => {
       const { rankingReport } = await import('../../scripts/token-ranking.mjs');
       const md = rankingReport(f(Object.keys(golden).map(g)), { source: 'golden', generatedAt: 'T' });
-      assert.match(md, /\| A \| 5 \|/); assert.match(md, /\| NR \| 1 \|/); assert.match(md, /## 20 safest[\s\S]*\| 1 \| ethereum \| USDC \|/);
-      assert.match(md, /## Not rated \(1\)[\s\S]*\| 4663 \| USDe \| - \| NR \| low \| [\d.]+ \| chain not supported/);
+      assert.match(md, /Stability: high \| \d+ \|/); assert.match(md, /Stability: insufficient data \| 1 \|/); assert.match(md, /## 20 steadiest[\s\S]*\| 1 \| ethereum \| USDC \|/);
+      assert.match(md, /## Not enough data \(1\)[\s\S]*\| 4663 \| USDe \| - \| Stability: insufficient data \| low \| [\d.]+ \| chain not supported/);
+      assert.ok(!/safest|riskiest/i.test(md), 'the report has no safest or riskiest wording');
       assert.ok(!/[–—]/.test(md), 'no long dashes');
     }],
     ['tokens cut to 0 are ordered by their uncut penalty: the deader market goes last', ({ rankTokens: f, evaluateToken: ev }) => {

@@ -51,3 +51,19 @@ export function calculateCollateralMix(vault, allocations = []) {
     unverifiedPercent
   };
 }
+
+/**
+ * Adds the curated category of every token (server/data/tokenClasses.json, key "chainId:address") and the share of the collateral
+ * in each category. A token with no record is `unclassified`. Shares use the same base as the mix; idle cash is in no category.
+ * @returns {object} the mix with `category`/`subtype`/`categoryConfidence` on every token plus `categoryShares` ({ category: percent })
+ */
+export function withTokenClasses(mix, classByToken) {
+  const categoryShares = {};
+  const tokens = (mix.tokens || []).map(t => {
+    const c = classByToken?.get(keyOf(t.chainId, t.address));
+    const category = c?.category ?? 'unclassified';
+    categoryShares[category] = Math.round(((categoryShares[category] ?? 0) + t.percent) * 100) / 100;
+    return { ...t, category, subtype: c?.subtype ?? null, categoryConfidence: c?.confidence ?? null };
+  });
+  return { ...mix, tokens, categoryShares };
+}

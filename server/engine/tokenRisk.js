@@ -9,7 +9,8 @@
  *   na      the rule does not apply to this kind of token
  * score = 100 - sum over the stability pillars of (pillar weight * points of that pillar), cut to 0..100. Higher is steadier.
  * control_score is the same kind of number for the control and transparency pillars and is shown next to the score, not ranked by.
- * A record with too little data or no price is not rated (grade NR) and goes after the rated ones.
+ * A record with too little data or no price is not rated (stability `insufficient_data`) and goes after the rated ones.
+ * The result is shown as a neutral stability level (high, medium, low), never as a safety grade: it says how steady the price and the exit look, not that the token is safe.
  *
  * Old records (collected before the impact, holder and PT fixes) are read through the primitives: the swap impact is computed
  * from out_usd and the requested size, the PT expiry from the contract values, the own-holder shares from the top list.
@@ -17,7 +18,13 @@
 import { parsePtExpiry, parseSharePrice, PROTOCOL_NAME_RE, MORPHO_BLUE } from '../services/tokenParsers.js';
 import { CHAINS } from '../services/tokenCollector.js';
 
-export const RISK_MODEL = 'token-risk-3';
+export const RISK_MODEL = 'token-risk-4';
+
+/** Levels shown to people; `insufficient_data` is a record that cannot be rated. */
+export const STABILITY_LEVELS = ['high', 'medium', 'low', 'insufficient_data'];
+export const STABILITY_LABELS = {
+  high: 'Stability: high', medium: 'Stability: medium', low: 'Stability: low', insufficient_data: 'Stability: insufficient data'
+};
 
 // Calibration: every threshold and weight lives here. The rank is about STABILITY only: how well the token holds its price, how
 // deep its exit is, how spread its holders are and how big and old the market is. Who controls the contract (control, transparency)
@@ -40,7 +47,7 @@ const RISK = {
   // more than a normal ETH swing). A missing holder list is common on L2 explorers (WBTC and WETH on Arbitrum and Base): it lowers
   // the confidence and costs a little, it is not a fault of the market
   unknownShareByPillar: { liquidity: 0.6, price: 0.5, holders: 0.2 },
-  grades: [['A', 85], ['B', 70], ['C', 55], ['D', 40]], // below the last one: E
+  levels: [['high', 70], ['medium', 40]], // below the last one: low
   minCoverage: 0.4,
   confidence: { high: { coverage: 0.75, unknown: 0.15 }, medium: { coverage: 0.5, unknown: 0.35 } },
   // Curves: [x, points] knots, linear between them (log10 x for dollar amounts), so one cent more never jumps a grade
@@ -65,8 +72,7 @@ const RISK = {
   volume24hUsd: [[1e3, 20], [1e4, 8], [1e5, 2], [1e6, 0]], // a market with no trades has no price discovery, whatever an aggregator quotes
   timelockMinDelaySec: 86400,
   ptMaturedPoints: 35, // a matured PT is redeemed 1:1 but its market is closed and its price stops being discovered
-  mediumConfidenceMaxScore: 84.9, // an A needs high confidence
-  lowConfidenceMaxScore: 69.9, // a record with many unknowns cannot rank as A or B
+  lowConfidenceMaxScore: 69.9, // a record with many unknowns cannot be level high
   volatilityPerPct: 0.8, volatilityExtraPerPct: 0.6, volatilityExtraFromPct: 20, volatilityMaxPoints: 45, // points per percent of the 30-day price range (a peg at 0.1% costs 0.08, ETH at 16% costs 13), steeper above 20%; a 40% month costs 44 (it was capped at 35, which left 44% movers at C)
   ptSingleVenuePoints: 4 // a live PT trades on one Pendle pool only
 };
@@ -526,7 +532,7 @@ const notRatedReason = rec => {
  * Rating of one token record ({chainId, address, symbol, status, coverage, data} as getTokenData returns it).
  * @param {object} record
  * @param {{assetPriceUsd?:number|null, nowSec?:number}} [ctx] price of the vault asset (from its own record) and a reference time override
- * @returns {{model, score:number|null, grade, confidence, stability_score, control_score, not_rated_reason, penalty:number, flags:Array, pillars:object}}
+ * @returns {{model, score:number|null, stability, stability_label, confidence, stability_score, control_score, not_rated_reason, penalty:number, flags:Array, pillars:object}}
  * `penalty` is the weighted sum before the 0..100 cut: it still orders the tokens that all score 0
  */
 export function evaluateToken(record, ctx = {}) {
@@ -559,12 +565,12 @@ export function evaluateToken(record, ctx = {}) {
   const controlScore = Math.max(0, round(100 - cw.control * pillars.control.points - cw.transparency * pillars.transparency.points, 1));
   const nr = notRatedReason(record);
   const raw = Math.max(0, Math.min(100, round(100 - penalty, 1)));
-  const cap = confidence === 'low' ? RISK.lowConfidenceMaxScore : confidence === 'medium' ? RISK.mediumConfidenceMaxScore : 100;
+  const cap = confidence === 'low' ? RISK.lowConfidenceMaxScore : 100;
   const capped = !nr && raw > cap;
   const score = nr ? null : capped ? cap : raw;
-  const grade = nr ? 'NR' : (RISK.grades.find(([, min]) => score >= min)?.[0] ?? 'E');
+  const stability = nr ? 'insufficient_data' : (RISK.levels.find(([, min]) => score >= min)?.[0] ?? 'low');
   return {
-    model: RISK_MODEL, score, grade, confidence: nr ? 'low' : confidence, stability_score: score, control_score: controlScore,
+    model: RISK_MODEL, score, stability, stability_label: STABILITY_LABELS[stability], confidence: nr ? 'low' : confidence, stability_score: score, control_score: controlScore,
     not_rated_reason: nr, score_before_cap: capped ? raw : null, penalty: round(penalty, 1), unknown_share: round(unknownShare, 3), flags, pillars
   };
 }
@@ -581,7 +587,7 @@ function topFlags(result, k = 3, control = false) {
  * by coverage. Ties end on chain id and address, so the order is the same on every run. The price of an ERC-4626 vault's asset is
  * taken from the asset's own record when it is in the list.
  * @param {object[]} records
- * @returns {Array<{rank, chainId, address, symbol, score, grade, confidence, stability_score, control_score, market_cap_usd, top_flags, not_rated_reason}>}
+ * @returns {Array<{rank, chainId, address, symbol, score, stability, stability_label, confidence, stability_score, control_score, market_cap_usd, top_flags, not_rated_reason}>}
  */
 export function rankTokens(records) {
   const list = Array.isArray(records) ? records.filter(r => r && typeof r === 'object') : [];
@@ -591,12 +597,12 @@ export function rankTokens(records) {
     const e = evaluateToken(r, { assetPriceUsd: asset ? prices.get(`${Number(r.chainId)}:${asset}`) ?? null : null });
     return {
       chainId: Number(r.chainId), address: String(r.address).toLowerCase(), symbol: r.symbol ?? at(r, 'data.identity.symbol') ?? null,
-      score: e.score, grade: e.grade, confidence: e.confidence, stability_score: e.stability_score, control_score: e.control_score,
+      score: e.score, stability: e.stability, stability_label: e.stability_label, confidence: e.confidence, stability_score: e.stability_score, control_score: e.control_score,
       market_cap_usd: round(marketCap(r.data ?? {}).value, 0), penalty: e.penalty, coverage: n(r.coverage), top_flags: topFlags(e), control_flags: topFlags(e, 2, true), not_rated_reason: e.not_rated_reason
     };
   });
   rows.sort((a, b) => {
-    const nrA = a.grade === 'NR', nrB = b.grade === 'NR';
+    const nrA = a.stability === 'insufficient_data', nrB = b.stability === 'insufficient_data';
     if (nrA !== nrB) return nrA ? 1 : -1;
     if (!nrA && a.score !== b.score) return b.score - a.score;
     if (!nrA && a.confidence !== b.confidence) return CONF_ORDER[b.confidence] - CONF_ORDER[a.confidence];

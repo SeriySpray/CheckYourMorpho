@@ -41,7 +41,8 @@ export const CHAINS = {
   130: { blockscout: 'unichain', llama: 'unichain', gecko: 'unichain', kyber: 'unichain', usdc: '0x078D782b760474a361dDA0AF3839290b0EF57AD6', rpc: 'unichain-rpc.publicnode.com' },
   143: { llama: 'monad', gecko: 'monad', kyber: 'monad', usdc: '0x754704Bc059F8C67012fEd69BC8A327a5aafb603' },
   999: { llama: 'hyperliquid', gecko: 'hyperevm', kyber: 'hyperevm', usdc: '0xb88339CB7199b77E23DB6E890353E22632Ba630f' },
-  747474: { llama: 'katana', gecko: 'katana' }
+  747474: { llama: 'katana', gecko: 'katana' },
+  4663: { llama: 'robinhood', gecko: 'robinhood' } // Robinhood Chain: Blockscout answers only behind a Cloudflare challenge, so no explorer data
 };
 
 const HOSTS = ['sourcify.dev', 'coins.llama.fi', 'api.geckoterminal.com', 'aggregator-api.kyberswap.com', 'api.safe.global', 'api-v2.pendle.finance',
@@ -200,20 +201,24 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   };
   const json = r => (r?.status === 200 ? parseJson(r.text) : null);
   const rpc = (key, method, params) => fetchSource(key, urls.rpc, { body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+  const prev = token.previous && typeof token.previous === 'object' ? token.previous : null;
 
-  // Phase 1: independent sources; one host is read in order, different hosts at the same time
+  // Phase 1: independent sources; one host is read in order, different hosts at the same time.
+  // A good record younger than `stableRefreshSec` is first checked by the cheap signals of a change (proxy slots, read page, who holds the keys);
+  // when they are the same, the slow facts (source, creation, controllers, RWA) are taken from the stored record instead of being read again.
   const p1 = {};
+  let reuse = false;
   const group = {
     rpc: async () => {
       if (!c?.rpc) return;
       p1.slotAdmin = await rpc('rpc_admin_slot', 'eth_getStorageAt', [address, ADMIN_SLOT, 'latest']);
       p1.slotImpl = await rpc('rpc_impl_slot', 'eth_getStorageAt', [address, IMPL_SLOT, 'latest']);
     },
-    sourcify: async () => { p1.sourcify = await fetchSource('sourcify', urls.sourcify); },
+    sourcify: async () => { if (!reuse) p1.sourcify = await fetchSource('sourcify', urls.sourcify); },
     blockscout: async () => {
       if (!c?.blockscout) return;
       p1.bsToken = await fetchSource('blockscout_token', urls.bsToken);
-      p1.bsAddress = await fetchSource('blockscout_address', urls.bsAddress);
+      if (!reuse) p1.bsAddress = await fetchSource('blockscout_address', urls.bsAddress);
       p1.bsHolders = await fetchSource('blockscout_holders', urls.bsHolders);
       p1.bsCounters = await fetchSource('blockscout_counters', urls.bsCounters);
     },
@@ -229,7 +234,18 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
     },
     explorer: async () => { if (c?.explorer) p1.explorer = await fetchSource('explorer_read', urls.explorer); }
   };
-  await Promise.all(Object.values(group).map(f => f()));
+  const fingerprint = () => {
+    const rv = parseReadContract(p1.explorer?.status === 200 ? p1.explorer.text : '') ?? {};
+    return JSON.stringify([parseRpcAddress(json(p1.slotAdmin)), parseRpcAddress(json(p1.slotImpl)), rv.implementation ?? null, controllerAddresses(rv).map(x => `${x.role}:${x.address}`)]);
+  };
+  const cheap = ['rpc', 'explorer'];
+  if (prev) {
+    await Promise.all(cheap.map(k => group[k]()));
+    // shortcut: a controller that changes only on the implementation's read page is noticed at the weekly refresh
+    reuse = Boolean(c && prev.contract && prev.control && prev.meta?.stable_fp && Math.floor(now() / 1000) - (prev.meta.stable_at ?? 0) < CONFIG.tokenData.stableRefreshSec && fingerprint() === prev.meta.stable_fp);
+  }
+  await Promise.all(Object.entries(group).filter(([k]) => !(prev && cheap.includes(k))).map(([, f]) => f()));
+  const stableFp = fingerprint();
 
   const llamaKey = `${c?.llama}:${address}`;
   const sourcify = parseSourcify(json(p1.sourcify));
@@ -243,14 +259,14 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const readValues = { ...(parseReadContract(p1.explorer?.status === 200 ? p1.explorer.text : '') ?? {}) };
   const slotAdmin = parseRpcAddress(json(p1.slotAdmin));
   const slotImpl = parseRpcAddress(json(p1.slotImpl));
-  const impl = (sourcify?.implementations?.[0]?.address ?? bsAddress?.implementations?.[0]?.address ?? slotImpl) || null;
+  const impl = (reuse ? prev.contract.implementations?.[0]?.address ?? slotImpl : sourcify?.implementations?.[0]?.address ?? bsAddress?.implementations?.[0]?.address ?? slotImpl) || null;
   const symbol = token.symbol || bsToken?.symbol || price?.symbol || null;
   const decimals = bsToken?.decimals ?? price?.decimals ?? null;
 
   // A contract Sourcify does not know: take the name and ABI from Blockscout, which verifies on its own
-  let contractName = sourcify?.contract_name ?? null;
+  let contractName = reuse ? prev.identity?.contract_name ?? null : sourcify?.contract_name ?? null;
   let abi = sourcify?.abi ?? null;
-  if (!abi && c?.blockscout) {
+  if (!reuse && !abi && c?.blockscout) {
     const bc = parseBlockscoutContract(json(await fetchSource('blockscout_contract', urls.bsContract, { maxBytes: CONTRACT_MAX_BYTES })));
     contractName ??= bc?.contract_name ?? null;
     abi = bc?.abi ?? null;
@@ -262,10 +278,10 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const tasks = [];
   const implUrls = impl && ADDR_RE.test(impl) ? sourceUrls(chainId, address, { implementation: impl }) : null;
   if (implUrls) {
-    tasks.push(async () => { p2.sourcifyImpl = await fetchSource('sourcify_impl', implUrls.sourcifyImpl); });
+    if (!reuse) tasks.push(async () => { p2.sourcifyImpl = await fetchSource('sourcify_impl', implUrls.sourcifyImpl); });
     if (c?.explorer) tasks.push(async () => { p2.explorerImpl = await fetchSource('explorer_read_impl', implUrls.explorerImpl); });
   }
-  if (c?.blockscout && bsAddress?.creation_tx) tasks.push(async () => { p2.creationTx = await fetchSource('blockscout_creation_tx', bsTxUrl(chainId, bsAddress.creation_tx)); });
+  if (!reuse && c?.blockscout && bsAddress?.creation_tx) tasks.push(async () => { p2.creationTx = await fetchSource('blockscout_creation_tx', bsTxUrl(chainId, bsAddress.creation_tx)); });
   if (c?.kyber && c.usdc) {
     tasks.push(async () => {
       const skip = (status, reason) => ({ status, price_impact_pct: null, out_usd: null, kyber_in_usd: null, gas_usd: null, dexes: [], reason });
@@ -282,19 +298,20 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   }
   if (c && contractName === 'PendlePrincipalToken') tasks.push(async () => { p2.pendle = await fetchSource('pendle_markets', urls.pendle); });
   if (c?.feeds) tasks.push(async () => { p2.feeds = await loadFeeds(chainId, fetcher, now()); sources.push({ key: 'chainlink_feeds', url: urls.feeds, status: p2.feeds.status, ms: p2.feeds.ms, error: p2.feeds.error ?? null }); });
-  if (c && symbol) tasks.push(async () => { p2.rwa = await fetchSource('rwa_xyz', rwaUrl(symbol)); });
+  if (!reuse && c && symbol) tasks.push(async () => { p2.rwa = await fetchSource('rwa_xyz', rwaUrl(symbol)); });
   await Promise.all(tasks.map(t => t()));
 
   const implSourcify = parseSourcify(json(p2.sourcifyImpl));
   let implAbi = implSourcify?.abi ?? null;
-  if (!implAbi && implUrls?.bsContractImpl) implAbi = parseBlockscoutContract(json(await fetchSource('blockscout_contract_impl', implUrls.bsContractImpl, { maxBytes: CONTRACT_MAX_BYTES })))?.abi ?? null;
+  if (!reuse && !implAbi && implUrls?.bsContractImpl) implAbi = parseBlockscoutContract(json(await fetchSource('blockscout_contract_impl', implUrls.bsContractImpl, { maxBytes: CONTRACT_MAX_BYTES })))?.abi ?? null;
   const implValues = parseReadContract(p2.explorerImpl?.status === 200 ? p2.explorerImpl.text : '') ?? {};
   Object.assign(readValues, Object.fromEntries(Object.entries(implValues).filter(([k]) => !(k in readValues))));
 
   // Phase 3: who controls the contract (owner, admin, the EIP-1967 proxy admin, ...): what kind of address it is, whether it is a Safe,
   // and the delay of a timelock. The Safe service is asked only where it exists (`safe_checked`).
   const controllers = [];
-  if (c?.blockscout) {
+  if (reuse) controllers.push(...prev.control.controllers);
+  else if (c?.blockscout) {
     const list = controllerAddresses(readValues);
     if (slotAdmin) {
       const same = list.find(x => x.address.toLowerCase() === slotAdmin);
@@ -333,7 +350,7 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const data = {
     identity: { name: bsToken?.name ?? null, symbol, decimals, total_supply: bsToken?.total_supply ?? null,
       token_type: bsToken?.token_type ?? null, contract_name: contractName },
-    contract: {
+    contract: reuse ? prev.contract : {
       sourcify_match: sourcify?.sourcify_match ?? null, blockscout_verified: bsAddress?.verified ?? null, is_proxy: anyProxy ? true : sourcify?.is_proxy ?? null,
       proxy_type: sourcify?.proxy_type ?? bsAddress?.proxy_type ?? (slotImpl ? 'EIP1967' : null), implementations,
       deployer: sourcify?.deployer ?? null, creator: bsAddress?.creator ?? null, deployed_at: parseCreationTx(json(p2.creationTx)),
@@ -351,7 +368,7 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
     liquidity: { pools_count: gPools?.pools_count ?? null, total_reserve_usd: gPools?.total_reserve_usd ?? null, total_volume_24h_usd: gPools?.total_volume_24h_usd ?? null,
       pools: gPools?.pools ?? [], kyber },
     pendle: isPt ? { ...(ptMarket ?? { active: false }), ...parsePtExpiry(ptMarket, readValues, now()) } : null,
-    rwa: p2.rwa?.status === 200 ? parseRwa(p2.rwa.text, address) : null,
+    rwa: reuse ? prev.rwa ?? null : p2.rwa?.status === 200 ? parseRwa(p2.rwa.text, address) : null,
     oracle_feeds: { feeds: feedData?.feeds ?? [], has_por_feed: feedData?.has_por_feed ?? null }
   };
   const counts = countFields(data);
@@ -362,7 +379,7 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const hasIdentity = Boolean(data.identity.name || contractName || decimals !== null);
   const status = c && hasPrice && (bsToken || gInfo) && counts.coverage >= MIN_STATUS_OK_COVERAGE ? 'ok'
     : !c || hasPrice || hasIdentity ? 'partial' : 'failed';
-  data.meta = { collected_at: Math.floor(now() / 1000), chain_supported: Boolean(c), sources, filled: counts.filled, total: counts.total, coverage: counts.coverage };
+  data.meta = { collected_at: Math.floor(now() / 1000), stable_at: reuse ? prev.meta.stable_at : Math.floor(now() / 1000), stable_fp: reuse ? prev.meta.stable_fp : stableFp, chain_supported: Boolean(c), sources, filled: counts.filled, total: counts.total, coverage: counts.coverage };
   log(`  ${chainId}:${address} ${status}, coverage ${counts.coverage}`);
   return { status, coverage: counts.coverage, data };
 }
@@ -447,7 +464,8 @@ export async function runTokenDataTick(db, { collect = collectTokenData, now = D
     for (const token of tokenDataQueue(db, Math.floor(now() / 1000), { limit })) {
       if (now() >= deadline) break;
       try {
-        applyTokenData(db, token, await collect(token, { now, log }), Math.floor(now() / 1000));
+        const stored = getTokenData(db, token.chainId, token.address);
+        applyTokenData(db, token, await collect({ ...token, previous: stored?.status === 'ok' ? stored.data : null }, { now, log }), Math.floor(now() / 1000));
         out.collected++;
       } catch (err) {
         out.failed++;

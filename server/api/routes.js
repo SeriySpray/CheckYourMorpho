@@ -8,14 +8,15 @@ import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
 import { calculateHHI } from '../engine/hhiEngine.js';
-import { parseTagsJson } from '../engine/collateralEngine.js';
+import { parseTagsJson, withTokenClasses } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
+import { TOKEN_CLASSES } from '../data/tokenClasses.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
 import { getBotInfo, upsertSubscription } from '../services/telegramService.js';
 import { getTokenData, listTokenData } from '../services/tokenCollector.js';
-import { evaluateToken, rankTokens, assetAddressOf, RISK_MODEL } from '../engine/tokenRisk.js';
+import { evaluateToken, rankTokens, assetAddressOf, RISK_MODEL, STABILITY_LEVELS } from '../engine/tokenRisk.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,7 +38,7 @@ export const DEFAULT_VAULTS_LIMIT = 500;
 
 // Token ranking over every token_data record, recomputed at most once a minute (the collector writes in the background)
 const TOKEN_RANKING_TTL_MS = 60000;
-const TOKEN_RANKING_GRADES = ['A', 'B', 'C', 'D', 'E', 'NR'];
+const TOKEN_RANKING_LEVELS = STABILITY_LEVELS;
 let tokenRanking = null;
 
 // Every successful sync (manual or scheduled) invalidates both caches
@@ -609,7 +610,7 @@ function getTokenRanking() {
 }
 
 /**
- * GET /api/tokens/ranking?limit=&offset=&chainId=&grade=: tokens from the safest to the riskiest, not rated (NR) ones last.
+ * GET /api/tokens/ranking?limit=&offset=&chainId=&stability=: tokens from the steadiest to the least stable, those without enough data last.
  * `rank` is the place in the whole ranking, so it stays the same when a filter is applied.
  */
 export function handleGetTokenRanking(req, res, url) {
@@ -620,13 +621,13 @@ export function handleGetTokenRanking(req, res, url) {
     const offset = Number.isFinite(rawOffset) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, rawOffset)) : 0;
     const rawChainId = parseInt(url.searchParams.get('chainId') || '', 10);
     const chainId = Number.isFinite(rawChainId) && rawChainId > 0 ? rawChainId : null;
-    const rawGrade = url.searchParams.get('grade');
-    const grade = rawGrade ? rawGrade.trim().toUpperCase() : null;
-    if (grade !== null && !TOKEN_RANKING_GRADES.includes(grade)) {
-      sendJson(res, 400, { error: `Invalid grade parameter (one of ${TOKEN_RANKING_GRADES.join(', ')})` }, req);
+    const rawLevel = url.searchParams.get('stability');
+    const level = rawLevel ? rawLevel.trim().toLowerCase() : null;
+    if (level !== null && !TOKEN_RANKING_LEVELS.includes(level)) {
+      sendJson(res, 400, { error: `Invalid stability parameter (one of ${TOKEN_RANKING_LEVELS.join(', ')})` }, req);
       return;
     }
-    const matches = getTokenRanking().filter(t => (chainId === null || t.chainId === chainId) && (grade === null || t.grade === grade));
+    const matches = getTokenRanking().filter(t => (chainId === null || t.chainId === chainId) && (level === null || t.stability === level));
     sendJson(res, 200, { model: RISK_MODEL, total: matches.length, limit, offset, tokens: matches.slice(offset, offset + limit) }, req);
   } catch (err) {
     console.error('[API] Token ranking failed:', err);
@@ -724,6 +725,7 @@ export function handleGetVaultByAddress(req, res, address) {
 
     // Compute comprehensive institutional audit verdict (MQI + collateral breakdown + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);
+    verdict.collateral = withTokenClasses(verdict.collateral, TOKEN_CLASSES);
     const compromisedKeys = new Set(verdict.mqi.compromisedMarkets.map(m => m.marketUniqueKey));
     const unverifiedKeys = new Set(verdict.mqi.unverifiedMarkets.map(m => m.marketUniqueKey));
 

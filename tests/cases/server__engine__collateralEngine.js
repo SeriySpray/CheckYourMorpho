@@ -6,6 +6,16 @@ const token = (sym, usd, over = {}) => alloc({
 });
 
 export default {
+  withTokenClasses: [
+    ['category and shares per token; a token with no record is unclassified, idle cash is in no category', ({ calculateCollateralMix: mix, withTokenClasses: f }) => {
+      const m = mix(vault({ total_assets_usd: 100e6 }), [token('a', 50e6), token('b', 30e6), token('c', 10e6), idle(10e6)]);
+      const q = new Map([['1:0xa', { category: 'stablecoin', subtype: 'fiat_backed', confidence: 'high' }], ['1:0xb', { category: 'stablecoin', subtype: null, confidence: 'low' }]]);
+      const r = f(m, q);
+      assert.deepEqual(r.tokens.map(t => [t.symbol, t.category, t.subtype, t.categoryConfidence]), [['a', 'stablecoin', 'fiat_backed', 'high'], ['b', 'stablecoin', null, 'low'], ['c', 'unclassified', null, null]]);
+      assert.deepEqual(r.categoryShares, { stablecoin: 80, unclassified: 10 });
+      assert.deepEqual(f({ tokens: [] }, null), { tokens: [], categoryShares: {} });
+    }],
+  ],
   parseTagsJson: [
     ['an array is returned; null, the string null, objects and garbage give null', ({ parseTagsJson: f }) => {
       assert.deepEqual(f('["eth","lst"]'), ['eth', 'lst']);
