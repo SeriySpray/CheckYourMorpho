@@ -12,6 +12,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { RUNNER_DEFAULTS, parseArgs, buildAgyArgs, minimalEnv, acquireLock, runProcess, runResearch, researchToken } from '../server/services/researchRunner.js';
+import { prefetchEvidence } from '../server/services/researchPrefetch.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const log = msg => console.log(`${new Date().toISOString()} ${msg}`);
@@ -61,6 +62,7 @@ const deps = {
     log: ctx.log,
     waitMemory: ctx.waitMemory,
     fetchImpl: fetch,
+    prefetch: t => prefetchEvidence(t, { fetchImpl: fetch, sleep: ms => new Promise(r => setTimeout(r, ms)), log: ctx.log }),
     runAgy: prompt => agy(buildAgyArgs({ prompt, model: opts.model }), RUNNER_DEFAULTS.agyTimeoutMs),
     saveRaw: (t, text) => {
       fs.mkdirSync(rawDir, { recursive: true });

@@ -1,0 +1,8 @@
+{
+  "name": "PendlePrincipalToken",
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": [],
+  "deployer": "0x3333333333333333333333333333333333333333",
+  "match": "exact_match"
+}

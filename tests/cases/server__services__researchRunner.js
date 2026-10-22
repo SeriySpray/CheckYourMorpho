@@ -17,12 +17,13 @@ const ok = (stdout = WETH_OUT) => ({ code: 0, stdout, stderr: '', timedOut: fals
 const pagesFetch = async () => ({ status: 200, headers: new Headers(), body: new Response(`WETH ${WETH}`).body, text: async () => `WETH ${WETH}` });
 
 function tokenDeps(runs, over = {}) {
-  const calls = { agy: 0, posts: [], saved: [], logs: [] };
+  const calls = { agy: 0, posts: [], saved: [], logs: [], prefetch: 0 };
   const queue = [...runs];
   return {
     calls,
     deps: {
       now: () => NOW, log: m => calls.logs.push(m), fetchImpl: pagesFetch,
+      prefetch: async () => { calls.prefetch++; return []; },
       runAgy: async () => { calls.agy++; return queue.shift() ?? ok(); },
       saveRaw: (t, text) => calls.saved.push([t.address, text]),
       post: async body => { calls.posts.push(body); return { outcome: 'accepted', errors: [] }; },
@@ -230,9 +231,9 @@ export default {
       const { calls, deps } = tokenDeps([ok()]);
       const r = await f(token, { runId: 'run-1', model: 'M' }, deps);
       assert.deepEqual(r, { status: 'accepted', detail: '' });
-      assert.equal(calls.agy, 1); assert.equal(calls.posts.length, 1);
+      assert.equal(calls.agy, 1); assert.equal(calls.posts.length, 1); assert.equal(calls.prefetch, 1);
       const p = calls.posts[0];
-      assert.deepEqual([p.runId, p.model, p.promptVersion, p.chainId, p.address, p.raw.category], ['run-1', 'M', 'research-prompt-5', 1, WETH, 'wrapped-crypto']);
+      assert.deepEqual([p.runId, p.model, p.promptVersion, p.chainId, p.address, p.raw.category], ['run-1', 'M', 'research-prompt-6', 1, WETH, 'wrapped-crypto']);
       assert.equal(p.checks.length, 7); assert.ok(p.checks.every(c => c.status === 200 && c.mentions));
       assert.equal(calls.saved.length, 1);
     }],
@@ -240,7 +241,8 @@ export default {
       const bad = { ...WETH_RAW, address: '0x' + '2'.repeat(40) };
       const { calls, deps } = tokenDeps([ok(JSON.stringify({ response: JSON.stringify(bad) })), ok()]);
       const r = await f(token, { runId: 'r', model: 'M' }, deps);
-      assert.equal(r.status, 'accepted'); assert.equal(calls.agy, 2); assert.equal(calls.posts.length, 1); assert.equal(calls.posts[0].raw.address, WETH);
+      assert.equal(r.status, 'accepted'); assert.equal(calls.agy, 2); assert.equal(calls.prefetch, 1); assert.equal(calls.posts.length, 1); assert.equal(calls.posts[0].raw.address, WETH);
+      assert.ok(calls.saved[0][1].includes('--- evidence ---'));
       assert.ok(calls.logs.some(l => /attempt 1: invalid/.test(l)));
     }],
     ['two invalid answers: the last one is still posted so the server can record and hold the token', async ({ researchToken: f }) => {

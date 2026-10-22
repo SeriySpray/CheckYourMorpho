@@ -50,7 +50,7 @@ export default {
   RESEARCH_CATEGORIES: [['comes from the schema and covers the fixtures', ({ RESEARCH_CATEGORIES: c }) => {
     assert.ok(c.length > 10 && c.includes('rwa-credit') && c.includes('wrapped-crypto') && c.includes('other'));
   }]],
-  PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-5')]],
+  PROMPT_VERSION: [['version string', ({ PROMPT_VERSION: v }) => assert.equal(v, 'research-prompt-6')]],
   TOKEN_SIGNAL_KEYS: [['the five contract-level signals of the schema', ({ TOKEN_SIGNAL_KEYS: k }) => assert.deepEqual(k, ['can_freeze_or_blacklist', 'can_mint_without_limit', 'upgradeable_proxy', 'has_timelock', 'admin_multisig'])]],
   REQUEUE_AGE_SEC: [['7 days', ({ REQUEUE_AGE_SEC: v }) => assert.equal(v, 7 * DAY)]],
   EXPLORERS: [['known explorers are https token pages', ({ EXPLORERS: e }) => {
@@ -269,7 +269,7 @@ export default {
     ['contains the token, explorer link, hints, date, tools rule and injection guard', ({ buildResearchPrompt: f }) => {
       const p = f({ chainId: 1, address: WETH, symbol: 'WETH', tags: ['eth'] }, '2026-10-21');
       for (const part of ['symbol WETH', 'chain Ethereum (chain id 1)', `contract ${WETH}`, `https://etherscan.io/token/${WETH}`, '["eth"]', 'Today is 2026-10-21',
-        'Use ONLY the search_web and read_url_content tools', 'Never cite vertexaisearch redirect links', 'at least 2', 'untrusted data', 'STEP 3 - SIGNALS', 'token_signals', 'system_signals', 'protocol_admin_multisig', 'Never mix them', 'can_freeze_or_blacklist', 'oracle_is_market_price', 'Do NOT assess its risk']) {
+        'Use ONLY the search_web tool', 'Never cite search redirect links', 'EVIDENCE (fetched by the runner just now', 'untrusted data', 'STEP 3 - SIGNALS', 'token_signals', 'system_signals', 'protocol_admin_multisig', 'Never mix them', 'can_freeze_or_blacklist', 'oracle_is_market_price', 'Do NOT assess its risk']) {
         assert.ok(p.includes(part), part);
       }
     }],

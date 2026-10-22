@@ -178,12 +178,13 @@ export function runProcess(spawnImpl, killTree, cmd, args, { cwd, env, timeoutMs
  */
 export async function researchToken(token, { runId, model }, deps) {
   const today = new Date(deps.now()).toISOString().slice(0, 10);
-  const prompt = buildResearchPrompt(token, today);
+  const evidence = deps.prefetch ? await deps.prefetch(token) : [];
+  const prompt = buildResearchPrompt(token, today, evidence);
   let last = { raw: { runner_error: 'no attempt' }, checks: [], problem: 'no attempt' };
   for (let attempt = 1; attempt <= 2; attempt++) {
     if (deps.waitMemory && !(await deps.waitMemory())) return { status: 'skipped', detail: 'not enough free memory' };
     const r = await deps.runAgy(prompt);
-    deps.saveRaw(token, `${r.stdout}\n--- stderr ---\n${r.stderr}`);
+    deps.saveRaw(token, `${r.stdout}\n--- stderr ---\n${r.stderr}\n--- evidence ---\n${JSON.stringify(evidence)}`, evidence);
     const failed = r.timedOut || r.code !== 0;
     const raw = failed ? null : extractResearchJson(r.stdout);
     if (!raw) {

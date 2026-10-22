@@ -1,0 +1,11 @@
+{
+  "coins": {
+    "ethereum:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+      "prices": [
+        { "timestamp": 1726900000, "price": 2400.0 },
+        { "timestamp": 1727000000, "price": 2600.0 },
+        { "timestamp": 1727100000, "price": 2500.0 }
+      ]
+    }
+  }
+}
