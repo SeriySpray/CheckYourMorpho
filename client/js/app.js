@@ -101,6 +101,19 @@ const DOM = {
 /**
  * Initializes application and fetches vaults data.
  */
+/** The back-to-top arrow appears once the ledger is scrolled about two screens down. */
+function setupLedgerToTop() {
+  const ledger = DOM.vaultExplorerWidget;
+  const btn = document.getElementById('ledger-to-top');
+  if (!ledger || !btn) return;
+  ledger.addEventListener('scroll', () => {
+    const show = ledger.scrollTop > ledger.clientHeight * 2;
+    btn.classList.toggle('show', show);
+    btn.tabIndex = show ? 0 : -1;
+  }, { passive: true });
+  btn.addEventListener('click', () => ledger.scrollTo({ top: 0, behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth' }));
+}
+
 async function initApp() {
   // 1. Initialize 3D Particle Sphere
   sphere = new ParticleSphere(DOM.sphereCanvas, {
@@ -128,6 +141,8 @@ async function initApp() {
       pinnedCarouselTimer = setTimeout(updatePinnedCarousel, 250);
     }).observe(DOM.pinnedRichPills.parentElement);
   }
+
+  setupLedgerToTop();
 
   // 2. Bind UI Events
   setupVaultExplorerEvents();

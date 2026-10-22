@@ -34,6 +34,46 @@ body.audit-open .vault-explorer-widget {
   width: calc(var(--ledger-w-compact) - var(--panel-gap));
 }
 
+/* Back to top: pinned to the ledger's bottom edge (sticky, zero flow height), shown after a long scroll */
+.vault-explorer-widget > .ledger-to-top {
+  position: sticky;
+  bottom: 16px;
+  z-index: 3;
+  flex: none;
+  align-self: flex-end;
+  width: 36px;
+  height: 36px;
+  margin: -36px 16px 16px auto;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: oklch(0.2 0.005 260 / 0.72);
+  color: var(--fg-2);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out), visibility 0s linear 220ms, background 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+.vault-explorer-widget > .ledger-to-top.show {
+  opacity: 0.6;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+.vault-explorer-widget > .ledger-to-top.show:hover,
+.vault-explorer-widget > .ledger-to-top.show:focus-visible {
+  opacity: 1;
+  background: var(--ink-3);
+  color: var(--fg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vault-explorer-widget > .ledger-to-top { transition: none; transform: none; }
+}
+
 .ledger-top {
   flex: none;
   margin-top: 18px;
