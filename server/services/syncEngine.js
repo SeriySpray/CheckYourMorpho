@@ -99,10 +99,13 @@ export function underlyingTotals(under) {
   return { allocSum, denominator: allocSum > underTotal ? allocSum : underTotal };
 }
 
-/** Raw assets of a V1 vault that the API reports without any market: unknown, not idle cash. */
+/**
+ * Raw assets of a V1 vault that the API reports without any market: unknown, not idle cash.
+ * A missing or empty position list on a vault that holds assets is the same gap: the API gave nothing to verify.
+ */
 export function unresolvedV1Assets(rawV) {
   const allocation = rawV.state?.allocation;
-  if (!Array.isArray(allocation)) return toBigInt(rawV.state?.totalAssets);
+  if (!Array.isArray(allocation) || allocation.length === 0) return toBigInt(rawV.state?.totalAssets);
   return allocation.filter(a => !a.market).reduce((acc, a) => acc + toBigInt(a.supplyAssets), 0n);
 }
 

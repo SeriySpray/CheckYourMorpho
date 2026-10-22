@@ -383,8 +383,12 @@ export default {
       assert.equal(f({ state: { totalAssets: '900', allocation: null } }), 900n)],
     ['allocation відсутня -> увесь totalAssets', ({ unresolvedV1Assets: f }) =>
       assert.equal(f({ state: { totalAssets: '900' } }), 900n)],
-    ['порожній масив allocation -> 0 (кеш, а не невідомість)', ({ unresolvedV1Assets: f }) =>
-      assert.equal(f({ state: { totalAssets: '900', allocation: [] } }), 0n)],
+    ['порожній масив allocation -> увесь totalAssets (API не дав позицій: невідомість, а не кеш)', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '900', allocation: [] } }), 900n)],
+    ['порожній масив allocation і нульовий totalAssets -> 0 (порожній vault)', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '0', allocation: [] } }), 0n)],
+    ['є позиції з ринком, решта TVL -> 0 (справжній idle на контракті)', ({ unresolvedV1Assets: f }) =>
+      assert.equal(f({ state: { totalAssets: '900', allocation: [{ supplyAssets: '500', market: { marketId: '0xA' } }] } }), 0n)],
     ['позиції без ринку сумуються, позиції з ринком ні', ({ unresolvedV1Assets: f }) =>
       assert.equal(f({ state: { totalAssets: '900', allocation: [{ supplyAssets: '100', market: null }, { supplyAssets: '50', market: { marketId: '0xA' } }, { supplyAssets: '30', market: null }] } }), 130n)],
   ],

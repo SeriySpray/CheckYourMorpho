@@ -166,7 +166,10 @@ export function calculateMQI(vault, allocations = []) {
   const rawCompromisedItems = [];
   let totalCompromisedRawUsd = 0;
 
+  let hasUnreadableSupply = false;
   for (const alloc of allocations) {
+    // A position whose size is missing or not a non-negative number is unknown, not zero
+    if (alloc.supply_assets_usd == null || !(Number(alloc.supply_assets_usd) >= 0)) hasUnreadableSupply = true;
     const supplyUsd = Math.max(0, Number(alloc.supply_assets_usd) || 0);
     const test = isMarketClean(alloc);
 
@@ -215,12 +218,15 @@ export function calculateMQI(vault, allocations = []) {
     }
   }
 
-  const unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && unresolvedRawUsd >= dustFloorUsd)
+  let unresolvedUsd = unresolvedRawUsd >= minMaterialThresholdUsd || (isCumulativeMaterial && unresolvedRawUsd >= dustFloorUsd)
     ? unresolvedRawUsd : 0;
 
-  // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean)
+  // Any other vault capital not allocated to borrowing markets is unallocated idle cash on contract (clean),
+  // unless a position of unknown size could be hiding in it: then the remainder is unknown too
   const totalAllocated = cleanSupplyUsd + compromisedSupplyUsd + unverifiedMarketsUsd;
-  const idleCashUsd = Math.max(0, totalAssetsUsd - totalAllocated - unresolvedUsd);
+  const remainderUsd = Math.max(0, totalAssetsUsd - totalAllocated - unresolvedUsd);
+  const idleCashUsd = hasUnreadableSupply ? 0 : remainderUsd;
+  if (hasUnreadableSupply) unresolvedUsd += remainderUsd;
   const totalCleanAssetsUsd = cleanSupplyUsd + idleCashUsd;
 
   // MQI is the clean share of the capital we could verify. Capital whose data is missing (unverified markets,

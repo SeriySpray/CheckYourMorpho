@@ -119,6 +119,22 @@ export default {
     ['нечисловий TVL -> 100%, нуль ринків', ({ calculateMQI: f }) => {
       const r = f(vault({ total_assets_usd: 'abc' }), [dirty(50e6)]); assert.equal(r.mqiPercent, 100); assert.equal(r.totalMarketsCount, 0);
     }],
+    ['розмір позиції нечитабельний (null / NaN / від\'ємний) -> залишок TVL нерозкритий, а не кеш', ({ calculateMQI: f }) => {
+      for (const bad of [null, undefined, NaN, 'abc', -1]) {
+        const r = f(vault(), [dirty(bad)]);
+        assert.equal(r.mqiPercent, null, String(bad)); assert.equal(r.isAllClean, false, String(bad));
+        assert.equal(r.unresolvedAssetsUsd, 100e6, String(bad)); assert.equal(r.cleanAssetsUsd, 0, String(bad));
+      }
+    }],
+    ['нечитабельна позиція поруч із читабельною чистою -> чиста лишається чистою, решта нерозкрита', ({ calculateMQI: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 40e6 }), dirty(null)]);
+      assert.equal(r.cleanAssetsUsd, 40e6); assert.equal(r.unresolvedAssetsUsd, 60e6); assert.equal(r.mqiPercent, 100);
+      assert.equal(r.isAllClean, false);
+    }],
+    ['усі суми читабельні -> залишок TVL лишається кешем (регресія)', ({ calculateMQI: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 40e6 })]);
+      assert.equal(r.cleanAssetsUsd, 100e6); assert.equal(r.unresolvedAssetsUsd, 0); assert.equal(r.isAllClean, true);
+    }],
     ['усі ринки чисті -> 100%', ({ calculateMQI: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 50e6 })]);
       assert.equal(r.mqiPercent, 100); assert.equal(r.cleanMarketsCount, 1); assert.equal(r.cleanAssetsUsd, 100e6); assert.equal(r.isAllClean, true);
