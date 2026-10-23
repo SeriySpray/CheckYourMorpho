@@ -693,6 +693,16 @@ export function diffPendingConfigs(vaultContext, rawPendingConfigs = [], existin
   return { events, statusUpdates };
 }
 
+// Mass-withdrawal stress scenarios: about half of the catalogue trips them (shared markets), so they only make a vault yellow
+const STRESS_FLAGS = new Set(['Critical Crowded Exit Deficit', 'Elevated Crowded Exit Contagion']);
+
+/** The verdict level a single audit flag sets: 'red' for CRITICAL/HIGH, 'yellow' for MEDIUM and the stress flags, null otherwise. */
+export function flagTier(flag) {
+  if (STRESS_FLAGS.has(flag?.title)) return 'yellow';
+  if (flag?.level === 'CRITICAL' || flag?.level === 'HIGH') return 'red';
+  return flag?.level === 'MEDIUM' ? 'yellow' : null;
+}
+
 const deriveVerdictLevel = (vault, verdict) => {
   if (!verdict || !verdict.mqi) return null;
   if (verdict.mqi.unpriced || isUnpricedVault(vault)) return null;
@@ -702,15 +712,14 @@ const deriveVerdictLevel = (vault, verdict) => {
     return null;
   }
   const flags = Array.isArray(verdict.redFlags) ? verdict.redFlags : [];
-  if (flags.some(f => f.level === 'CRITICAL' || f.level === 'HIGH')) return 'red';
-  if (flags.some(f => f.level === 'MEDIUM')) return 'yellow';
+  if (flags.some(f => flagTier(f) === 'red')) return 'red';
+  if (flags.some(f => flagTier(f) === 'yellow')) return 'yellow';
   return 'green';
 };
 
 /** Titles of the flags that set a red or yellow verdict level, joined for the digest; null for other levels. */
 export function verdictReasons(verdict, level) {
-  const levels = level === 'red' ? ['CRITICAL', 'HIGH'] : level === 'yellow' ? ['MEDIUM'] : [];
-  const flags = Array.isArray(verdict?.redFlags) ? verdict.redFlags.filter(f => levels.includes(f.level)) : [];
+  const flags = Array.isArray(verdict?.redFlags) ? verdict.redFlags.filter(f => flagTier(f) === level) : [];
   return flags.length > 0 ? flags.map(f => f.title).join('; ') : null;
 }
 

@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 const base = { verdict_level: 'green', mqi_percent: 95, net_apy: 0.05, fee: 0.05 };
 
 export default {
+  describeRisk: [
+    ['green - без прапорців; відомі прапорці мають зрозумілі назви, однакові мітки зливаються, невідомий прапорець лишається як є', ({ describeRisk }) => {
+      assert.deepEqual(describeRisk('green', 'ignored'), { label: 'no risk flags', detail: '' });
+      const both = describeRisk('red', 'Critical Crowded Exit Deficit; Elevated Crowded Exit Contagion; Unpriced Vault');
+      assert.equal(both.label, 'exit risk under stress and unmeasurable risk');
+      assert.equal(both.detail.split('. ').length, 3);
+      assert.deepEqual(describeRisk('red', 'Some New Flag'), { label: 'some new flag', detail: '' });
+    }],
+    ['без причини: red - risk flags, yellow - incomplete data', ({ describeRisk }) => {
+      assert.equal(describeRisk('red', null).label, 'risk flags');
+      assert.equal(describeRisk('yellow').label, 'incomplete data');
+    }],
+  ],
   diffVaultSamples: [
     ['без змін або без однієї зі сторін -> порожньо', ({ diffVaultSamples }) => {
       assert.deepEqual(diffVaultSamples(base, { ...base }, 0.05), []);
@@ -10,15 +23,19 @@ export default {
       assert.deepEqual(diffVaultSamples(base, null), []);
     }],
     ['вердикт: зміна в обидва боки; null/unknown ігноруються; флап GREEN-RED-GREEN за добу не дає нічого', ({ diffVaultSamples }) => {
-      assert.match(diffVaultSamples(base, { ...base, verdict_level: 'red' })[0].text, /GREEN to RED/);
-      assert.match(diffVaultSamples({ ...base, verdict_level: 'red' }, base)[0].text, /RED to GREEN/);
+      assert.match(diffVaultSamples(base, { ...base, verdict_level: 'red' })[0].text, /^Risk worsened: no risk flags changed to risk flags$/);
+      assert.match(diffVaultSamples({ ...base, verdict_level: 'red' }, base)[0].text, /^Risk improved: risk flags changed to no risk flags$/);
+      assert.match(diffVaultSamples({ ...base, verdict_level: 'red' }, { ...base, verdict_level: 'yellow' })[0].text, /^Risk improved: /);
       assert.deepEqual(diffVaultSamples({ ...base, verdict_level: null }, { ...base, verdict_level: 'red' }), []);
       assert.deepEqual(diffVaultSamples(base, { ...base, verdict_level: 'green' }), []);
     }],
     ['вердикт: причина з verdict_reasons дописується, без неї текст не змінюється', ({ diffVaultSamples }) => {
       const now = { ...base, verdict_level: 'red', verdict_reasons: 'Restricted Exit Liquidity' };
-      assert.equal(diffVaultSamples(base, now)[0].text, 'Verdict changed from GREEN to RED: Restricted Exit Liquidity');
-      assert.equal(diffVaultSamples(base, { ...now, verdict_reasons: null })[0].text, 'Verdict changed from GREEN to RED');
+      assert.equal(diffVaultSamples(base, now)[0].text, 'Risk worsened: no risk flags changed to low exit liquidity. Less than 20% of the deposits can be withdrawn immediately.');
+      assert.equal(diffVaultSamples(base, { ...now, verdict_reasons: null })[0].text, 'Risk worsened: no risk flags changed to risk flags');
+      const stress = { ...base, verdict_level: 'red', verdict_reasons: 'Critical Crowded Exit Deficit' };
+      assert.equal(diffVaultSamples(base, stress)[0].text, 'Risk worsened: no risk flags changed to exit risk under stress. If competing vaults withdraw from the same markets at once, only a small part of the deposits could be withdrawn.');
+      assert.equal(diffVaultSamples(stress, base)[0].text, 'Risk improved: exit risk under stress changed to no risk flags');
     }],
     ['MQI: зміна на 10 пунктів і більше; 9.9 ігнорується', ({ diffVaultSamples }) => {
       assert.match(diffVaultSamples(base, { ...base, mqi_percent: 85 })[0].text, /dropped from 95% to 85%/);

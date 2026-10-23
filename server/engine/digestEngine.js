@@ -6,6 +6,31 @@ const FEE_EPSILON = 0.0001;
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
 const pct = (fraction, digits = 2) => `${(Math.round(fraction * 100 * 10 ** digits) / 10 ** digits)}%`;
 
+// Plain-language names for the verdict flags: a short label for the state and the sentence that explains it
+const RISK_FLAGS = {
+  'Critical Crowded Exit Deficit': ['exit risk under stress', 'If competing vaults withdraw from the same markets at once, only a small part of the deposits could be withdrawn'],
+  'Elevated Crowded Exit Contagion': ['exit risk under stress', 'If competing vaults withdraw from the same markets at once, withdrawals would slow down noticeably'],
+  'Restricted Exit Liquidity': ['low exit liquidity', 'Less than 20% of the deposits can be withdrawn immediately'],
+  'Negative Net APY (Capital Decay)': ['negative yield', 'The vault is losing depositor principal'],
+  'Compromised Market Exposure': ['market risk', 'Capital sits in markets with bad debt or failed checks'],
+  'Unpriced Vault': ['unmeasurable risk', 'No USD price is available, so the risk cannot be measured'],
+  'Unresolved Exposure': ['unidentified positions', 'Part of the capital sits in positions that could not be identified'],
+  'Unverified Markets': ['incomplete data', 'Some markets could not be checked'],
+  'Unknown Exit Liquidity': ['incomplete data', 'Withdrawable liquidity is not reported']
+};
+const RISK_RANK = { green: 0, yellow: 1, red: 2 };
+
+/** Describes a verdict level and its flag titles ("A; B") in words: { label, detail }. Green is "no risk flags". */
+export function describeRisk(level, reasons = null) {
+  if (level === 'green') return { label: 'no risk flags', detail: '' };
+  const known = String(reasons ?? '').split('; ').filter(Boolean).map(t => RISK_FLAGS[t] ?? [t.toLowerCase(), '']);
+  if (known.length === 0) return { label: level === 'red' ? 'risk flags' : 'incomplete data', detail: '' };
+  return {
+    label: [...new Set(known.map(k => k[0]))].join(' and '),
+    detail: known.map(k => k[1]).filter(Boolean).join('. ')
+  };
+}
+
 /**
  * Compares the vault sample from about a day ago with the current one and returns digest items.
  * It is a snapshot diff, so a GREEN to RED to GREEN flap inside the day produces nothing.
@@ -18,8 +43,10 @@ export function diffVaultSamples(baseline, current, avgNetApy7d = null) {
   const vPrev = String(baseline.verdict_level ?? '').toLowerCase();
   const vNow = String(current.verdict_level ?? '').toLowerCase();
   if (vPrev && vNow && vPrev !== vNow) {
-    const reason = current.verdict_reasons ? `: ${current.verdict_reasons}` : '';
-    items.push({ type: 'verdict', text: `Verdict changed from ${vPrev.toUpperCase()} to ${vNow.toUpperCase()}${reason}` });
+    const from = describeRisk(vPrev, baseline.verdict_reasons);
+    const to = describeRisk(vNow, current.verdict_reasons);
+    const worse = (RISK_RANK[vNow] ?? 0) > (RISK_RANK[vPrev] ?? 0);
+    items.push({ type: 'verdict', text: `Risk ${worse ? 'worsened' : 'improved'}: ${from.label} changed to ${to.label}${to.detail ? `. ${to.detail}.` : ''}` });
   }
 
   if (isNum(baseline.mqi_percent) && isNum(current.mqi_percent)) {

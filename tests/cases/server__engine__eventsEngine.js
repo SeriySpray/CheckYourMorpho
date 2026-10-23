@@ -282,6 +282,17 @@ export default {
       ]);
     }],
   ],
+  flagTier: [
+    ['CRITICAL і HIGH - red, MEDIUM - yellow, стрес-прапорці crowded exit - yellow попри свій рівень, невідоме - null', ({ flagTier }) => {
+      assert.equal(flagTier({ level: 'CRITICAL', title: 'Compromised Market Exposure' }), 'red');
+      assert.equal(flagTier({ level: 'HIGH', title: 'Restricted Exit Liquidity' }), 'red');
+      assert.equal(flagTier({ level: 'MEDIUM', title: 'Unverified Markets' }), 'yellow');
+      assert.equal(flagTier({ level: 'CRITICAL', title: 'Critical Crowded Exit Deficit' }), 'yellow');
+      assert.equal(flagTier({ level: 'HIGH', title: 'Elevated Crowded Exit Contagion' }), 'yellow');
+      assert.equal(flagTier({ level: 'LOW', title: 'x' }), null);
+      assert.equal(flagTier(null), null);
+    }],
+  ],
   verdictReasons: [
     ['red бере CRITICAL і HIGH, yellow - MEDIUM; інші рівні й порожні прапорці дають null', ({ verdictReasons }) => {
       const verdict = { redFlags: [{ level: 'HIGH', title: 'A' }, { level: 'CRITICAL', title: 'B' }, { level: 'MEDIUM', title: 'C' }] };
