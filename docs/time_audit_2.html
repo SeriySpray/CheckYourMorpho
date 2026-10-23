@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CheckYourMorpho: Повний Реєстр та Аудит Витраченого Часу — Етап 2</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .markdown-body {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 40px 24px 80px 24px;
+    }
+    h1, h2, h3 {
+      color: #f0f6fc;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      margin-top: 0;
+      margin-bottom: 20px;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid #21262d;
+    }
+    h2 {
+      font-size: 1.5em;
+      margin-top: 36px;
+      margin-bottom: 16px;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid #21262d;
+    }
+    h3 {
+      font-size: 1.25em;
+      margin-top: 24px;
+      margin-bottom: 12px;
+    }
+    p, ul, ol {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    ul {
+      padding-left: 2em;
+    }
+    li {
+      margin-top: 6px;
+    }
+    hr {
+      height: 1px;
+      padding: 0;
+      margin: 32px 0;
+      background-color: #30363d;
+      border: 0;
+    }
+    a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 85%;
+      padding: 0.2em 0.4em;
+      background-color: rgba(110, 118, 129, 0.4);
+      border-radius: 6px;
+      color: #f0f6fc;
+    }
+    strong {
+      color: #f0f6fc;
+      font-weight: 600;
+    }
+    .table-wrapper {
+      overflow-x: auto;
+      margin-bottom: 24px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #30363d;
+      border-right: 1px solid #30363d;
+    }
+    th:last-child, td:last-child {
+      border-right: none;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    th {
+      background-color: #161b22;
+      color: #f0f6fc;
+      font-weight: 600;
+      text-align: left;
+    }
+    tr:nth-child(2n) {
+      background-color: rgba(22, 27, 34, 0.5);
+    }
+    tr:hover {
+      background-color: rgba(110, 118, 129, 0.08);
+    }
+
+    /* Photos grid */
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .photo-card {
+      display: block;
+      background-color: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .photo-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+      vertical-align: middle;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        font-size: 14px;
+      }
+      .markdown-body {
+        padding: 20px 14px 60px 14px;
+      }
+      h1 {
+        font-size: 1.5em;
+        margin-bottom: 16px;
+      }
+      h2 {
+        font-size: 1.25em;
+        margin-top: 28px;
+        margin-bottom: 12px;
+      }
+      .photos-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .table-wrapper {
+        margin-bottom: 18px;
+        -webkit-overflow-scrolling: touch;
+      }
+      table {
+        min-width: 580px;
+        font-size: 13px;
+      }
+      th, td {
+        padding: 8px 10px;
+      }
+    }
+
+    @media print {
+      body {
+        background-color: #0d1117 !important;
+        color: #c9d1d9 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .markdown-body {
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      .table-wrapper {
+        overflow: visible !important;
+        border: 1px solid #30363d !important;
+      }
+      table {
+        min-width: 100% !important;
+        width: 100% !important;
+      }
+      tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      h1, h2, h3 {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      .photos-grid {
+        display: block !important;
+      }
+      .photo-card {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 24px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6;">
+  <main class="markdown-body" style="max-width: 1040px; margin: 0 auto; padding: 40px 24px 80px 24px;">
+
+<p style="margin-top: 0; margin-bottom: 24px; font-size: 14px; color: #8b949e; border-bottom: 1px solid #21262d; padding-bottom: 12px;">
+  <strong style="color: #f0f6fc;">Реєстр аудиту проєкту:</strong> 
+  <a href="time_audit.html" style="color: #58a6ff; text-decoration: none; margin-left: 8px;">← Етап 1 (27.09 – 09.10) [23 год 06 хв]</a>
+  <span style="color: #30363d; margin: 0 8px;">|</span>
+  <span style="color: #f0f6fc; font-weight: 600;">Етап 2 (09.10 – 23.10) [26 год 36 хв] (Поточний)</span>
+</p>
+
+<h1 style="color: #f0f6fc; font-weight: 600; font-size: 2em; margin-top: 0; margin-bottom: 20px; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; line-height: 1.25;">CheckYourMorpho: Повний Реєстр та Аудит Витраченого Часу — Етап 2</h1>
+
+<h2 style="color: #f0f6fc; font-weight: 600; font-size: 1.5em; margin-top: 36px; margin-bottom: 16px; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; line-height: 1.25;">1. Загальний підсумок другого етапу проєкту</h2>
+
+<ul style="padding-left: 2em; margin-top: 0; margin-bottom: 16px;">
+  <li style="margin-top: 6px; color: #c9d1d9;"><strong style="color: #f0f6fc; font-weight: 600;">Загальний сумарний час другого етапу (09.10 – 23.10.2026):</strong> <strong style="color: #f0f6fc; font-weight: 600;">1 596 хв</strong> (<strong style="color: #f0f6fc; font-weight: 600;">26 год 36 хв</strong>)</li>
+  <li style="margin-top: 6px; color: #c9d1d9;"><strong style="color: #f0f6fc; font-weight: 600;">Чистий час розробки 76 комітів у репозиторії Git (коміти #72 – #147):</strong> <strong style="color: #f0f6fc; font-weight: 600;">1 236 хв</strong> (<strong style="color: #f0f6fc; font-weight: 600;">20 год 36 хв</strong>)</li>
+  <li style="margin-top: 6px; color: #c9d1d9;"><strong style="color: #f0f6fc; font-weight: 600;">Сесії ончейн-досліджень, архітектури та аудитів (6 сесій LocalContext):</strong> <strong style="color: #f0f6fc; font-weight: 600;">360 хв</strong> (<strong style="color: #f0f6fc; font-weight: 600;">6 год 00 хв</strong>)</li>
+  <li style="margin-top: 6px; color: #c9d1d9;"><strong style="color: #f0f6fc; font-weight: 600;">Загальний обсяг досліджень та аудитів:</strong> <strong style="color: #f0f6fc; font-weight: 600;">360 хв</strong> (<strong style="color: #f0f6fc; font-weight: 600;">6 год 00 хв</strong>)</li>
+  <li style="margin-top: 6px; color: #c9d1d9;"><strong style="color: #f0f6fc; font-weight: 600;">Кумулятивний час проєкту за весь життєвий цикл (Етап 1 + Етап 2):</strong> <strong style="color: #f0f6fc; font-weight: 600;">2 982 хв</strong> (<strong style="color: #f0f6fc; font-weight: 600;">49 год 42 хв</strong>)</li>
+</ul>
+
+<hr style="height: 1px; padding: 0; margin: 32px 0; background-color: #30363d; border: 0;">
+
+<h2 style="color: #f0f6fc; font-weight: 600; font-size: 1.5em; margin-top: 36px; margin-bottom: 16px; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; line-height: 1.25;">2. Підсумковий баланс часу за напрямками</h2>
+
+<div class="table-wrapper" style="overflow-x: auto; margin-bottom: 24px; border: 1px solid #30363d; border-radius: 6px;">
+<table style="border-collapse: collapse; width: 100%; font-size: 14px; color: #c9d1d9; background-color: #0d1117;">
+<thead>
+  <tr style="background-color: #161b22;">
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Напрямок робіт</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Опис активностей</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Час у хвилинах</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Еквівалент (год + хв)</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Частка (%)</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Аналітичне ядро, розрахунок MQI та ризиків застави</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">MQI без порогового зрізання, оцінка верифікованого капіталу, токенні класи, AI Research воркери (Gemini), allowlist джерел</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">829 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">13 год 49 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">51.9%</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Telegram Bot, сповіщення та двостороння синхронізація</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Бот на long polling, персональні закріплені повідомлення, синхронізація улюблених сховищ з телефоном, Event Dispatcher, Telegram strip UI</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">300 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">5 год 00 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">18.8%</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Клієнтський UI та WebGL / Ledger</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Нове компонування карток Ledger, карусель закріплених сховищ, плавний скролінг, адаптивність під телефони без 3D-сфери, швидке повернення вгору</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">163 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">2 год 43 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">10.2%</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Система тестів, аудити безпеки та інфраструктура</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Інтерактивний тестовий веб-модуль, закриття 18 дефектів аудиту, mutation audit, IPv6 rate limit, GitHub Actions CI</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">304 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">5 год 04 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">19.0%</td>
+  </tr>
+  <tr style="background-color: rgba(56, 139, 253, 0.15); font-weight: 600;">
+    <td colspan="2" style="padding: 10px 14px; border-right: 1px solid #30363d; color: #f0f6fc;">РАЗОМ</td>
+    <td style="padding: 10px 14px; border-right: 1px solid #30363d; text-align: center; color: #f0f6fc;">1596 хв</td>
+    <td style="padding: 10px 14px; border-right: 1px solid #30363d; text-align: center; color: #f0f6fc;">26 год 36 хв</td>
+    <td style="padding: 10px 14px; text-align: center; color: #f0f6fc;">100.0%</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+<hr style="height: 1px; padding: 0; margin: 32px 0; background-color: #30363d; border: 0;">
+
+<h2 style="color: #f0f6fc; font-weight: 600; font-size: 1.5em; margin-top: 36px; margin-bottom: 16px; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; line-height: 1.25;">3. Зведена таблиця за етапами та фазами розробки</h2>
+
+<div class="table-wrapper" style="overflow-x: auto; margin-bottom: 24px; border: 1px solid #30363d; border-radius: 6px;">
+<table style="border-collapse: collapse; width: 100%; font-size: 14px; color: #c9d1d9; background-color: #0d1117;">
+<thead>
+  <tr style="background-color: #161b22;">
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Фаза</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Період</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Коміти</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Час комітів</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Час досліджень</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Разом на фазу</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 8: Мультиагентний аудит безпеки та загартування ядра</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">12.10 – 15.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#72 – #79</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">120 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">135 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">255 хв (4 год 15 хв)</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 9: Кешування API, мережевий захист та CI/CD</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">16.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#80 – #84</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">81 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">—</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">81 хв (1 год 21 хв)</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 10: Верифікація капіталу MQI та ризик-класи застави</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">19.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#85 – #98</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">227 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">—</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">227 хв (3 год 47 хв)</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 11: Архітектура подій (Vault Events & Timelocks) та класифікація токенів</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">20.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#99 – #107</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">146 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">60 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">206 хв (3 год 26 хв)</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 12: AI Research Agent для аналізу застав та токенів</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">21.10 – 22.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#108 – #126</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">341 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">125 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">466 хв (7 год 46 хв)</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 13: Повний редизайн сповіщень та інтерактивний Telegram Bot</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">22.10 – 23.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#127, #135 – #147</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">239 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">40 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">279 хв (4 год 39 хв)</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; font-weight: 600; color: #f0f6fc;">Фаза 14: Редизайн Ledger, точні пропорції MQI та мобільна оптимізація</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">23.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">#127 – #134</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">122 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">—</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">122 хв (2 год 02 хв)</td>
+  </tr>
+  <tr style="background-color: rgba(56, 139, 253, 0.15); font-weight: 600;">
+    <td colspan="3" style="padding: 10px 14px; border-right: 1px solid #30363d; color: #f0f6fc;">РАЗОМ</td>
+    <td style="padding: 10px 14px; border-right: 1px solid #30363d; text-align: center; color: #f0f6fc;">1236 хв</td>
+    <td style="padding: 10px 14px; border-right: 1px solid #30363d; text-align: center; color: #f0f6fc;">360 хв</td>
+    <td style="padding: 10px 14px; text-align: center; color: #f0f6fc;">1596 хв (26 год 36 хв)</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+<hr style="height: 1px; padding: 0; margin: 32px 0; background-color: #30363d; border: 0;">
+
+<h2 style="color: #f0f6fc; font-weight: 600; font-size: 1.5em; margin-top: 36px; margin-bottom: 16px; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; line-height: 1.25;">4. Повний реєстр усіх 76 комітів із часом у хвилинах</h2>
+
+<div class="table-wrapper" style="overflow-x: auto; margin-bottom: 24px; border: 1px solid #30363d; border-radius: 6px;">
+<table style="border-collapse: collapse; width: 100%; font-size: 14px; color: #c9d1d9; background-color: #0d1117;">
+<thead>
+  <tr style="background-color: #161b22;">
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">№</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Хеш</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Дата і час (ISO)</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Повідомлення коміту</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Час (хв)</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Виконана дія</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">72</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">3598840</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 20:56:26 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(server): resolve findings of the two multi-agent reviews (sync, engines, API, tooling)</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">18 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Усунення зауважень серверної частини після 2-го раунду мультиагентного аудиту (sync, engines, API, tooling)</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">73</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">e95d6e1</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 20:56:26 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): resolve frontend findings of the two multi-agent reviews</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Виправлення зауважень фронтенду за підсумками багатоагентного аудиту інтерфейсу</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">74</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">064639c</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 21:49:32 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(tests): interactive test module with web UI, exported all server functions</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">30 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Створення інтерактивного модуля тестування з власним веб-інтерфейсом та експорт усіх функцій сервера</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">75</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">3191fa2</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 22:43:10 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">test: strengthen cases after mutation audit, cover syncAllVaults and index.js</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">22 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Посилення тестового покриття після мутаційного аудиту, тести syncAllVaults та index.js</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">76</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">b00e347</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 23:00:56 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(engine): compare tiers with unrounded values, unify empty-allocation exit, fix crowded-exit wording</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Порівняння рівнів ризику за неокругленими даними, уніфікація виходу з нульовою алокацією</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">77</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">7748e8e</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 23:01:41 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">test(config): skip the nginx port check when the nginx config is not present</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">5 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Пропуск перевірки порту nginx під час тестів за відсутності конфігураційного файлу</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">78</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">644622d</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 23:12:56 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix: harden input handling found by the test audit</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">9 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Захист обробки вхідних параметрів та граничних значень, виявлених аудитом тестів</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">79</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">d741603</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-15 23:15:14 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix: oracle "0x", protocol-relative paths, look-through shares, Independent curator</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Нормалізація оракулів без префікса '0x', протокольно-відносні шляхи та детекція Independent кураторів</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">80</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">c1c05ef</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-16 20:51:42 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(engine): treat unresolved V2 adapter capital and unknown liquidity as unknown, not clean/100%</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Коректне трактування нерозкритих V2-адаптерів та невідомої ліквідності як unknown замість clean</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">81</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">c44f729</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-16 20:51:42 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(api): per-sync vault catalog cache, rate limit, stale status, CSP and static caching</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Кешування каталогу сховищ за синхронізацією, захист від перевантаження (rate limit), CSP та кеш статики</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">82</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">629b534</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-16 20:51:42 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): stale-data indicator, N/A for unknown exit, reduced motion, status colors via CSS</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Індикатор застарілих даних (stale-data), статус N/A для невідомого виходу, підтримка prefers-reduced-motion</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">83</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">6e92702</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-16 20:51:43 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">docs: rewrite README to match the code, add CI workflow, fail runner on hung cases</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">18 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Оновлення документації README згідно актуальної кодової бази, налаштування GitHub Actions CI workflow</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">84</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">920a424</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-16 21:13:28 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix: key rate limit by IPv6 /64, show N/A for unknown liquidity in pinned cards, correct package description</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Групування rate limit за IPv6 /64 підмережею, показ N/A у закріплених картках за відсутності ліквідності</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">85</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">7b46a77</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 11:44:04 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(engine): count unresolved V1/V2 capital and unpriced vaults as unknown, share one denominator, cumulative materiality for MQI</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Облік нерозкритого V1/V2 капіталу як unknown, спільний знаменник та кумулятивна матеріальність MQI</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">86</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">e43c618</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 11:52:07 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(engine): tolerate accrued interest in MorphoMarketV1 caps, relative dust floor for cumulative materiality, identify idle markets by address, unknown liquidity for unpriced assets, list badge and README</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">18 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Толерантність до нарахованих відсотків у лімітах MorphoMarketV1, поріг пилу (dust floor) для матеріальності</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">87</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">d852a28</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 11:58:52 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(engine): no Only-null exit flag for unpriced vaults, dust floor never hides a cumulative set, list badge shares</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Запобігання помилковому прапорцю 'Only-null exit' для неоцінених сховищ, коректні частки у бейджах списку</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">88</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">29ba4af</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 12:04:19 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(sync): narrow MorphoMarketV1 cap tolerance to 0.5%, keep unreported LLTV and collateral symbol unknown instead of idle defaults</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Звуження толерантності лімітів ринку до 0.5%, збереження невідомих LLTV та символу застави замість значень за замовчуванням</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">89</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">54dd34e</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 12:39:42 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(sync): unreported bad debt, warnings, loan price and chain stay unknown instead of optimistic defaults</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Збереження неповідомленого бед-дебту, попереджень та ціни позики у статусі unknown без оптимістичних припущень</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">90</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">196dd13</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 12:48:15 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(mqi): score only the verified capital, report missing-data markets and unexpanded capital as unverified</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Розрахунок MQI виключно на верифікованому капіталі, маркування ринків з відсутніми даними як unverified</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">91</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">53cabe1</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 12:55:20 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(exit,hhi): measure on the verified capital, report unexpanded capital as unverified</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Метрики виходу (Exit) та HHI на верифікованому капіталі, звітність нерозширеного капіталу</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">92</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">bb725f0</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 20:37:43 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(mqi): dust never hides a material total, no score on residue, positive shares never round to 0, look-through checks the chain</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Захист від приховування матеріальних сум пиловими лімітами, відсутність хибного скорингу на залишках</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">93</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">847df73</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 20:48:20 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(mqi): one materiality rule for MQI, HHI and exit; unknown price, collateral address, LLTV and bad debt stay unknown; client badge and LLTV consistency</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">18 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Єдине правило матеріальності для MQI, HHI та виходу; синхронізація бейджів клієнта та консистентність LLTV</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">94</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">53d7fe8</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 21:16:38 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">test: cover client/js in the test module, export and test the remaining server helpers</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">22 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Покриття клієнтського коду client/js тестами, експорт та верифікація допоміжних серверних функцій</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">95</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">25b5498</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 21:23:12 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): exit cap N/A for unknown liquidity, sort and favorites chips, zero decimals and price, escapeHtml(0), negative cent format, coprime stride on non-integers</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Показ N/A для невідомої ліквідності у фільтрах, обробка нульових десяткових знаків та форматування від'ємних центів</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">96</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">ee2dd2e</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 22:04:36 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(collateral): group collateral into risk classes (BTC, ETH, synthetic dollars, credit funds, PT, volatile, unknown) and flag by class share instead of per-token HHI</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">26 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Групування застави у ризик-класи (BTC, ETH, синтетичні долари, кредитні фонди, PT, volatile, unknown) замість суто токенного HHI</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">97</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">8bf50b2</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 22:46:14 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): mark the collateral classes meter as the author's assessment, with an explanation popover</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Маркування шкали класів застави як експертної авторської оцінки з пояснювальним popover-вікном</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">98</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">1ff6742</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-19 23:18:16 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): stop jerky vault list scroll (height-only intrinsic size, flex-shrink 0, no backdrop blur or heavy hover on rows)</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">18 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Усунення смикання скролу списку сховищ: оптимізація flex-shrink, відмова від важких hover та backdrop blur у рядках</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">99</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">a87b3ea</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 01:30:02 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(events): detect curator actions, pending timelock changes and risk transitions per sync, store them in vault_events and expose /api/events, /api/events/pending and an Atom feed</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">30 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Система детекції дій кураторів, очікуваних змін timelock та переходів ризику; таблиця vault_events та Events API</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">100</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">a2222cd</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 01:30:03 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): vault activity panel with a notification bell, upcoming timelocked changes and event history for favorites, reallocations hidden by default</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">26 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Клієнтська панель активності сховищ (Vault Activity) з дзвіночком сповіщень, історією подій та майбутніми змінами</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">101</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">ee76075</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 21:36:22 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(collateral): add token_classes table and deriveTokenClass that classifies a token from Morpho tags and Pendle data, not wired in yet</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Створення таблиці token_classes та алгоритму deriveTokenClass на базі тегів Morpho та метаданих Pendle</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">102</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">dee172f</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 21:40:07 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(sync): collect Morpho asset tags and Pendle markets into token_classes each sync and derive token classes, not used by the verdict yet</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Збір тегів активів Morpho та ринків Pendle у token_classes під час кожної синхронізації</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">103</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">29f74b9</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 22:16:52 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(collateral): add Morpho-tag risk table, tokenState and calculateTagMix next to the old class model, not wired in yet</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Таблиця ризиків тегів Morpho, tokenState та calculateTagMix паралельно зі старою моделлю класів</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">104</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">a0f9f53</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 22:21:34 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">refactor(sync): keep only Morpho tags, rename the token service to tokenTags with a token_tags table and drop Pendle and the derived classes</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">12 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Фокусування на тегах Morpho, перейменування сервісу на tokenTags з таблицею token_tags, відмова від залежності від Pendle</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">105</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">1628682</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 22:24:37 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(collateral): switch verdict, API, events and client to the Morpho-tag model, drop the class JSON data, collateral flag and share-crossed events</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Перемикання вердикту, API, подій та клієнта на модель тегів Morpho, очищення застарілих JSON-структур класів</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">106</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2ad0337</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 22:25:29 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">docs(collateral): describe the Morpho tag table, the yield choice and known wrong tags, generate the README table from code</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Документування таблиці тегів Morpho, особливостей прибуткових токенів та автогенерація таблиці README з коду</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">107</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">e3e47b3</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-20 22:45:49 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">refactor(collateral): rename tag groups to base, neutral and special, drop risk wording from the tag model, UI and docs</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">9 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Перейменування груп тегів на base, neutral та special, очищення формулювань ризику в моделі тегів, UI та доках</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">108</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">fb30cc5</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:16:45 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(db): add token_research and token_research_history tables for AI collateral research</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Створення таблиць token_research та token_research_history для збереження фактів і сигналів AI-досліджень</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">109</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">8d47a08</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:20:29 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): add tokenResearch service with result validation, apply rules, work queue, prompt and source checks</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Сервіс tokenResearch: валідація результатів, застосування правил, черга завдань, перевірка джерел та промпт</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">110</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">54530f1</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:22:23 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(api): research queue and token-protected result import with a streamed body limit</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Черга досліджень та імпорт результатів з токен-захистом і лімітом розміру тіла запиту</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">111</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">bd2ac82</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:25:39 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): add the PC research runner (agy per token, local source checks, post to the server) with its logic covered by tests</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">22 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Автономний локальний runner досліджень токенів (локальні перевірки джерел, виклики agy, відправка на сервер), покритий тестами</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">112</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">931e131</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:30:31 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(collateral): switch the engine, verdict, events and API from Morpho tags to AI research tiers, drop the tag-group model, keep tags as chips</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">18 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Інтеграція результатів досліджень у вердикт сховищ та перехід на багаторівневу шкалу сигналів застави</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">113</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">3f08994</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:32:11 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): collateral meter, per-token breakdown and market table cell from AI research tiers, disclaimer, tier-change events</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">22 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Відображення шкали застави, деталізації по токенах та маркерів подій зміни тіру в аудиті сховища</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">114</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">854c1d6</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 00:33:46 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">docs: describe the AI research model, tier scale, disclaimer, API and the PC runner with Task Scheduler</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Документування архітектури моделі AI Research, шкали сигналів, API та планувальника завдань Windows Task Scheduler</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">115</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">bd2403d</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 01:12:51 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): parallel workers with a per-call free memory check, PID-based run lock</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Організація пулу паралельних воркерів дослідження токенів з динамічною перевіркою пам'яті та PID-блокуванням</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">116</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">03fd0d1</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 01:42:10 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): the agent collects facts and signals only, no risk tier; prompt 3, signals schema, evidence-only validation, facts cell and Assessment pending meter</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">22 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Перехід агента на виключний збір фактів та ончейн-сигналів без суб'єктивного тіру; оновлення схеми сигналів</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">117</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">98fe3a8</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 02:01:49 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): lower an overstated confidence instead of rejecting the record, with a confidence_downgraded note</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">9 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Автоматичне зниження завищеного рівня впевненості агента з фіксацією примітки confidence_downgraded</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">118</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">71c1c07</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-21 13:31:11 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): default agent model gemini-3.8-flash-low, about 1.5x faster with near-identical signals</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Впровадження моделі gemini-3.8-flash-low: прискорення збору сигналів у 1.5 рази</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">119</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">4248247</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 11:16:58 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): allow up to 8 parallel workers, stagger 10 s</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Масштабування до 8 паралельних воркерів зі ступінчастою затримкою старту 10 с</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">120</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">440a2df</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 11:16:59 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): allowlist of source hosts, host check in validation, prompt 5 with allowed sources</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Створення білого списку (allowlist) перевірених джерел даних та валідація хостів у промпті 5</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">121</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">fcb88ad</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 12:26:42 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(research): prefetch evidence from allowlisted sources into the prompt (research-prompt-6)</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Попереднє завантаження фактів із перевірених джерел безпосередньо у контекст промпту (research-prompt-6)</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">122</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">9191431</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 12:29:45 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">test(collector): real response snapshots of token data sources</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Тестування колектора фактів на реальних снепшотах відповідей зовнішніх джерел даних</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">123</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">c3ef443</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 17:00:06 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(tokens): facts collector, stability ranking, drop AI research</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Колектор фактів токенів, ранжування стабільності на базі зібраних ончейн-метрик</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">124</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">033b578</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 17:18:19 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(notify): rewrite the notification module (events, digest, Telegram bot)</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">40 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Глибоке переписування модуля сповіщень: архітектура подій, генератор дайджестів та Telegram-бот</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">125</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">a3a3a56</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 20:03:27 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(tokens): stability levels, curated token categories and collector fixes</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">26 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Категоризація токенів (5 кураторських класів), покращення колектора та оновлення рівнів стабільності</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">126</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">d9b0aa4</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-22 22:28:51 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">refactor(tokens): remove the token stability ranking (rating engine, GET /api/tokens/ranking, the risk field of the token endpoint, CLI report, golden records)</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Очищення архітектури: видалення надлишкового рушія ранжування стабільності на користь детермінованих правил</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">127</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">3985a08</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 01:34:14 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): "Ledger" redesign - card layout, sphere layout API, pinned carousel, phone without sphere</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">35 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Масштабний редизайн 'Ledger': компонування карток, новий API розкладки 3D-сфери, карусель улюблених, оптимізація для смартфонів</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">128</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">8dbb769</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 01:45:38 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): back-to-top arrow for the vault ledger</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">7 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Кнопка-стрілка швидкого повернення у верхню частину реєстру сховищ</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">129</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">55a27ff</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 01:48:43 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): back-to-top pill centered under the ledger header</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">5 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Центрування плашки швидкого повернення під заголовком реєстру сховищ</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">130</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">0a0a4fa</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 02:07:32 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(mqi): empty V1 position list and unreadable position sizes are unknown capital, not idle cash</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">12 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Порожній список позицій V1 та незчитувані розміри позицій зараховуються як невідомий капітал (unknown), а не вільний кеш</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">131</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">1c8ed54</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 02:15:46 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">refactor(mqi): score is an exact proportion with no materiality cut-off; the threshold stays only for verdict flags and alerts</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Розрахунок оцінки MQI як точної безперервної частки без зрізання матеріальності</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">132</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">ca7b885</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 02:22:55 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(events): verdict level uses the verified capital (clean + compromised), not a field the MQI does not return</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">13 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Рівень вердикту базується на верифікованому капіталі (чистий + скомпрометований), узгодження з виходом MQI</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">133</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">13c6006</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 02:28:51 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(events): report bad debt first seen after a data gap once, with a flag; require V2 caps and adapters lists in the API response</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Одноразове фіксування бед-дебту після розривів синхронізації з прапорцем; обов'язкові списки V2 адаптерів в API</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">134</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">201fd50</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 02:42:06 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">docs(readme): MQI without materiality cut-off, alerts and Telegram bot, events API, phone layout</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Оновлення технічної документації README: новий MQI без порогового зрізання, Telegram-бот, API подій, мобільна верстка</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">135</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">8cd984d</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 09:55:52 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(digest): say why the verdict changed, from the flags that set the level</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">12 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Пояснення причини зміни вердикту в дайджесті на основі конкретних прапорців ризику</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">136</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">681379f</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 09:55:52 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): Activity history loads older pages through the nextBefore cursor</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Підвантаження старіших сторінок історії активностей через курсор nextBefore у панелі подій</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">137</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">d4d5e9b</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 10:00:59 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(events): upcoming list includes pending changes whose timelock already elapsed</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">10 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Включення до списку майбутніх змін (Upcoming) операцій, чий timelock вже минув, але не був виконаний</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">138</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">c4cc9ca</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 10:17:37 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): header star and bell selection follows the visible view</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">9 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Синхронізація вибору зірочки (обране) та дзвіночка у хедері з поточним відкритим видом</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">139</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">973f098</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 10:41:40 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): selected header button turns into a cross, header shows time since the last sync</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">12 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Трансформація вибраної кнопки хедера у хрестик закриття, показ часу з моменту останньої синхронізації даних</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">140</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">7747c74</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 10:41:40 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(bot): one message shape, richer texts, pinned Upcoming changes per chat</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Єдиний стандартизований шаблон повідомлень бота, збагачений текст та персональні закріплені Upcoming-зміни для чату</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">141</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">a8ec80c</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 12:14:13 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(events): risk level in words, crowded-exit stress flags make a vault yellow</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Словесний опис рівня ризику (Low, Guarded, Stress), прапорці стресового виходу (crowded exit) дають жовтий рівень</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">142</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">b7dd374</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 12:14:13 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(bot): /stop, live pinned message, favorites held by the chat, clearer alerts</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">22 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Команда /stop у боті, живе закріплене повідомлення, збереження улюблених сховищ чатом, чіткі попередження</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">143</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">8ad8034</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 12:14:13 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">feat(client): Telegram strip under the header, favorites pulled from the chat</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">26 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Рядок Telegram (Connect / Open chat) під хедером сайту, автоматичне отримання обраних сховищ із чату</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">144</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">25cffac</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 12:24:10 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix: slim Telegram strip on phones, pinned Upcoming message says no vaults are selected when the list is empty</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">12 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Компактна смуга Telegram на телефонах, адаптація закріпленого повідомлення коли обраних сховищ немає</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">145</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2cfa307</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 12:37:31 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): a favorites change is sent before the page is hidden and is never overwritten by a pull from the chat</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">16 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Надійне збереження обраного: відправка до приховування сторінки без затирання даними підтягування з чату</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">146</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">aa93952</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 12:49:14 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix: favorites changes reach the chat in seconds on phones and are never lost</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">20 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Миттєва доставка змін обраного до бота (400 мс) на смартфонах, черга повторних спроб у разі збою мережі</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;">147</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">9db26cf</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; white-space: nowrap;">2026-10-23 17:40:56 +0300</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">fix(client): slim Telegram strip beside an open audit instead of a squeezed three-line box</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">14 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d;">Акуратне розміщення стрічки Telegram поруч із відкритим аудитом замість сплющеного трирядкового блоку</td>
+  </tr>
+  <tr style="background-color: rgba(56, 139, 253, 0.15); font-weight: 600;">
+    <td colspan="4" style="padding: 10px 14px; border-right: 1px solid #30363d; color: #f0f6fc;">РАЗОМ</td>
+    <td style="padding: 10px 14px; border-right: 1px solid #30363d; text-align: center; color: #f0f6fc;">1236 хв</td>
+    <td style="padding: 10px 14px; color: #f0f6fc;">20 год 36 хв</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+<hr style="height: 1px; padding: 0; margin: 32px 0; background-color: #30363d; border: 0;">
+
+<h2 style="color: #f0f6fc; font-weight: 600; font-size: 1.5em; margin-top: 36px; margin-bottom: 16px; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; line-height: 1.25;">5. Дослідницькі та аналітичні сесії LocalContext (у хвилинах)</h2>
+
+<div class="table-wrapper" style="overflow-x: auto; margin-bottom: 24px; border: 1px solid #30363d; border-radius: 6px;">
+<table style="border-collapse: collapse; width: 100%; font-size: 14px; color: #c9d1d9; background-color: #0d1117;">
+<thead>
+  <tr style="background-color: #161b22;">
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Дата</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Нотатка сесії у LocalContext</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: left;">Тематика сесії</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Час (хв)</th>
+    <th style="padding: 10px 14px; border-bottom: 1px solid #30363d; color: #f0f6fc; font-weight: 600; text-align: center;">Формат</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">12.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2026-10-12_terminal_testing_module_and_100pct_coverage.md</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Розробка концепту інтерактивного тестового терміналу, нормалізатори, тестові кейси для числових типів та edge cases</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">45 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">0 год 45 хв</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">14.10 – 15.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2026-10-14_multi_agent_security_and_mutation_audit_round2.md</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Комплексний огляд 4 агентами: безпека SQLite WAL concurrency, PASSIVE checkpoint, LIKE ESCAPE, decimals formatUnits, прямі кредитори</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">90 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">1 год 30 хв</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">20.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2026-10-20_morpho_blue_token_risk_and_classification.pdf</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Аналіз типів застави, ризикових параметрів ринків Morpho Blue, взаємодії з пулами Pendle PT та синтетичними доларами ('Ризик-менеджмент та класифікація токенів у Morpho.pdf')</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">60 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">1 год 00 хв</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">21.10 – 22.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2026-10-21_ai_research_agent_workers_and_signal_schema.md</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Розробка prompt-engineering пайплайну (промпти 3-6), білий список джерел (DefiLlama, GeckoTerminal, RWA.xyz), валідація відповідей та пул паралельних процесів</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">75 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">1 год 15 хв</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">22.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2026-10-22_DATA_FLOW_AND_SYNC_ARCHITECTURE.md</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Формування повної архітектури конвеєра даних, нормалізація BigInt, SQLite WAL transactional indexing та узгодження з REST API</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">50 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">0 год 50 хв</td>
+  </tr>
+  <tr style="background-color: rgba(22, 27, 34, 0.5);">
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">23.10.2026</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;"><code style="font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 85%; padding: 0.2em 0.4em; background-color: rgba(110, 118, 129, 0.4); border-radius: 6px; color: #f0f6fc;">2026-10-23_telegram_bot_and_client_sync_protocol.md</code></td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d;">Проєктування безпечного протоколу зв'язування сесій без куків, синхронізація улюблених сховищ, debounce 400 мс, live pinned message</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; text-align: center; font-weight: 600; color: #f0f6fc;">40 хв</td>
+    <td style="padding: 10px 14px; border-bottom: 1px solid #30363d; text-align: center;">0 год 40 хв</td>
+  </tr>
+  <tr style="background-color: rgba(56, 139, 253, 0.15); font-weight: 600;">
+    <td colspan="3" style="padding: 10px 14px; border-right: 1px solid #30363d; color: #f0f6fc;">РАЗОМ</td>
+    <td style="padding: 10px 14px; border-right: 1px solid #30363d; text-align: center; color: #f0f6fc;">360 хв</td>
+    <td style="padding: 10px 14px; text-align: center; color: #f0f6fc;">6 год 00 хв</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+  </main>
+</body>
+</html>

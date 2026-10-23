@@ -250,7 +250,7 @@ export default {
       let heard = 0; mod.onSyncSuccess(() => { heard++; });
       const changed = rawV1('0xaaa', { state: { ...rawV1('0xaaa').state, totalAssets: '9000000000', totalAssetsUsd: 9000, allocation: [{ supplyAssets: '1', supplyCap: '0', market: rawMarket('0xm7') }] } });
       // 0xbbb відсутній (missed_syncs), 0xeee новий, 0xccc оновлюється, і лише останній V2 ламає запис
-      await assert.rejects(sync(mod, newApi([changed, rawV1('0xeee')], [rawV2('0xccc', '0xm5'), rawV2('0xddd', '0xm8', { apy: true })])), /bound|bind/i);
+      await assert.rejects(sync(mod, newApi([changed, rawV1('0xeee')], [rawV2('0xccc', '0xm5'), rawV2('0xddd', '0xm8', { apy: Symbol('x') })])), /bound|bind/i);
       assert.deepEqual(snap(), before);
       assert.equal(mod.getLastSyncResult().success, false); assert.equal(mod.isSyncing(), false); assert.equal(heard, 0);
       // транзакція не лишилась відкритою: наступна синхронізація комітиться

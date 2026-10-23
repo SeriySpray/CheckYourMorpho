@@ -38,3 +38,6 @@ nginx_checkyourmorpho.conf
 # Development documentation, design notes, and reference photos
 docs/*
 !docs/time_audit.html
+!docs/time_audit_stage2.html
+!docs/time_audit_2.html
+.playwright-mcp/
