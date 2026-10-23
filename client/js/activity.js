@@ -933,8 +933,10 @@ function updateActivityBadge(unseenInfo) {
       badge.classList.add('hidden');
       badge.classList.remove('critical');
     }
-    btn.setAttribute('aria-label', 'Vault activity');
-    btn.title = 'Vault activity';
+    // While the panel is open the button is the cross that closes it
+    const label = isPanelOpen ? 'Close vault activity' : 'Vault activity';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
     return;
   }
 
@@ -1096,6 +1098,8 @@ export function openActivityPanel() {
   if (btn) {
     btn.classList.add('on');
     btn.setAttribute('aria-expanded', 'true');
+    btn.title = 'Close vault activity';
+    btn.setAttribute('aria-label', 'Close vault activity');
   }
   if (panel) panel.classList.remove('hidden');
   if (heading) heading.textContent = 'Vault Activity';
@@ -1131,6 +1135,8 @@ export function closeActivityPanel() {
   if (btn) {
     btn.classList.remove('on');
     btn.setAttribute('aria-expanded', 'false');
+    btn.title = 'Vault activity';
+    btn.setAttribute('aria-label', 'Vault activity');
   }
   if (panel) panel.classList.add('hidden');
   if (heading) heading.textContent = 'Vaults Explorer';

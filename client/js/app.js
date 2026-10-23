@@ -156,7 +156,7 @@ async function initApp() {
     const data = await res.json();
     allVaults = data.vaults || [];
 
-    if (DOM.headerStatusText) DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
+    renderHeaderStatus();
     sphere.setVaults(allVaults);
     renderVaultExplorer();
     renderPinnedRichPills();
@@ -223,8 +223,20 @@ function showStatusNotice(text) {
   if (!DOM.headerStatusText) return;
   DOM.headerStatusText.textContent = text;
   setTimeout(() => {
-    DOM.headerStatusText.textContent = allVaults.length > 0 ? `Live: ${allVaults.length} Vaults` : 'API Offline';
+    if (allVaults.length > 0) renderHeaderStatus(); else DOM.headerStatusText.textContent = 'API Offline';
   }, 4000);
+}
+
+/** ISO time of the last successful server sync from /api/status, null until the first answer. */
+let lastSyncIso = null;
+
+/** Header label next to the buttons: time since the last server sync, or the vault count before /api/status answers. */
+function renderHeaderStatus() {
+  if (!DOM.headerStatusText) return;
+  const ms = Date.now() - Date.parse(lastSyncIso);
+  DOM.headerStatusText.textContent = Number.isFinite(ms)
+    ? `Synced ${ms < 60000 ? 'just now' : formatDataAge(lastSyncIso)}`
+    : `Live: ${allVaults.length} Vaults`;
 }
 
 /** "5m ago" style age of an ISO timestamp, or '' when it cannot be parsed. */
@@ -249,6 +261,9 @@ async function refreshStaleIndicator() {
   } catch {
     // Offline state is already reported by the vaults poll
   }
+  if (typeof status?.lastSuccessAt === 'string') lastSyncIso = status.lastSuccessAt;
+  // Only the sync label is refreshed: a notice, "Reconnecting..." or "API Offline" in the header stays as it is
+  if (allVaults.length > 0 && /^(Synced|Live:)/.test(DOM.headerStatusText?.textContent ?? '')) renderHeaderStatus();
   const stale = status?.stale === true;
   const age = stale ? formatDataAge(status.lastSuccessAt) : '';
   const label = age ? `Stale data · last sync ${age}` : 'Stale data';
@@ -280,9 +295,7 @@ function startLivePolling() {
         const data = await res.json();
         if (Array.isArray(data.vaults) && data.vaults.length > 0) {
           allVaults = data.vaults;
-          if (DOM.headerStatusText) {
-            DOM.headerStatusText.textContent = `Live: ${allVaults.length} Vaults`;
-          }
+          renderHeaderStatus();
           if (sphere) {
             sphere.setVaults(allVaults);
           }
@@ -1184,6 +1197,9 @@ function syncFavFilterButton() {
   const pressed = explorerFilters.pinnedOnly && !(DOM.activityPanel && !DOM.activityPanel.classList.contains('hidden'));
   DOM.explorerFavFilterBtn.classList.toggle('active', pressed);
   DOM.explorerFavFilterBtn.setAttribute('aria-pressed', String(pressed));
+  const label = pressed ? 'Clear favorites filter' : 'Filter Pinned Favorites';
+  DOM.explorerFavFilterBtn.title = label;
+  DOM.explorerFavFilterBtn.setAttribute('aria-label', label);
 }
 
 /** The activity view hides the filter chips; when it closes they come back for whatever filters are still on. */

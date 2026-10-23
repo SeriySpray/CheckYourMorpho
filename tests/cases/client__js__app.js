@@ -204,6 +204,21 @@ const base = {
       assert.match(s.DOM.chipsContainer.innerHTML, /Favorites/);
     }),
   ],
+  renderHeaderStatus: [
+    T('час від останнього синку: щойно, хвилини; без відповіді /api/status - лічильник vault', ({ renderHeaderStatus: f, __state: s }) => {
+      s.allVaults = [cv(), cv()];
+      s.lastSyncIso = null;
+      f();
+      assert.equal(s.DOM.headerStatusText.textContent, 'Live: 2 Vaults');
+      s.lastSyncIso = new Date(Date.now() - 30000).toISOString();
+      f();
+      assert.equal(s.DOM.headerStatusText.textContent, 'Synced just now');
+      s.lastSyncIso = new Date(Date.now() - 5 * 60000).toISOString();
+      f();
+      assert.equal(s.DOM.headerStatusText.textContent, 'Synced 5m ago');
+      s.lastSyncIso = null;
+    }),
+  ],
   getFreshAudit: [
     T('свіжий запис повертається без урахування регістру адреси', ({ getFreshAudit: f, __state: s }) => {
       const entry = { cachedAt: Date.now() - 1000, vault: {} };
@@ -387,6 +402,7 @@ const base = {
       assert.equal(env.timers[0].id, s.livePollingTimer);
     }),
     T('опитування оновлює список, лічильник, сферу і зберігає прокрутку', async ({ startLivePolling: f, __state: s }, env) => {
+      s.lastSyncIso = null; // module state survives between cases
       s.allVaults = [cv()];
       env.fetch(url => (url.startsWith('/api/vaults?') ? jsonResponse({ vaults: [cv(), cv({ address: '0xB' }), cv({ address: '0xC' })] }) : jsonResponse({})));
       f();
