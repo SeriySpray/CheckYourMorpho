@@ -1398,6 +1398,12 @@ body.audit-open .explorer-filters-grid { display: none; }
   body.audit-open .explorer-count { font: 400 11px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
   body.audit-open .explorer-header .stale-indicator { display: flex; }
   .explorer-header .stale-indicator { margin-top: 6px; }
+  /* Telegram strip on a phone: one slim row aligned with the 16px edge of the list; the explanation only when it carries state */
+  .activity-tg { margin: 4px 16px 8px; padding: 8px 8px 8px 12px; gap: 10px; border-radius: 8px; }
+  .activity-tg-title { font-size: 12px; }
+  .activity-tg-note { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .activity-tg:not(.connected) .activity-tg-note { display: none; }
+  .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-heading { font-size: 22px; }
 
   .explorer-search-box {

@@ -232,6 +232,7 @@ export function countChanges(events, nowSec = Math.floor(Date.now() / 1000)) {
  */
 export function formatUpcoming(events, followedCount, nowSec = Math.floor(Date.now() / 1000)) {
   const followed = `${followedCount} vault${followedCount === 1 ? '' : 's'} you follow`;
+  if (followedCount === 0) return message('Upcoming changes', 'No vaults are selected, so there are no upcoming changes for now.', 'Star vaults on the site and their pending changes appear here. This message updates itself.');
   if (events.length === 0) return message('Upcoming changes', `Nothing is waiting for a timelock in the ${followed}. This message updates itself.`);
 
   const vaults = groupChanges(events);

@@ -1051,7 +1051,7 @@ export default {
         assert.equal(els['activity-tg-link'].textContent, 'Open chat');
         assert.equal(els['activity-tg-link'].href, 'https://t.me/cym_bot');
         assert.equal(els['activity-tg-title'].textContent, 'Telegram connected');
-        assert.equal(els['activity-tg-note'].textContent, '@cym_bot  |  alerts for 1 vault');
+        assert.equal(els['activity-tg-note'].textContent, 'alerts for 1 vault  |  @cym_bot');
         assert.ok(els['activity-tg'].classList.contains('connected'));
       } finally { document.getElementById = realGet; s.tgUsername = null; s.tgConnected = false; }
     }],

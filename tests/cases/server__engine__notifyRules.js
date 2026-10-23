@@ -166,6 +166,10 @@ export default {
     }],
   ],
   formatUpcoming: [
+    ['без обраних vault-ів: повідомлення, що vault-и не вибрано і змін поки немає', ({ formatUpcoming }) => {
+      const m = formatUpcoming([], 0, NOW);
+      assert.match(m, /^<b>Upcoming changes<\/b>\n\nNo vaults are selected, so there are no upcoming changes for now\.\n\nStar vaults on the site/);
+    }],
     ['порожній список - окреме повідомлення про те, що нічого не чекає', ({ formatUpcoming }) => {
       const m = formatUpcoming([], 3, NOW);
       assert.match(m, /^<b>Upcoming changes<\/b>\n\nNothing is waiting for a timelock in the 3 vaults you follow\./);

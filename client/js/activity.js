@@ -832,7 +832,7 @@ function renderTelegramStrip() {
   strip.classList.toggle('connected', connected);
   document.getElementById('activity-tg-title').textContent = connected ? 'Telegram connected' : 'Telegram alerts';
   document.getElementById('activity-tg-note').textContent = connected
-    ? `@${tgUsername}  |  ${count > 0 ? `alerts for ${count} vault${count === 1 ? '' : 's'}` : 'star vaults to get alerts'}`
+    ? `${count > 0 ? `alerts for ${count} vault${count === 1 ? '' : 's'}` : 'star vaults to get alerts'}  |  @${tgUsername}`
     : 'Urgent changes, a daily digest and pending changes pinned in a chat.';
   link.textContent = connected ? 'Open chat' : 'Connect';
   // The code in the link is what lets the chat adopt this browser's favorites and this browser adopt the chat's

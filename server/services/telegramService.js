@@ -245,11 +245,12 @@ const isGone = err => err.code === 400 && /message to (edit|pin) not found|messa
  */
 export async function syncUpcomingPin(db, tg, sub, nowSec = Math.floor(Date.now() / 1000), force = false) {
   const addrs = JSON.parse(sub.vaults_json);
-  if (addrs.length === 0) return 'skipped';
-  const text = formatUpcoming(pendingFor(db, addrs), addrs.length, nowSec);
-  const hash = crypto.createHash('sha1').update(text).digest('hex');
   const key = `tg_pin:${sub.chat_id}`;
   const saved = JSON.parse(getState(db, key) || 'null');
+  // Without vaults nothing is sent, but a message that is already pinned must stop showing the last vaults
+  if (addrs.length === 0 && !saved) return 'skipped';
+  const text = formatUpcoming(addrs.length ? pendingFor(db, addrs) : [], addrs.length, nowSec);
+  const hash = crypto.createHash('sha1').update(text).digest('hex');
   if (saved?.hash === hash && saved.pinned && !force) return 'unchanged';
   if (force && saved?.message_id) await tg.call('deleteMessage', { chat_id: sub.chat_id, message_id: saved.message_id }).catch(() => {});
   const payload = { chat_id: sub.chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: SITE_BUTTON };

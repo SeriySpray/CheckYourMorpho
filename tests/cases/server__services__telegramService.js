@@ -320,6 +320,22 @@ export default {
       assert.match(tg.calls[0].payload.text, /1 pending change in the 1 vault you follow/);
       db.close();
     }],
+    ['останній vault знято з обраних: закріплене повідомлення редагується на "vault-и не вибрано", без закріпленого нічого не надсилається', async ({ syncUpcomingPin, upsertSubscription }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db, { chat: 55, vaults: [A] });
+      const sub = () => db.prepare('SELECT * FROM tg_subscriptions').get();
+      upsertSubscription(db, SUB, [], NOW);
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW), 'skipped');
+      assert.equal(tg.calls.length, 0);
+      upsertSubscription(db, SUB, [A], NOW + 1);
+      await syncUpcomingPin(db, tg, sub(), NOW + 1);
+      tg.calls.length = 0;
+      upsertSubscription(db, SUB, [], NOW + 2);
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW + 2), 'edited');
+      assert.deepEqual(tg.calls.map(c => c.method), ['editMessageText']);
+      assert.match(tg.calls[0].payload.text, /No vaults are selected/);
+      db.close();
+    }],
     ['force замінює повідомлення новим навіть без змін (чат міг бути очищений у користувача): видаляє старе, надсилає і закріплює; без vault-ів нічого не шле', async ({ syncUpcomingPin }) => {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, vaults: [A] });
@@ -328,7 +344,7 @@ export default {
       tg.calls.length = 0;
       assert.equal(await syncUpcomingPin(db, tg, sub, NOW + 5, true), 'sent');
       assert.deepEqual(tg.calls.map(c => c.method), ['deleteMessage', 'sendMessage', 'pinChatMessage']);
-      assert.equal(await syncUpcomingPin(db, tg, { ...sub, vaults_json: '[]' }, NOW), 'skipped');
+      assert.equal(await syncUpcomingPin(db, tg, { ...sub, chat_id: 66, vaults_json: '[]' }, NOW), 'skipped');
       db.close();
     }],
     ['"message is not modified" - не помилка; видалене користувачем повідомлення замінюється новим і закріплюється', async ({ syncUpcomingPin }) => {
