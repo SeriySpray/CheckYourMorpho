@@ -86,7 +86,7 @@ export default {
   formatDigest: [
     ['заголовок з датою, блок на vault, пункти зі списком', ({ formatDigest }) => {
       const [m] = formatDigest([{ address: A, name: 'Alpha USDC', items: [{ text: 'Verdict changed from GREEN to RED' }, { text: 'x' }] }], '2026-10-22');
-      assert.equal(m, '<b>Daily digest</b>  |  2026-10-22\n\n<b>Alpha USDC</b>  <code>0x1111...1111</code>\n- Verdict changed from GREEN to RED\n- x');
+      assert.equal(m, '<b>Daily digest</b>\n\n2026-10-22  |  1 vault with changes\n\n<b>Alpha USDC</b>\n<code>0x1111...1111</code>\n- Verdict changed from GREEN to RED\n- x');
     }],
     ['довгий дайджест ділиться на повідомлення до 4096 символів, кожне починається із заголовка, блок не розривається', ({ formatDigest }) => {
       const entries = Array.from({ length: 60 }, (_, i) => ({ address: A, name: `Vault ${i}`, items: [{ text: 'a'.repeat(120) }, { text: 'b'.repeat(120) }] }));
@@ -96,10 +96,10 @@ export default {
       assert.equal(msgs.join('\n').match(/<b>Vault \d+<\/b>/g).length, 60);
     }],
     ['мережа додається після назви, коли відома', ({ formatDigest }) => {
-      assert.match(formatDigest([{ address: A, name: 'Alpha', chain: 'Base', items: [{ text: 't' }] }], 'd')[0], /\n<b>Alpha<\/b> \(Base\)  <code>0x1111\.\.\.1111<\/code>/);
+      assert.match(formatDigest([{ address: A, name: 'Alpha', chainId: 8453, items: [{ text: 't' }] }], 'd')[0], /\n<b>Alpha<\/b>  \|  Base\n<code>0x1111\.\.\.1111<\/code>/);
     }],
     ['vault без імені підписується як Vault', ({ formatDigest }) => {
-      assert.match(formatDigest([{ address: B, name: null, items: [{ text: 't' }] }], 'd')[0], /\n<b>Vault<\/b>  <code>0x2222\.\.\.2222<\/code>/);
+      assert.match(formatDigest([{ address: B, name: null, items: [{ text: 't' }] }], 'd')[0], /\n<b>Vault<\/b>\n<code>0x2222\.\.\.2222<\/code>/);
     }],
     ['назва vault з розміткою екранується', ({ formatDigest }) => {
       assert.ok(formatDigest([{ address: A, name: 'A <b>&</b>', items: [{ text: 'x < y' }] }], 'd')[0].includes('<b>A &lt;b&gt;&amp;&lt;/b&gt;</b>'));

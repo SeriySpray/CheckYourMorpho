@@ -8,6 +8,7 @@ const A = '0x1111111111111111111111111111111111111111';
 const B = '0x2222222222222222222222222222222222222222';
 const SUB = 'abcdefghijklmnopqrstuv';
 const noSleep = async () => {};
+let messageSeq = 1000;
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -27,6 +28,7 @@ function makeTg({ updates = [], fail = {} } = {}) {
       const err = fail[method]?.shift();
       if (err) throw Object.assign(new Error(err.message), { code: err.code });
       if (method === 'getUpdates') return updates.splice(0);
+      if (method === 'sendMessage') return { message_id: ++messageSeq };
       return {};
     }
   };
@@ -104,7 +106,8 @@ export default {
       await handleBotUpdate(db, tg, update(1, 55, `/start ${SUB}`), NOW);
       const r = db.prepare('SELECT chat_id, active, bound_at FROM tg_subscriptions').get();
       assert.deepEqual({ ...r }, { chat_id: 55, active: 1, bound_at: NOW });
-      assert.match(tg.sent()[0].text, /<b>Connected<\/b>\n\nYou follow 2 vaults\./);
+      assert.match(tg.sent()[0].text, /^<b>Connected<\/b>\n\nYou follow 2 vaults\./);
+      assert.match(tg.sent()[0].text, /pinned at the top of this chat/);
       assert.equal(tg.sent()[0].chat_id, 55);
       db.close();
     }],
@@ -129,11 +132,40 @@ export default {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, vaults: [A, B] });
       await handleBotUpdate(db, tg, update(1, 55, '/list'), NOW);
-      assert.equal(tg.sent()[0].text, `<b>You follow 2 vaults</b>\n\nAlpha USDC\n<code>${A}</code>\n\nBeta WETH\n<code>${B}</code>`);
+      assert.equal(tg.sent()[0].text, '<b>You follow 2 vaults</b>\n\n<b>Alpha USDC</b>  |  Ethereum\n<code>0x1111...1111</code>\n\n<b>Beta WETH</b>  |  Ethereum\n<code>0x2222...2222</code>');
       await handleBotUpdate(db, tg, update(2, 55, '/stop'), NOW);
       assert.equal(db.prepare('SELECT active FROM tg_subscriptions').get().active, 0);
       await handleBotUpdate(db, tg, update(3, 55, '/list'), NOW);
       assert.match(tg.sent()[2].text, /No vaults followed/);
+      db.close();
+    }],
+    ['/upcoming: без vault-ів підказка підключитись; з vault-ами оновлює закріплене повідомлення і відповідає, що воно актуальне', async ({ handleBotUpdate }) => {
+      const db = makeDb(); const tg = makeTg();
+      await handleBotUpdate(db, tg, update(1, 55, '/upcoming'), NOW);
+      assert.match(tg.sent()[0].text, /sync here by themselves/);
+      db.prepare('DELETE FROM tg_subscriptions').run();
+      bound(db, { chat: 55, vaults: [A] });
+      tg.calls.length = 0;
+      await handleBotUpdate(db, tg, update(2, 55, '/upcoming'), NOW);
+      assert.deepEqual(tg.calls.map(c => c.method), ['sendMessage', 'pinChatMessage']);
+      assert.match(tg.sent()[0].text, /^<b>Upcoming changes<\/b>/);
+      tg.calls.length = 0;
+      await handleBotUpdate(db, tg, update(3, 55, '/upcoming'), NOW + 5);
+      assert.deepEqual(tg.calls.map(c => c.method), ['pinChatMessage', 'sendMessage']);
+      assert.match(tg.sent()[0].text, /^<b>Upcoming changes are up to date<\/b>/);
+      db.close();
+    }],
+    ['/list додає вердикт, MQI і кількість очікуваних змін; /status рахує зміни, які вже можна застосувати', async ({ handleBotUpdate }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db, { chat: 55, vaults: [A, B] });
+      db.prepare('INSERT INTO vault_samples (vault_address, hour_bucket, sampled_at, mqi_percent, verdict_level) VALUES (?, ?, ?, 98, ?)').run(A, Math.floor(NOW / 3600), NOW, 'red');
+      urgent(db, { kind: 'pending_guardian_change', status: 'pending', validAt: NOW - 60, key: 'pg-ready', details: {} });
+      urgent(db, { kind: 'pending_market_removal', status: 'pending', validAt: NOW + 600, key: 'pm-wait', details: {} });
+      await handleBotUpdate(db, tg, update(1, 55, '/list'), NOW);
+      assert.match(tg.sent()[0].text, /<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\nVerdict: RED  \|  MQI 98%  \|  2 pending changes/);
+      assert.match(tg.sent()[0].text, /<code>0x2222\.\.\.2222<\/code>\n\n?$|<code>0x2222\.\.\.2222<\/code>$/);
+      await handleBotUpdate(db, tg, update(2, 55, '/status'), NOW);
+      assert.match(tg.sent()[1].text, /Pending changes: 2 \(1 can be applied now\)\. \/upcoming shows them\./);
       db.close();
     }],
     ['/help і невідома команда: опис без прив\'язки до підписки', async ({ handleBotUpdate }) => {
@@ -152,7 +184,7 @@ export default {
       db.prepare('DELETE FROM tg_subscriptions').run();
       bound(db, { chat: 55, vaults: [A, B] });
       await handleBotUpdate(db, tg, update(2, 55, '/status'), NOW);
-      assert.match(tg.sent()[1].text, /^<b>Alerts on<\/b>\n\nFollowing 2 vaults\./);
+      assert.match(tg.sent()[1].text, /^<b>Alerts on<\/b>\n\nFollowing 2 vaults\.\n\nPending changes: 0\. \/upcoming shows them\./);
       await handleBotUpdate(db, tg, update(3, 55, '/start'), NOW);
       assert.match(tg.sent()[2].text, /<b>Alerts on<\/b>/);
       db.close();
@@ -198,6 +230,82 @@ export default {
       db.close();
     }],
   ],
+  syncUpcomingPin: [
+    ['перший раз надсилає і закріплює, без змін нічого не викликає, зі зміною редагує те саме повідомлення', async ({ syncUpcomingPin }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db, { chat: 55, vaults: [A] });
+      const sub = () => db.prepare('SELECT * FROM tg_subscriptions').get();
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW), 'sent');
+      assert.deepEqual(tg.calls.map(c => c.method), ['sendMessage', 'pinChatMessage']);
+      assert.match(tg.sent()[0].text, /^<b>Upcoming changes<\/b>\n\nNothing is waiting for a timelock in the 1 vault you follow\./);
+      const id = JSON.parse(db.prepare("SELECT value FROM sync_state WHERE key = 'tg_pin:55'").get().value).message_id;
+      assert.deepEqual(tg.calls[1].payload, { chat_id: 55, message_id: id, disable_notification: true });
+
+      tg.calls.length = 0;
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW + 60), 'unchanged');
+      assert.equal(tg.calls.length, 0);
+
+      urgent(db, { kind: 'pending_guardian_change', status: 'pending', validAt: NOW + 7200, key: 'pg1', details: {} });
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW + 120), 'edited');
+      assert.deepEqual(tg.calls.map(c => c.method), ['editMessageText']);
+      assert.equal(tg.calls[0].payload.message_id, id);
+      assert.match(tg.calls[0].payload.text, /1 pending change in the 1 vault you follow/);
+      db.close();
+    }],
+    ['force закріплює ще раз навіть без змін; без vault-ів нічого не шле', async ({ syncUpcomingPin }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db, { chat: 55, vaults: [A] });
+      const sub = db.prepare('SELECT * FROM tg_subscriptions').get();
+      await syncUpcomingPin(db, tg, sub, NOW);
+      tg.calls.length = 0;
+      assert.equal(await syncUpcomingPin(db, tg, sub, NOW + 5, true), 'unchanged');
+      assert.deepEqual(tg.calls.map(c => c.method), ['pinChatMessage']);
+      assert.equal(await syncUpcomingPin(db, tg, { ...sub, vaults_json: '[]' }, NOW), 'skipped');
+      db.close();
+    }],
+    ['"message is not modified" - не помилка; видалене користувачем повідомлення замінюється новим і закріплюється', async ({ syncUpcomingPin }) => {
+      const db = makeDb();
+      bound(db, { chat: 55, vaults: [A] });
+      const sub = () => db.prepare('SELECT * FROM tg_subscriptions').get();
+      const tg = makeTg({ fail: { editMessageText: [{ code: 400, message: 'Bad Request: message is not modified' }, { code: 400, message: 'Bad Request: message to edit not found' }] } });
+      await syncUpcomingPin(db, tg, sub(), NOW);
+      urgent(db, { kind: 'pending_guardian_change', status: 'pending', validAt: NOW + 7200, key: 'pg1', details: {} });
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW + 60), 'unchanged');
+      urgent(db, { kind: 'pending_market_removal', status: 'pending', validAt: NOW + 9000, key: 'pm1', details: {} });
+      tg.calls.length = 0;
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW + 120), 'sent');
+      assert.deepEqual(tg.calls.map(c => c.method), ['editMessageText', 'sendMessage', 'pinChatMessage']);
+      assert.equal(JSON.parse(db.prepare("SELECT value FROM sync_state WHERE key = 'tg_pin:55'").get().value).message_id, tg.calls[2].payload.message_id);
+      db.close();
+    }],
+    ['невдале закріплення не дублює повідомлення: наступний виклик лише закріплює; 403 вимикає підписку', async ({ syncUpcomingPin }) => {
+      const db = makeDb();
+      bound(db, { chat: 55, vaults: [A] });
+      const sub = () => db.prepare('SELECT * FROM tg_subscriptions').get();
+      const tg = makeTg({ fail: { pinChatMessage: [{ code: 400, message: 'Bad Request: not enough rights' }] } });
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW), 'sent');
+      tg.calls.length = 0;
+      assert.equal(await syncUpcomingPin(db, tg, sub(), NOW + 60), 'unchanged');
+      assert.deepEqual(tg.calls.map(c => c.method), ['pinChatMessage']);
+      const blocked = makeTg({ fail: { sendMessage: [{ code: 403, message: 'Forbidden: bot was blocked by the user' }] } });
+      db.prepare("DELETE FROM sync_state WHERE key = 'tg_pin:55'").run();
+      assert.equal(await syncUpcomingPin(db, blocked, sub(), NOW + 120), 'blocked');
+      assert.equal(sub().active, 0);
+      db.close();
+    }],
+  ],
+  dispatchPins: [
+    ['оновлює закріплене повідомлення всіх активних чатів, лічить лише надіслані чи змінені, пропускає вимкнені', async ({ dispatchPins }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db, { chat: 55, vaults: [A] });
+      bound(db, { sub: 'zyxwvutsrqponmlkjihgfe', chat: 66, vaults: [B] });
+      db.prepare("UPDATE tg_subscriptions SET active = 0 WHERE chat_id = 66").run();
+      assert.equal(await dispatchPins(db, tg, NOW, noSleep), 1);
+      assert.equal(await dispatchPins(db, tg, NOW + 60, noSleep), 0);
+      assert.equal(tg.sent().length, 1);
+      db.close();
+    }],
+  ],
   pollBotOnce: [
     ['обробляє оновлення, зберігає offset = останній update_id + 1 і передає його в наступний запит', async ({ pollBotOnce }) => {
       const db = makeDb();
@@ -229,7 +337,7 @@ export default {
       assert.equal(await dispatchUrgent(db, tg, NOW + 60, noSleep), 1);
       assert.equal(await dispatchUrgent(db, tg, NOW + 120, noSleep), 0);
       assert.equal(tg.sent().length, 1);
-      assert.match(tg.sent()[0].text, /^<b>CRITICAL<\/b>  \|  Alpha USDC\n<code>0x1111\.\.\.1111<\/code>\n\n<b>Event title<\/b>\nTVL: \$2\.0M to \$1\.0M/);
+      assert.match(tg.sent()[0].text, /^<b>Large TVL outflow<\/b>\n\n<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n\nTVL: \$2\.0M to \$1\.0M/);
       assert.equal(tg.sent()[0].chat_id, 777);
       db.close();
     }],
@@ -255,7 +363,7 @@ export default {
       urgent(db, { at: NOW + 1, key: 'g1' }); urgent(db, { at: NOW + 2, key: 'g2' }); urgent(db, { at: NOW + 3, key: 'g3', kind: 'bad_debt_appeared', details: { badDebtUsd: 5000, supplyUsd: 90000 } });
       assert.equal(await dispatchUrgent(db, tg, NOW + 10, noSleep), 2);
       assert.equal(tg.sent().length, 2);
-      assert.match(tg.sent()[0].text, /2 changes at once/);
+      assert.match(tg.sent()[0].text, /^<b>Large TVL outflow \(2 changes\)<\/b>/);
       assert.equal(tg.sent()[0].parse_mode, 'HTML');
       assert.equal(tg.sent()[0].reply_markup.inline_keyboard[0][0].text, 'Open CheckYourMorpho');
       assert.equal(db.prepare('SELECT COUNT(*) AS c FROM tg_sent').get().c, 3);
@@ -301,7 +409,7 @@ export default {
       const early = Date.UTC(2026, 0, 15, 6, 0) / 1000;
       assert.equal(await dispatchDigest(db, tg, early, noSleep), 0);
       assert.equal(await dispatchDigest(db, tg, NOW, noSleep), 1);
-      assert.match(tg.sent()[0].text, /^<b>Daily digest<\/b>  \|  2026-01-15\n\n<b>Alpha USDC<\/b> \(Ethereum\)  <code>0x1111\.\.\.1111<\/code>\n- Verdict changed from GREEN to RED$/);
+      assert.match(tg.sent()[0].text, /^<b>Daily digest<\/b>\n\n2026-01-15  \|  1 vault with changes\n\n<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n- Verdict changed from GREEN to RED$/);
       assert.equal(await dispatchDigest(db, tg, NOW + 600, noSleep), 0);
       assert.equal(tg.sent().length, 1);
       assert.equal(db.prepare("SELECT value FROM sync_state WHERE key = 'last_digest_date'").get().value, '2026-01-15');

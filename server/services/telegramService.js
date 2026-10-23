@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { isUrgent, formatUrgentGroup, escapeHtml } from '../engine/notifyRules.js';
+import { isUrgent, formatUrgentGroup, formatUpcoming, countChanges, groupChanges, message, vaultBlock, paginate } from '../engine/notifyRules.js';
 import { buildDigest, formatDigest, digestDue } from './digestService.js';
 
 const SUB_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -19,19 +19,21 @@ const pairingButton = subId => ({ inline_keyboard: [[{ text: 'Open CheckYourMorp
 
 const COMMANDS = [
   { command: 'status', description: 'Alert status' },
+  { command: 'upcoming', description: 'Pin pending changes of your vaults' },
   { command: 'list', description: 'Vaults you follow' },
   { command: 'help', description: 'What the bot sends' },
   { command: 'pause', description: 'Pause alerts' },
   { command: 'resume', description: 'Resume alerts' }
 ];
 
-const HELP_TEXT = [
-  '<b>CheckYourMorpho alerts</b>',
+const COMMAND_LINES = '/upcoming  pinned pending changes\n/list  vaults you follow\n/status  alert status\n/pause  pause alerts';
+
+const HELP_TEXT = message('CheckYourMorpho alerts',
   'Alerts for the vaults you star on the site. The list updates by itself when you star or unstar a vault.',
   '<b>Sent immediately</b>\n- A cap increase that adds 5% or more of vault assets, or opens a new cap\n- A market added or removed\n- A guardian change or a shorter timelock\n- Bad debt appearing in a market\n- A sharp TVL outflow (15% or more in 24 hours, at least $500K)',
   '<b>Daily digest, 09:00 Kyiv time</b>\n- Verdict and MQI changes\n- A Net APY drop against the 7-day average\n- Fee changes and delisting\n- A summary of reallocations',
-  '/status  alert status\n/list  vaults you follow\n/pause  pause alerts\n/resume  resume alerts'
-].join('\n\n');
+  '<b>Pinned message</b>\nUpcoming changes: pending timelock changes of your vaults, grouped by vault. It stays at the top of the chat and updates itself, /upcoming refreshes it.',
+  `${COMMAND_LINES}\n/resume  resume alerts`);
 
 const defaultSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -98,12 +100,12 @@ export async function handleBotUpdate(db, tg, update, nowSec = Math.floor(Date.n
     }
     return pairingButton(sub.sub_id);
   };
-  const notConnected = () => say('<b>CheckYourMorpho alerts</b>\n\nOpen the site with the button below, star the vaults you follow and they sync here by themselves. Nothing else to set up.\n\n/help shows what the bot sends.', pairing());
+  const notConnected = () => say(message('CheckYourMorpho alerts', 'Open the site with the button below, star the vaults you follow and they sync here by themselves. Nothing else to set up.', '/help shows what the bot sends.'), pairing());
 
   if (/^\/start(@\w+)?$/.test(command)) {
     if (!arg || !SUB_ID_RE.test(arg)) {
       const sub = latest();
-      if (sub && JSON.parse(sub.vaults_json).length) { await say(statusText(db, sub), SITE_BUTTON); return; }
+      if (sub && JSON.parse(sub.vaults_json).length) { await say(statusText(db, sub, nowSec), SITE_BUTTON); return; }
       await notConnected();
       return;
     }
@@ -113,39 +115,146 @@ export async function handleBotUpdate(db, tg, update, nowSec = Math.floor(Date.n
     upsertSubscription(db, arg, [], nowSec, false);
     db.prepare('UPDATE tg_subscriptions SET chat_id = ?, active = 1, bound_at = ? WHERE sub_id = ?').run(chatId, nowSec, arg);
     const n = JSON.parse(db.prepare('SELECT vaults_json FROM tg_subscriptions WHERE sub_id = ?').get(arg).vaults_json).length;
-    await say(`<b>Connected</b>\n\nYou follow ${n} vault${n === 1 ? '' : 's'}. The list follows your stars on the site.\n\nUrgent changes arrive immediately. The daily digest comes at 09:00 Kyiv time.\n\n/list  vaults you follow\n/help  what the bot sends\n/pause  pause alerts`, SITE_BUTTON);
+    await say(message('Connected',
+      `You follow ${n} vault${n === 1 ? '' : 's'}. The list follows your stars on the site.`,
+      'Urgent changes arrive immediately. The daily digest comes at 09:00 Kyiv time.',
+      n > 0 && 'Pending changes of your vaults are pinned at the top of this chat.',
+      `${COMMAND_LINES}\n/help  what the bot sends`), SITE_BUTTON);
+    if (n > 0) await syncUpcomingPin(db, tg, latest(), nowSec, true);
   } else if (/^\/help(@\w+)?$/.test(command)) {
     await say(HELP_TEXT, SITE_BUTTON);
   } else if (/^\/status(@\w+)?$/.test(command)) {
     const sub = latest();
-    if (sub && JSON.parse(sub.vaults_json).length) await say(statusText(db, sub), SITE_BUTTON); else await notConnected();
+    if (sub && JSON.parse(sub.vaults_json).length) await say(statusText(db, sub, nowSec), SITE_BUTTON); else await notConnected();
+  } else if (/^\/upcoming(@\w+)?$/.test(command)) {
+    const sub = latest();
+    if (!sub || JSON.parse(sub.vaults_json).length === 0) { await notConnected(); return; }
+    const res = await syncUpcomingPin(db, tg, sub, nowSec, true);
+    // A new message is its own answer; an edited one needs a word so the command does not look ignored
+    if (res === 'edited' || res === 'unchanged') await say(message('Upcoming changes are up to date', 'The pinned message at the top of this chat shows them.'));
+    else if (res === 'retry') await say(message('Could not update the pinned message', 'Try /upcoming again in a minute.'));
   } else if (/^\/list(@\w+)?$/.test(command)) {
     const row = db.prepare('SELECT vaults_json FROM tg_subscriptions WHERE chat_id = ? AND active = 1').get(chatId);
     const addrs = row ? JSON.parse(row.vaults_json) : [];
-    const name = db.prepare('SELECT name FROM vaults WHERE address = ?');
-    await say(addrs.length
-      ? `<b>You follow ${addrs.length} vault${addrs.length === 1 ? '' : 's'}</b>\n\n${addrs.map(a => `${escapeHtml(name.get(a)?.name || 'Vault')}\n<code>${a}</code>`).join('\n\n')}`
-      : '<b>No vaults followed</b>\n\nOpen the site with the button below and star vaults: they appear here by themselves.', addrs.length ? undefined : pairing());
+    if (addrs.length === 0) {
+      await say(message('No vaults followed', 'Open the site with the button below and star vaults: they appear here by themselves.'), pairing());
+    } else {
+      for (const page of listPages(db, addrs)) await say(page);
+    }
   } else if (/^\/(pause|stop)(@\w+)?$/.test(command)) {
     db.prepare('UPDATE tg_subscriptions SET active = 0 WHERE chat_id = ?').run(chatId);
-    await say('<b>Alerts paused</b>\n\nNothing will be sent. /resume turns them back on.');
+    await say(message('Alerts paused', 'Nothing will be sent and the pinned Upcoming changes message stops updating.', '/resume turns alerts back on.'));
   } else if (/^\/resume(@\w+)?$/.test(command)) {
     const sub = latest();
     if (!sub) { await notConnected(); return; }
     db.prepare('UPDATE tg_subscriptions SET active = 0 WHERE chat_id = ? AND sub_id != ?').run(chatId, sub.sub_id);
     // Resuming starts fresh: events from the pause are not replayed
     db.prepare('UPDATE tg_subscriptions SET active = 1, bound_at = ? WHERE sub_id = ?').run(nowSec, sub.sub_id);
-    await say('<b>Alerts resumed</b>\n\n/status shows the current state.');
+    await say(message('Alerts resumed', 'Events from the pause are not replayed.', '/status shows the current state.'));
+    if (JSON.parse(sub.vaults_json).length > 0) await syncUpcomingPin(db, tg, { ...sub, active: 1 }, nowSec);
   } else if (command.startsWith('/')) {
-    await say('Unknown command. /help lists what the bot can do.');
+    await say(message('Unknown command', '/help lists what the bot can do.'));
   } else if (!latest()) {
     await notConnected();
   }
 }
 
-function statusText(db, sub) {
-  const n = JSON.parse(sub.vaults_json).length;
-  return `<b>Alerts ${sub.active ? 'on' : 'paused'}</b>\n\nFollowing ${n} vault${n === 1 ? '' : 's'}.\nUrgent changes are sent immediately, the digest at 09:00 Kyiv time.\n\n${sub.active ? '/pause pauses alerts.' : '/resume turns them back on.'} /list shows the vaults.`;
+const isNum = v => typeof v === 'number' && Number.isFinite(v);
+
+/** Pending changes (status pending, a known time) of the given vaults, soonest first. */
+function pendingFor(db, addrs) {
+  if (addrs.length === 0) return [];
+  return db.prepare(`
+    SELECT ve.*, v.name AS vault_name FROM vault_events ve LEFT JOIN vaults v ON v.address = ve.vault_address
+    WHERE ve.status = 'pending' AND ve.valid_at IS NOT NULL AND lower(ve.vault_address) IN (SELECT value FROM json_each(?))
+    ORDER BY ve.valid_at, ve.id
+  `).all(JSON.stringify(addrs));
+}
+
+function statusText(db, sub, nowSec) {
+  const addrs = JSON.parse(sub.vaults_json);
+  const n = addrs.length;
+  const { total, ready } = countChanges(pendingFor(db, addrs), nowSec);
+  const lastDigest = getState(db, 'last_digest_date');
+  return message(`Alerts ${sub.active ? 'on' : 'paused'}`,
+    `Following ${n} vault${n === 1 ? '' : 's'}.`,
+    `Pending changes: ${total}${ready > 0 ? ` (${ready} can be applied now)` : ''}. /upcoming shows them.`,
+    `Urgent changes are sent immediately, the digest at 09:00 Kyiv time.${lastDigest ? ` Last digest: ${lastDigest}.` : ''}`,
+    `${sub.active ? '/pause pauses alerts.' : '/resume turns them back on.'} /list shows the vaults.`);
+}
+
+/** The followed vaults as messages: name, chain, short address, then verdict, MQI and pending changes. */
+function listPages(db, addrs) {
+  const meta = db.prepare('SELECT name, chain_id FROM vaults WHERE address = ?');
+  const sample = db.prepare('SELECT verdict_level, mqi_percent FROM vault_samples WHERE vault_address = ? ORDER BY hour_bucket DESC LIMIT 1');
+  const pending = new Map();
+  for (const [addr, groups] of groupChanges(pendingFor(db, addrs))) pending.set(addr.toLowerCase(), groups.size);
+  const blocks = addrs.map(a => {
+    const v = meta.get(a);
+    const sm = sample.get(a);
+    const parts = [];
+    if (sm?.verdict_level) parts.push(`Verdict: ${String(sm.verdict_level).toUpperCase()}`);
+    if (isNum(sm?.mqi_percent)) parts.push(`MQI ${sm.mqi_percent}%`);
+    if (pending.get(a)) parts.push(`${pending.get(a)} pending change${pending.get(a) === 1 ? '' : 's'}`);
+    return [vaultBlock(v?.name, v?.chain_id, a), parts.join('  |  ')].filter(Boolean).join('\n');
+  });
+  return paginate(message(`You follow ${addrs.length} vault${addrs.length === 1 ? '' : 's'}`), blocks);
+}
+
+const isBlocked = err => err.code === 403 || (err.code === 400 && /chat not found/i.test(err.message));
+// The pinned message was deleted by the user or can no longer be edited: a new one replaces it
+const isGone = err => err.code === 400 && /message to edit not found|message can't be edited|MESSAGE_ID_INVALID/i.test(err.message);
+
+/**
+ * Keeps one pinned "Upcoming changes" message per chat: sent and pinned the first time, edited in place when the
+ * set of pending changes changes, sent again if the user deleted it. The text carries absolute times only, so an
+ * unchanged set costs no API call. `force` (the /upcoming command) re-pins and refreshes even when nothing changed.
+ * Returns 'skipped', 'unchanged', 'edited', 'sent', 'blocked' or 'retry'.
+ */
+export async function syncUpcomingPin(db, tg, sub, nowSec = Math.floor(Date.now() / 1000), force = false) {
+  const addrs = JSON.parse(sub.vaults_json);
+  if (addrs.length === 0) return 'skipped';
+  const text = formatUpcoming(pendingFor(db, addrs), addrs.length, nowSec);
+  const hash = crypto.createHash('sha1').update(text).digest('hex');
+  const key = `tg_pin:${sub.chat_id}`;
+  const saved = JSON.parse(getState(db, key) || 'null');
+  if (saved?.hash === hash && saved.pinned && !force) return 'unchanged';
+  const payload = { chat_id: sub.chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: SITE_BUTTON };
+  const save = (messageId, pinned) => setState(db, key, JSON.stringify({ message_id: messageId, hash, pinned }), nowSec);
+  const pin = async messageId => {
+    try { await tg.call('pinChatMessage', { chat_id: sub.chat_id, message_id: messageId, disable_notification: true }); return true; } catch (err) {
+      if (isBlocked(err)) throw err;
+      console.error('[Telegram] Pinning failed, will retry:', err.message);
+      return false;
+    }
+  };
+  try {
+    if (saved) {
+      let result = 'unchanged';
+      try {
+        if (saved.hash !== hash) { await tg.call('editMessageText', { ...payload, message_id: saved.message_id }); result = 'edited'; }
+      } catch (err) {
+        if (isGone(err)) saved.message_id = null;
+        else if (!/not modified/i.test(err.message)) throw err;
+      }
+      if (saved.message_id !== null) {
+        const pinned = (saved.pinned && !force) || await pin(saved.message_id);
+        save(saved.message_id, pinned);
+        return result;
+      }
+    }
+    const sent = await tg.call('sendMessage', payload);
+    save(sent.message_id, false); // remembered before pinning, so a failed pin never leads to a duplicate message
+    save(sent.message_id, await pin(sent.message_id));
+    return 'sent';
+  } catch (err) {
+    if (isBlocked(err)) {
+      db.prepare('UPDATE tg_subscriptions SET active = 0 WHERE sub_id = ?').run(sub.sub_id);
+      return 'blocked';
+    }
+    console.error('[Telegram] Updating the pinned message failed, will retry:', err.message);
+    return 'retry';
+  }
 }
 
 /** One long-poll round: fetches updates after the stored offset, handles each, stores the next offset. */
@@ -168,7 +277,7 @@ async function sendOnce(db, tg, sub, key, text, nowSec) {
     db.prepare('INSERT OR IGNORE INTO tg_sent (sub_id, message_key, sent_at) VALUES (?, ?, ?)').run(sub.sub_id, key, nowSec);
     return 'sent';
   } catch (err) {
-    if (err.code === 403 || (err.code === 400 && /chat not found/i.test(err.message))) {
+    if (isBlocked(err)) {
       db.prepare('UPDATE tg_subscriptions SET active = 0 WHERE sub_id = ?').run(sub.sub_id);
       return 'blocked';
     }
@@ -244,6 +353,16 @@ export async function dispatchDigest(db, tg, nowSec = Math.floor(Date.now() / 10
   return sent;
 }
 
+/** Brings every active chat's pinned Upcoming changes message up to date; a tick where no set of changes moved sends nothing. */
+export async function dispatchPins(db, tg, nowSec = Math.floor(Date.now() / 1000), sleep = defaultSleep) {
+  let touched = 0;
+  for (const sub of activeSubscriptions(db)) {
+    const res = await syncUpcomingPin(db, tg, sub, nowSec);
+    if (res === 'sent' || res === 'edited') { touched++; await sleep(SEND_GAP_MS); }
+  }
+  return touched;
+}
+
 /**
  * Starts the bot (long polling) and the dispatch timer. Without a token it only logs once and does nothing.
  * Returns { stop } or null.
@@ -272,7 +391,7 @@ export async function startNotifications(db, { token = process.env.TELEGRAM_BOT_
   })();
 
   const tick = async () => {
-    try { await dispatchUrgent(db, tg, undefined, sleep); await dispatchDigest(db, tg, undefined, sleep); } catch (err) { console.error('[Telegram] Dispatch failed:', err.message); }
+    try { await dispatchUrgent(db, tg, undefined, sleep); await dispatchDigest(db, tg, undefined, sleep); await dispatchPins(db, tg, undefined, sleep); } catch (err) { console.error('[Telegram] Dispatch failed:', err.message); }
   };
   const timer = setInterval(tick, tickMs);
   return { stop() { running = false; clearInterval(timer); } };

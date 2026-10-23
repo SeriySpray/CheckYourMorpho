@@ -51,44 +51,52 @@ export default {
     }],
   ],
   formatUrgent: [
-    ['cap V2 relative: частки у відсотках, скільки додає, коли набуде чинності і що ще можна вийти', ({ formatUrgent }) => {
-      const e = ev('pending_cap_increase', { row: { title: 'Pending cap increase (IncreaseRelativeCap)' }, details: { capKind: 'relative', oldCap: 0.1, newCap: 0.25, tvlShareAdded: 0.15 } });
+    ['cap V2 relative: заголовок з типу, vault, сума, пояснення, серйозність і час набуття чинності за Києвом', ({ formatUrgent, kyivTime }) => {
+      const e = ev('pending_cap_increase', { row: { title: 'Pending cap increase (IncreaseRelativeCap)', chain_id: 8453 }, details: { capKind: 'relative', oldCap: 0.1, newCap: 0.25, tvlShareAdded: 0.15 } });
       const m = formatUrgent(e, 'Alpha USDC', NOW);
       assert.equal(m, [
-        '<b>WARNING</b>  |  Alpha USDC\n<code>0x1111...1111</code>',
-        '<b>Pending cap increase (IncreaseRelativeCap)</b>\nCap: 10% to 25%, adds 15% of vault assets',
-        `<b>Takes effect</b> ${new Date((NOW + 7200) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC (in 2h)\nDepositors can still withdraw until then.`
+        '<b>Cap increase pending</b>',
+        '<b>Alpha USDC</b>  |  Base\n<code>0x1111...1111</code>',
+        'Cap: 10% to 25%, adds 15% of vault assets\nThe curator is raising how much the vault may put into this market. Once applied, more deposits can flow there.\nSeverity: Warning',
+        `<b>Takes effect</b> ${kyivTime(NOW + 7200)} Kyiv time (in 2h).\nDepositors can still withdraw until then.`
       ].join('\n\n'));
     }],
-    ['cap absolute без старого значення: none, компактні числа', ({ formatUrgent }) => {
+    ['cap absolute без старого значення: none, компактні числа; cap без ліміту читається як unlimited', ({ formatUrgent }) => {
       const m = formatUrgent(ev('pending_cap_increase', { details: { capKind: 'absolute', oldCap: null, newCap: 2_500_000, tvlShareAdded: 0.2 } }), null, NOW);
-      assert.match(m, /^<b>WARNING<\/b>  \|  Vault\n<code>0x1111\.\.\.1111<\/code>/);
+      assert.match(m, /^<b>Cap increase pending<\/b>\n\n<b>Vault<\/b>\n<code>0x1111\.\.\.1111<\/code>/);
       assert.match(m, /Cap: none to 2\.5M, adds 20% of vault assets/);
+      const open = formatUrgent(ev('pending_cap_increase', { details: { capKind: 'absolute', oldCap: null, newCap: 3.4e32, tvlShareAdded: 9e23 } }), 'V', NOW);
+      assert.match(open, /Cap: none to unlimited, adds over 1000% of vault assets/);
     }],
     ['timelock, bad debt, відтік TVL; не pending-події без рядка про набуття чинності', ({ formatUrgent }) => {
-      assert.match(formatUrgent(ev('pending_timelock_change', { row: { severity: 'critical' }, details: { oldTimelock: 172800, newTimelock: 3600 } }), 'V', NOW), /^<b>CRITICAL<\/b>.*\nTimelock: 2d to 1h/s);
+      const tl = formatUrgent(ev('pending_timelock_change', { row: { severity: 'critical' }, details: { oldTimelock: 172800, newTimelock: 3600 } }), 'V', NOW);
+      assert.match(tl, /^<b>Timelock change pending<\/b>[\s\S]*\nTimelock: 2d to 1h\n[\s\S]*Severity: Critical/);
       const bd = formatUrgent(ev('bad_debt_appeared', { row: { status: 'final', severity: 'critical', valid_at: null }, details: { badDebtUsd: 12_000, supplyUsd: 3_400_000 } }), 'V', NOW);
+      assert.match(bd, /^<b>Bad debt appeared<\/b>/);
       assert.match(bd, /Bad debt: \$12\.0K in a market holding \$3\.4M of the vault/);
       assert.ok(!bd.includes('Takes effect'));
-      assert.match(formatUrgent(ev('tvl_drop', { row: { status: 'final', valid_at: null }, details: { previousTvlUsd: 10_000_000, currentTvlUsd: 7_000_000 } }), 'V', NOW), /TVL: \$10\.0M to \$7\.0M/);
+      const tvl = formatUrgent(ev('tvl_drop', { row: { status: 'final', valid_at: null }, details: { previousTvlUsd: 10_000_000, currentTvlUsd: 7_000_000 } }), 'V', NOW);
+      assert.match(tvl, /^<b>Large TVL outflow<\/b>/);
+      assert.match(tvl, /TVL: \$10\.0M to \$7\.0M/);
     }],
-    ['timelock уже минув: повідомляє, що змінити можна будь-коли', ({ formatUrgent }) => {
+    ['невідомий тип лишає заголовок події; timelock уже минув: повідомляє, що змінити можна будь-коли', ({ formatUrgent }) => {
+      assert.match(formatUrgent(ev('pending_abdicate', { row: { title: 'Stored title' } }), 'V', NOW), /^<b>Stored title<\/b>/);
       const m = formatUrgent(ev('pending_market_removal', { row: { valid_at: NOW - 5 } }), 'V', NOW);
       assert.match(m, /<b>The timelock has passed\.<\/b> The change can be applied at any moment\./);
     }],
   ],
   formatUrgentGroup: [
-    ['одна подія - звичайний текст; кілька - один заголовок з найвищою серйозністю, рядки з деталями і найближчий дедлайн', ({ formatUrgentGroup, formatUrgent }) => {
+    ['одна подія - звичайний текст; кілька - один заголовок з кількістю, рядки з деталями, найвища серйозність і найближчий дедлайн', ({ formatUrgentGroup, formatUrgent, kyivTime }) => {
       const one = ev('pending_cap_increase', { details: { capKind: 'relative', oldCap: null, newCap: 0.5, tvlShareAdded: 0.5 } });
       assert.equal(formatUrgentGroup([one], 'Alpha', NOW), formatUrgent(one, 'Alpha', NOW));
       const a = ev('pending_cap_increase', { row: { title: 'Pending relative cap increase for cbBTC collateral', valid_at: NOW + 7200 }, details: { capKind: 'relative', oldCap: null, newCap: 0.5, tvlShareAdded: 0.5 } });
       const b = ev('pending_cap_increase', { row: { title: 'Pending absolute cap increase for cbBTC/USDC', severity: 'critical', valid_at: NOW + 3600 }, details: { capKind: 'absolute', oldCap: null, newCap: 5_000_000, tvlShareAdded: 0.56 } });
       const m = formatUrgentGroup([a, b], 'Alpha', NOW);
-      assert.equal(m.split('\n')[0], '<b>CRITICAL</b>  |  Alpha');
-      assert.match(m, /\n2 changes at once\n/);
+      assert.equal(m.split('\n')[0], '<b>Cap increase pending (2 changes)</b>');
       assert.match(m, /<b>Pending relative cap increase for cbBTC collateral<\/b>\nCap: none to 50%, adds 50% of vault assets/);
       assert.match(m, /<b>Pending absolute cap increase for cbBTC\/USDC<\/b>\nCap: none to 5\.0M, adds 56% of vault assets/);
-      assert.ok(m.includes(`<b>Takes effect</b> ${new Date((NOW + 3600) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC (in 1h)`));
+      assert.match(m, /Severity: Critical/);
+      assert.ok(m.includes(`<b>Takes effect</b> ${kyivTime(NOW + 3600)} Kyiv time (in 1h)`));
     }],
     ['понад 6 подій: показано 6 і "and N more"; без pending-подій немає рядка про дедлайн', ({ formatUrgentGroup }) => {
       const many = Array.from({ length: 9 }, (_, i) => ev('tvl_drop', { row: { status: 'final', valid_at: null, title: `Drop ${i}` }, details: { previousTvlUsd: 2e6, currentTvlUsd: 1e6 } }));
@@ -96,6 +104,94 @@ export default {
       assert.equal(m.match(/^<b>Drop/gm).length, 6);
       assert.match(m, /\nand 3 more/);
       assert.ok(!m.includes('Takes effect'));
+    }],
+  ],
+  chainName: [
+    ['відомі мережі за id, невідома - null', ({ chainName }) => {
+      assert.equal(chainName(1), 'Ethereum');
+      assert.equal(chainName(8453), 'Base');
+      assert.equal(chainName(999999), null);
+    }],
+  ],
+  shortAddr: [
+    ['перші 6 і останні 4 символи', ({ shortAddr }) => { assert.equal(shortAddr(ADDR), '0x1111...1111'); }],
+  ],
+  message: [
+    ['жирний заголовок, абзаци через порожній рядок, порожні блоки пропускаються, заголовок екранується', ({ message }) => {
+      assert.equal(message('T', 'a', null, false, 'b'), '<b>T</b>\n\na\n\nb');
+      assert.equal(message('A & <B>'), '<b>A &amp; &lt;B&gt;</b>');
+    }],
+  ],
+  vaultBlock: [
+    ['назва, мережа через риску, скорочена адреса; без мережі і без імені', ({ vaultBlock }) => {
+      assert.equal(vaultBlock('Alpha', 8453, ADDR), '<b>Alpha</b>  |  Base\n<code>0x1111...1111</code>');
+      assert.equal(vaultBlock(null, null, ADDR), '<b>Vault</b>\n<code>0x1111...1111</code>');
+      assert.ok(vaultBlock('A <i>&</i>', 1, ADDR).startsWith('<b>A &lt;i&gt;&amp;&lt;/i&gt;</b>'));
+    }],
+  ],
+  kyivTime: [
+    ['зимовий і літній час Києва', ({ kyivTime }) => {
+      assert.equal(kyivTime(Date.UTC(2026, 0, 15, 7, 0) / 1000), '2026-01-15 09:00');
+      assert.equal(kyivTime(Date.UTC(2026, 6, 15, 6, 0) / 1000), '2026-07-15 09:00');
+      assert.equal(kyivTime(Date.UTC(2026, 0, 15, 22, 30) / 1000), '2026-01-16 00:30');
+    }],
+  ],
+  paginate: [
+    ['короткий список - одне повідомлення; довгий ділиться, кожна частина з заголовком, блок не розривається', ({ paginate }) => {
+      assert.deepEqual(paginate('H', ['a', 'b']), ['H\n\na\n\nb']);
+      const blocks = Array.from({ length: 80 }, (_, i) => `block ${i} ${'x'.repeat(100)}`);
+      const parts = paginate('H', blocks);
+      assert.ok(parts.length > 1);
+      for (const part of parts) { assert.ok(part.length <= 4096); assert.ok(part.startsWith('H\n\n')); }
+      assert.equal(parts.join('\n').match(/block \d+ /g).length, 80);
+    }],
+  ],
+  groupChanges: [
+    ['зміни однієї транзакції і типу - одна зміна; різні транзакції і vault-и окремо', ({ groupChanges }) => {
+      const d = tx => ({ details: { txHash: tx } });
+      const events = [
+        ev('pending_cap_increase', { ...d('0xaa'), row: { id: 1 } }), ev('pending_cap_increase', { ...d('0xaa'), row: { id: 2 } }),
+        ev('pending_cap_increase', { ...d('0xbb'), row: { id: 3 } }), ev('pending_cap_increase', { ...d('0xaa'), row: { id: 4, vault_address: '0x2222222222222222222222222222222222222222' } })
+      ];
+      const g = groupChanges(events);
+      assert.equal(g.size, 2);
+      assert.deepEqual([...g.get(ADDR).values()].map(x => x.length), [2, 1]);
+    }],
+  ],
+  countChanges: [
+    ['скільки змін чекає і скільки з них можна застосувати зараз', ({ countChanges }) => {
+      const events = [ev('pending_cap_increase', { row: { id: 1, valid_at: NOW - 10 } }), ev('pending_guardian_change', { row: { id: 2, valid_at: NOW + 10 } }), ev('pending_market_removal', { row: { id: 3, valid_at: NOW + 20 } })];
+      assert.deepEqual(countChanges(events, NOW), { total: 3, ready: 1 });
+      assert.deepEqual(countChanges([], NOW), { total: 0, ready: 0 });
+    }],
+  ],
+  formatUpcoming: [
+    ['порожній список - окреме повідомлення про те, що нічого не чекає', ({ formatUpcoming }) => {
+      const m = formatUpcoming([], 3, NOW);
+      assert.match(m, /^<b>Upcoming changes<\/b>\n\nNothing is waiting for a timelock in the 3 vaults you follow\./);
+    }],
+    ['блок на vault: що можна застосувати зараз і що чекає, однакові рядки зливаються з x2, час абсолютний за Києвом', ({ formatUpcoming, kyivTime }) => {
+      const tx = h => ({ details: { txHash: h, capWasZero: true } });
+      const row = (id, extra) => ({ id, chain_id: 1, vault_name: 'Alpha USDC', ...extra });
+      const events = [
+        ev('pending_cap_increase', { ...tx('0xaa'), row: row(1, { valid_at: NOW - 86400 }) }),
+        ev('pending_cap_increase', { ...tx('0xbb'), row: row(2, { valid_at: NOW - 86400 }) }),
+        ev('pending_guardian_change', { row: row(3, { valid_at: NOW + 7200 }) })
+      ];
+      const m = formatUpcoming(events, 2, NOW);
+      assert.match(m, /^<b>Upcoming changes<\/b>\n\n3 pending changes in the 2 vaults you follow\. This message updates itself\./);
+      assert.match(m, /<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n<b>Can be applied now<\/b>\n- Cap increase, opens a new cap \(x2\)\n<b>Waiting for the timelock<\/b>\n- Guardian change, takes effect /);
+      assert.ok(m.includes(`takes effect ${kyivTime(NOW + 7200)}`));
+      assert.ok(!/in \d+h/.test(m)); // no countdowns: the text only changes when the set of changes does
+      assert.equal(formatUpcoming(events, 2, NOW), formatUpcoming(events, 2, NOW + 600));
+    }],
+    ['дуже довгий список обрізається до ліміту з рядком "and N more vaults"', ({ formatUpcoming }) => {
+      const events = Array.from({ length: 150 }, (_, i) => ev('pending_guardian_change', {
+        row: { id: i + 1, vault_address: `0x${String(i).padStart(40, '0')}`, vault_name: `Vault number ${i}`, valid_at: NOW + 1000 + i }
+      }));
+      const m = formatUpcoming(events, 150, NOW);
+      assert.ok(m.length <= 4096);
+      assert.match(m, /\nand \d+ more vaults, see the site\.$/);
     }],
   ],
 };

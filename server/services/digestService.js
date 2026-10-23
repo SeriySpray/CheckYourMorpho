@@ -1,14 +1,10 @@
 import { diffVaultSamples } from '../engine/digestEngine.js';
-import { escapeHtml } from '../engine/notifyRules.js';
-import { CONFIG } from '../config.js';
+import { escapeHtml, message, vaultBlock, paginate } from '../engine/notifyRules.js';
 
 const DAY = 86400;
 const DIGEST_HOUR_KYIV = 9;
-const MESSAGE_LIMIT = 3800;
 const MIN_APY_SAMPLES = 48;
 
-const CHAIN_NAMES = Object.fromEntries(Object.entries(CONFIG.chains).map(([name, id]) => [id, name[0].toUpperCase() + name.slice(1)]));
-const shortAddr = a => `${a.slice(0, 6)}...${a.slice(-4)}`;
 const compactUsd = n => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(Math.round(n)));
 
 /**
@@ -63,7 +59,7 @@ export function buildDigest(db, addresses, nowSec = Math.floor(Date.now() / 1000
 
     if (items.length > 0) {
       const v = nameStmt.get(addr);
-      entries.push({ address: addr, name: v?.name ?? null, chain: CHAIN_NAMES[v?.chain_id] ?? null, items });
+      entries.push({ address: addr, name: v?.name ?? null, chainId: v?.chain_id ?? null, items });
     }
   }
   return entries;
@@ -71,17 +67,7 @@ export function buildDigest(db, addresses, nowSec = Math.floor(Date.now() / 1000
 
 /** Formats digest entries into Telegram HTML messages that fit one Telegram message each. */
 export function formatDigest(entries, dateLabel) {
-  const header = `<b>Daily digest</b>  |  ${dateLabel}`;
-  const blocks = entries.map(e => [`<b>${escapeHtml(e.name || 'Vault')}</b>${e.chain ? ` (${escapeHtml(e.chain)})` : ''}  <code>${shortAddr(e.address)}</code>`, ...e.items.map(i => `- ${escapeHtml(i.text)}`)].join('\n'));
-  const messages = [];
-  let current = header;
-  for (const block of blocks) {
-    if (current.length + block.length + 2 > MESSAGE_LIMIT && current !== header) {
-      messages.push(current);
-      current = header;
-    }
-    current += `\n\n${block}`;
-  }
-  messages.push(current);
-  return messages;
+  const header = message('Daily digest', `${dateLabel}  |  ${entries.length} vault${entries.length === 1 ? '' : 's'} with changes`);
+  const blocks = entries.map(e => [vaultBlock(e.name, e.chainId, e.address), ...e.items.map(i => `- ${escapeHtml(i.text)}`)].join('\n'));
+  return paginate(header, blocks);
 }
