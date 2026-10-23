@@ -282,6 +282,16 @@ export default {
       ]);
     }],
   ],
+  verdictReasons: [
+    ['red бере CRITICAL і HIGH, yellow - MEDIUM; інші рівні й порожні прапорці дають null', ({ verdictReasons }) => {
+      const verdict = { redFlags: [{ level: 'HIGH', title: 'A' }, { level: 'CRITICAL', title: 'B' }, { level: 'MEDIUM', title: 'C' }] };
+      assert.equal(verdictReasons(verdict, 'red'), 'A; B');
+      assert.equal(verdictReasons(verdict, 'yellow'), 'C');
+      assert.equal(verdictReasons(verdict, 'green'), null);
+      assert.equal(verdictReasons({ redFlags: [] }, 'red'), null);
+      assert.equal(verdictReasons(null, 'red'), null);
+    }],
+  ],
   buildWatchState: [
     ['flagged_markets: лише брудний ринок з суттєвою часткою позначається, чистий і дрібний ні', ({ buildWatchState }) => {
       const vault = { address: VAULT_ADDR, chain_id: 1, total_assets_usd: 1_000_000, liquidity_usd: 1e9 };

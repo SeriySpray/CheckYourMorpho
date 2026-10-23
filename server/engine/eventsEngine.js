@@ -707,6 +707,13 @@ const deriveVerdictLevel = (vault, verdict) => {
   return 'green';
 };
 
+/** Titles of the flags that set a red or yellow verdict level, joined for the digest; null for other levels. */
+export function verdictReasons(verdict, level) {
+  const levels = level === 'red' ? ['CRITICAL', 'HIGH'] : level === 'yellow' ? ['MEDIUM'] : [];
+  const flags = Array.isArray(verdict?.redFlags) ? verdict.redFlags.filter(f => levels.includes(f.level)) : [];
+  return flags.length > 0 ? flags.map(f => f.title).join('; ') : null;
+}
+
 /**
  * Builds the compact per-vault watch state object stored in vault_watch_state.state_json.
  */

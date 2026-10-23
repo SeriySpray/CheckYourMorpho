@@ -18,7 +18,8 @@ export function diffVaultSamples(baseline, current, avgNetApy7d = null) {
   const vPrev = String(baseline.verdict_level ?? '').toLowerCase();
   const vNow = String(current.verdict_level ?? '').toLowerCase();
   if (vPrev && vNow && vPrev !== vNow) {
-    items.push({ type: 'verdict', text: `Verdict changed from ${vPrev.toUpperCase()} to ${vNow.toUpperCase()}` });
+    const reason = current.verdict_reasons ? `: ${current.verdict_reasons}` : '';
+    items.push({ type: 'verdict', text: `Verdict changed from ${vPrev.toUpperCase()} to ${vNow.toUpperCase()}${reason}` });
   }
 
   if (isNum(baseline.mqi_percent) && isNum(current.mqi_percent)) {

@@ -15,6 +15,11 @@ export default {
       assert.deepEqual(diffVaultSamples({ ...base, verdict_level: null }, { ...base, verdict_level: 'red' }), []);
       assert.deepEqual(diffVaultSamples(base, { ...base, verdict_level: 'green' }), []);
     }],
+    ['вердикт: причина з verdict_reasons дописується, без неї текст не змінюється', ({ diffVaultSamples }) => {
+      const now = { ...base, verdict_level: 'red', verdict_reasons: 'Restricted Exit Liquidity' };
+      assert.equal(diffVaultSamples(base, now)[0].text, 'Verdict changed from GREEN to RED: Restricted Exit Liquidity');
+      assert.equal(diffVaultSamples(base, { ...now, verdict_reasons: null })[0].text, 'Verdict changed from GREEN to RED');
+    }],
     ['MQI: зміна на 10 пунктів і більше; 9.9 ігнорується', ({ diffVaultSamples }) => {
       assert.match(diffVaultSamples(base, { ...base, mqi_percent: 85 })[0].text, /dropped from 95% to 85%/);
       assert.match(diffVaultSamples({ ...base, mqi_percent: 70 }, { ...base, mqi_percent: 90 })[0].text, /rose/);

@@ -5,7 +5,8 @@ import {
   diffPendingConfigs,
   buildWatchState,
   diffDerivedState,
-  detectTvlOutflow
+  detectTvlOutflow,
+  verdictReasons
 } from '../engine/eventsEngine.js';
 import { formatUnits } from './normalizers.js';
 
@@ -218,7 +219,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       vault.address, Math.floor(nowSec / 3600), nowSec,
       assetsTokens !== null && Number.isFinite(assetsTokens) ? assetsTokens : null,
       priced ? nextState.total_assets_usd : null,
-      vault.net_apy ?? null, nextState.mqi_percent, nextState.verdict_level, nextState.fee, nextState.is_listed
+      vault.net_apy ?? null, nextState.mqi_percent, nextState.verdict_level, verdictReasons(verdict, nextState.verdict_level), nextState.fee, nextState.is_listed
     ]);
 
     nextWatchStates.push({
@@ -288,8 +289,8 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
 
   const upsertSampleStmt = db.prepare(`
     INSERT OR REPLACE INTO vault_samples (
-      vault_address, hour_bucket, sampled_at, total_assets, total_assets_usd, net_apy, mqi_percent, verdict_level, fee, is_listed
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      vault_address, hour_bucket, sampled_at, total_assets, total_assets_usd, net_apy, mqi_percent, verdict_level, verdict_reasons, fee, is_listed
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const deleteWatchStmt = db.prepare(`

@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS vault_samples (
   net_apy REAL,
   mqi_percent REAL,
   verdict_level TEXT,
+  verdict_reasons TEXT,
   fee REAL,
   is_listed INTEGER,
   PRIMARY KEY (vault_address, hour_bucket)
