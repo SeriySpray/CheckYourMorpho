@@ -175,6 +175,35 @@ const lastCall = (sphere, kind) => sphere.calls.filter(c => c[0] === kind).at(-1
 
 const base = {
   // ---------- Кеш аудитів ----------
+  syncFavFilterButton: [
+    T('зірка натиснута лише коли фільтр обраних увімкнено і видно таблицю, а не панель активності', ({ syncFavFilterButton: f, __state: s }) => {
+      const btn = s.DOM.explorerFavFilterBtn;
+      const pressed = () => [btn.classList.contains('active'), btn.getAttribute('aria-pressed')];
+      s.DOM.activityPanel.classList.add('hidden');
+      s.explorerFilters.pinnedOnly = false;
+      f();
+      assert.deepEqual(pressed(), [false, 'false']);
+      s.explorerFilters.pinnedOnly = true;
+      f();
+      assert.deepEqual(pressed(), [true, 'true']);
+      s.DOM.activityPanel.classList.remove('hidden');
+      f();
+      assert.deepEqual(pressed(), [false, 'false']);
+    }),
+  ],
+  onActivityPanelToggle: [
+    T('закриття панелі активності повертає чипи активних фільтрів, відкриття їх не чіпає', ({ onActivityPanelToggle: f, __state: s }) => {
+      s.explorerFilters.pinnedOnly = true;
+      s.DOM.activityPanel.classList.remove('hidden');
+      s.DOM.activeFilterChips.classList.add('hidden');
+      f();
+      assert.ok(s.DOM.activeFilterChips.classList.contains('hidden'));
+      s.DOM.activityPanel.classList.add('hidden');
+      f();
+      assert.ok(!s.DOM.activeFilterChips.classList.contains('hidden'));
+      assert.match(s.DOM.chipsContainer.innerHTML, /Favorites/);
+    }),
+  ],
   getFreshAudit: [
     T('свіжий запис повертається без урахування регістру адреси', ({ getFreshAudit: f, __state: s }) => {
       const entry = { cachedAt: Date.now() - 1000, vault: {} };
@@ -1078,7 +1107,14 @@ const base = {
       assert.deepEqual(run({ curator: 're7' }), ['0x1']);
       pin('0x3');
       assert.deepEqual(run({ pinnedOnly: true }), ['0x3']);
+      s.DOM.activityPanel.classList.add('hidden');
+      f();
       assert.equal(s.DOM.explorerFavFilterBtn.getAttribute('aria-pressed'), 'true');
+      assert.ok(s.DOM.explorerFavFilterBtn.classList.contains('active'));
+      s.DOM.activityPanel.classList.remove('hidden'); // activity view open: the table is hidden, so the star is not pressed
+      f();
+      assert.equal(s.DOM.explorerFavFilterBtn.getAttribute('aria-pressed'), 'false');
+      assert.ok(!s.DOM.explorerFavFilterBtn.classList.contains('active'));
     }),
     T('порожній результат: різні повідомлення для обраних і звичайних фільтрів', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [cv()];

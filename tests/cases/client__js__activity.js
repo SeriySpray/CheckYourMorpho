@@ -779,6 +779,16 @@ export default {
       }];
       renderActivityPanel();
       assert.ok(dom.list.innerHTML.includes('Cap updated'));
+    }],
+    ['лічильник Upcoming рахує показані рядки: події однієї транзакції зливаються в один', ({ renderActivityPanel, __state: s }) => {
+      const dom = setupFakeDom();
+      s.deps.DOM = dom;
+      s.deps.getPinnedAddresses = () => [];
+      s.activeScope = 'all';
+      const ev = (id, tx) => ({ id, vault_address: '0x1111111111111111111111111111111111111111', kind: 'pending_cap_increase', status: 'pending', title: 'Cap', severity: 'warning', valid_at: 2000000000, details: { txHash: tx } });
+      s.cachedPendingEvents = [ev(1, '0xaa'), ev(2, '0xaa'), ev(3, '0xbb')];
+      renderActivityPanel();
+      assert.equal(dom.upcomingCount.textContent, '(2)');
     }]
   ],
 

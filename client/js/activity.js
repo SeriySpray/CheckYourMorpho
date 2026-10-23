@@ -966,7 +966,7 @@ function renderActivityPanel() {
   const reallocCb = document.getElementById('activity-show-realloc-cb');
 
   if (upcomingCount) {
-    upcomingCount.textContent = `(${cachedPendingEvents.length})`;
+    upcomingCount.textContent = `(${groupEvents(cachedPendingEvents, true).length})`; // rows shown, not raw events: one transaction is one row
   }
 
   // Synchronize scope buttons
@@ -1099,6 +1099,7 @@ export function openActivityPanel() {
   }
   if (panel) panel.classList.remove('hidden');
   if (heading) heading.textContent = 'Vault Activity';
+  deps.onPanelToggle?.();
 
   // Hide search, filter grid, chips, and vaults list
   if (deps.DOM.explorerSearchBox) deps.DOM.explorerSearchBox.classList.add('hidden');
@@ -1133,6 +1134,7 @@ export function closeActivityPanel() {
   }
   if (panel) panel.classList.add('hidden');
   if (heading) heading.textContent = 'Vaults Explorer';
+  deps.onPanelToggle?.();
 
   // Restore search, filter grid, and vaults list
   if (deps.DOM.explorerSearchBox) deps.DOM.explorerSearchBox.classList.remove('hidden');

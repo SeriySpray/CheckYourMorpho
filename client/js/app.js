@@ -192,6 +192,7 @@ async function initApp() {
       activityBadge: DOM.explorerActivityBadge,
       activityPanel: DOM.activityPanel
     },
+    onPanelToggle: onActivityPanelToggle,
     getSphereParticlePos: (addr) => sphere?.getParticleScreenPos?.(addr) || null
   });
 }
@@ -549,9 +550,6 @@ function updateActiveFilterChips() {
       const toClear = btn.getAttribute('data-clear');
       if (toClear === 'pinnedOnly') {
         explorerFilters.pinnedOnly = false;
-        if (DOM.explorerFavFilterBtn) {
-          DOM.explorerFavFilterBtn.classList.remove('active');
-        }
       } else if (toClear === 'sort') {
         explorerFilters.sort = 'tvl_desc';
         updateDropdownUI('sort', 'tvl_desc');
@@ -679,7 +677,6 @@ function setupVaultExplorerEvents() {
       const fromActivity = DOM.activityPanel && !DOM.activityPanel.classList.contains('hidden');
       if (fromActivity) closeActivityPanel();
       explorerFilters.pinnedOnly = fromActivity ? true : !explorerFilters.pinnedOnly;
-      DOM.explorerFavFilterBtn.classList.toggle('active', explorerFilters.pinnedOnly);
       renderVaultExplorer();
     });
   }
@@ -704,10 +701,6 @@ function resetDropdownFilters() {
   explorerFilters.curator = 'all';
   explorerFilters.sort = 'tvl_desc';
   explorerFilters.pinnedOnly = false;
-
-  if (DOM.explorerFavFilterBtn) {
-    DOM.explorerFavFilterBtn.classList.remove('active');
-  }
 
   updateDropdownUI('network', 'all');
   updateDropdownUI('asset', 'all');
@@ -1185,6 +1178,20 @@ const EXPLORER_FIRST_ROWS = 60;
 const EXPLORER_CHUNK = 80;
 let explorerRenderToken = 0;
 
+/** Star in the header is pressed only while the favorites filter is on and the table (not the activity view) is showing. */
+function syncFavFilterButton() {
+  if (!DOM.explorerFavFilterBtn) return;
+  const pressed = explorerFilters.pinnedOnly && !(DOM.activityPanel && !DOM.activityPanel.classList.contains('hidden'));
+  DOM.explorerFavFilterBtn.classList.toggle('active', pressed);
+  DOM.explorerFavFilterBtn.setAttribute('aria-pressed', String(pressed));
+}
+
+/** The activity view hides the filter chips; when it closes they come back for whatever filters are still on. */
+function onActivityPanelToggle() {
+  syncFavFilterButton();
+  if (DOM.activityPanel?.classList.contains('hidden')) updateActiveFilterChips();
+}
+
 function renderVaultExplorer() {
   if (!DOM.explorerVaultsList) return;
   const savedScrollTop = DOM.vaultExplorerWidget ? DOM.vaultExplorerWidget.scrollTop : 0;
@@ -1196,10 +1203,7 @@ function renderVaultExplorer() {
   if (DOM.explorerFavCount) {
     DOM.explorerFavCount.textContent = pinnedList.length;
   }
-  if (DOM.explorerFavFilterBtn) {
-    DOM.explorerFavFilterBtn.classList.toggle('active', explorerFilters.pinnedOnly);
-    DOM.explorerFavFilterBtn.setAttribute('aria-pressed', String(explorerFilters.pinnedOnly));
-  }
+  syncFavFilterButton();
 
   const isFiltered = Boolean(
     explorerFilters.query ||
