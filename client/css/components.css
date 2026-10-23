@@ -910,8 +910,16 @@ body.audit-open .explorer-filters-grid { display: none; }
 
 .activity-empty-title { color: var(--fg); font-size: 16px; font-weight: 500; }
 
+.activity-more {
+  list-style: none;
+  display: flex;
+  justify-content: center;
+  padding: 16px var(--pad-x) 20px;
+}
+
 .activity-retry-btn,
-.activity-switch-scope-btn {
+.activity-switch-scope-btn,
+.activity-more-btn {
   padding: 6px 14px;
   border: 1px solid var(--line-2);
   border-radius: 999px;
@@ -921,7 +929,10 @@ body.audit-open .explorer-filters-grid { display: none; }
 }
 
 .activity-retry-btn:hover,
-.activity-switch-scope-btn:hover { border-color: var(--fg); color: var(--fg); }
+.activity-switch-scope-btn:hover,
+.activity-more-btn:hover:not(:disabled) { border-color: var(--fg); color: var(--fg); }
+
+.activity-more-btn:disabled { opacity: 0.5; cursor: default; }
 
 .activity-footer {
   flex: none;

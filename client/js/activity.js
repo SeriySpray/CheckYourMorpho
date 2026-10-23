@@ -72,6 +72,8 @@ let activeTab = 'upcoming'; // 'upcoming' | 'history'
 let activeScope = 'favorites'; // 'favorites' | 'all'
 let cachedPendingEvents = [];
 let cachedHistoryEvents = [];
+let historyCursors = []; // [{ addresses, before }] one per request chunk; before is the API nextBefore, null when exhausted
+let isLoadingMore = false;
 let lastFetchTs = 0;
 let fetchToken = 0;
 let isLoading = false;
@@ -1067,6 +1069,13 @@ function renderActivityPanel() {
     frag.appendChild(rowEl);
     list.appendChild(rowEl);
   }
+  if (!isUpcoming && historyCursors.some(c => c.before !== null)) {
+    const more = document.createElement('li');
+    more.className = 'activity-more';
+    more.innerHTML = `<button type="button" class="activity-more-btn"${isLoadingMore ? ' disabled' : ''}>${isLoadingMore ? 'Loading...' : 'Show older events'}</button>`;
+    more.querySelector('button').addEventListener('click', loadMoreHistory);
+    list.appendChild(more);
+  }
   if (!list.innerHTML && currentEvents.length > 0) {
     list.innerHTML = currentEvents.map(ev => {
       const vm = buildEventRowViewModel(ev, deps.getVault, nowSec, isUpcoming);
@@ -1166,6 +1175,7 @@ async function fetchActivityData(forceRefetch = false) {
         if (token !== fetchToken) return;
         cachedPendingEvents = [];
         cachedHistoryEvents = [];
+        historyCursors = [];
         isLoading = false;
         lastFetchTs = Date.now();
         updateActivityBadge({ count: 0, highestSeverity: null, hasCritical: false });
@@ -1196,6 +1206,7 @@ async function fetchActivityData(forceRefetch = false) {
 
       cachedPendingEvents = mergedPending;
       cachedHistoryEvents = filterHistoryEvents(mergedHistory);
+      historyCursors = chunks.map((addresses, i) => ({ addresses, before: historyResList[i].nextBefore ?? null }));
       lastFetchTs = Date.now();
       isLoading = false;
 
@@ -1220,6 +1231,7 @@ async function fetchActivityData(forceRefetch = false) {
 
       cachedPendingEvents = Array.isArray(pendingRes.events) ? pendingRes.events : [];
       cachedHistoryEvents = filterHistoryEvents(historyRes.events);
+      historyCursors = [{ addresses: [], before: historyRes.nextBefore ?? null }];
       lastFetchTs = Date.now();
       isLoading = false;
 
@@ -1231,6 +1243,36 @@ async function fetchActivityData(forceRefetch = false) {
     fetchError = 'Failed to load activity. Check your network connection.';
     if (isPanelOpen) renderActivityPanel();
   }
+}
+
+/**
+ * Loads the next page of History for every request chunk that still has older events.
+ * A failed page keeps its cursor, so the button simply offers the same page again.
+ */
+async function loadMoreHistory() {
+  if (isLoadingMore || !deps.apiFetch) return;
+  const token = fetchToken;
+  const kinds = getEventKinds(getShowReallocations());
+  isLoadingMore = true;
+  renderActivityPanel();
+
+  const pages = await Promise.all(historyCursors.map(async (cursor) => {
+    if (cursor.before === null) return cursor;
+    try {
+      const res = await deps.apiFetch(buildEventsUrl({ addresses: cursor.addresses, kinds, limit: 100, before: cursor.before }));
+      if (!res.ok) return cursor;
+      const body = await res.json();
+      return { ...cursor, before: body.nextBefore ?? null, events: body.events || [] };
+    } catch {
+      return cursor;
+    }
+  }));
+
+  isLoadingMore = false;
+  if (token !== fetchToken) return; // scope or favorites changed while loading: that fetch owns the state
+  historyCursors = pages.map(({ addresses, before }) => ({ addresses, before }));
+  cachedHistoryEvents = filterHistoryEvents(mergeEvents([cachedHistoryEvents, ...pages.map(p => p.events || [])], false));
+  if (isPanelOpen) renderActivityPanel();
 }
 
 /**

@@ -872,6 +872,53 @@ export default {
     }]
   ],
 
+  loadMoreHistory: [
+    ['довантажує наступну сторінку за курсором, зливає з кешем і закриває курсор, коли подій більше немає', async ({ loadMoreHistory, __state: s }) => {
+      const dom = setupFakeDom();
+      s.deps.DOM = dom;
+      s.deps.getPinnedAddresses = () => [];
+      s.isPanelOpen = true;
+      s.activeScope = 'all';
+      s.activeTab = 'history';
+      s.cachedHistoryEvents = [{ id: 20, title: 'Newer', severity: 'info', occurred_at: 2000 }];
+      s.historyCursors = [{ addresses: [], before: 20 }];
+
+      const urls = [];
+      s.deps.apiFetch = async (url) => {
+        urls.push(url);
+        return jsonResponse({ events: [{ id: 10, title: 'Older', severity: 'info', occurred_at: 1000 }], nextBefore: null });
+      };
+
+      const appended = [];
+      dom.list.appendChild = el => appended.push(el);
+      await loadMoreHistory();
+      assert.equal(urls.length, 1);
+      assert.match(urls[0], /before=20/);
+      assert.deepEqual(s.cachedHistoryEvents.map(e => e.id), [20, 10]);
+      assert.deepEqual(s.historyCursors.map(c => c.before), [null]);
+      assert.equal(s.isLoadingMore, false);
+      assert.notEqual(appended.at(-1).className, 'activity-more'); // the last render ends with a row, not the button
+    }],
+    ['невдала сторінка лишає курсор і кеш без змін, а кнопка показується далі', async ({ loadMoreHistory, __state: s }) => {
+      const dom = setupFakeDom();
+      s.deps.DOM = dom;
+      s.deps.getPinnedAddresses = () => [];
+      s.isPanelOpen = true;
+      s.activeScope = 'all';
+      s.activeTab = 'history';
+      s.cachedHistoryEvents = [{ id: 20, title: 'Newer', severity: 'info', occurred_at: 2000 }];
+      s.historyCursors = [{ addresses: [], before: 20 }];
+      s.deps.apiFetch = async () => { throw new Error('offline'); };
+      const appended = [];
+      dom.list.appendChild = el => appended.push(el);
+
+      await loadMoreHistory();
+      assert.deepEqual(s.cachedHistoryEvents.map(e => e.id), [20]);
+      assert.deepEqual(s.historyCursors.map(c => c.before), [20]);
+      assert.ok(appended.some(el => el.className === 'activity-more' && el.innerHTML.includes('Show older events')));
+    }],
+  ],
+
   onFavoritesChanged: [
     ['викликає fetchActivityData при зміні обраних', async ({ onFavoritesChanged, __state: s }) => {
       let fetched = false;
