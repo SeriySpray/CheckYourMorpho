@@ -1113,7 +1113,7 @@ export default {
     })],
   ],
   handleGetPendingEvents: [
-    ['повертає лише події зі status=pending та valid_at > now, впорядковані за valid_at ASC', async mod => sandbox(async db => {
+    ['повертає лише події зі status=pending (разом із виконуваними зараз), впорядковані за valid_at ASC', async mod => sandbox(async db => {
       const nowSec = Math.floor(Date.now() / 1000);
       ins(db, 'vaults', V(1, { name: 'Vault One' }));
       ins(db, 'vaults', V(2, { name: 'Vault Two' }));
@@ -1125,11 +1125,11 @@ export default {
 
       const all = getJson(mod, '/api/events/pending');
       assert.equal(all.status, 200);
-      assert.deepEqual(all.body.events.map(e => e.dedupe_key), ['p-sooner', 'p-later']);
+      assert.deepEqual(all.body.events.map(e => e.dedupe_key), ['p-expired', 'p-sooner', 'p-later']);
 
       const v1Only = getJson(mod, `/api/events/pending?address=${addr(1)}`);
       assert.equal(v1Only.status, 200);
-      assert.deepEqual(v1Only.body.events.map(e => e.dedupe_key), ['p-later']);
+      assert.deepEqual(v1Only.body.events.map(e => e.dedupe_key), ['p-expired', 'p-later']);
     })],
   ],
   handleGetTelegramConfig: [

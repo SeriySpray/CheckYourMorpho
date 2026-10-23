@@ -1219,7 +1219,7 @@ async function fetchActivityData(forceRefetch = false) {
       if (isPanelOpen) renderActivityPanel();
     } else {
       // Scope: All
-      const pendingUrl = buildPendingEventsUrl({ kinds, limit: 100 });
+      const pendingUrl = buildPendingEventsUrl({ kinds, limit: 200 });
       const historyUrl = buildEventsUrl({ kinds, limit: 100 });
 
       const [pendingRes, historyRes] = await Promise.all([

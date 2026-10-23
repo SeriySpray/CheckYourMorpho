@@ -89,7 +89,7 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 | GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations. Each allocation carries the Morpho tags of its collateral token (`collateralTags`); the facts come from `/api/tokens`. |
 | GET | `/api/tokens/:chainId/:address` | The collected facts of one collateral token: `status`, `coverage`, `collectedAt`, `stale` (older than two refresh periods), `data` (the groups above). 404 until the token has been collected. |
 | GET | `/api/events` | Event log, newest first. Query: `address` or `addresses` (comma separated), `kinds`, `severity`, `status`, `since` (unix seconds), `before`, `limit` (default 50, max 200). |
-| GET | `/api/events/pending` | Pending timelock changes that have not taken effect yet (up to 200), same filters. |
+| GET | `/api/events/pending` | Pending timelock changes that have not taken effect yet, including those whose timelock already elapsed and can be executed now (up to 200, oldest `valid_at` first), same filters. |
 | GET | `/api/tg/config` | Whether the Telegram bot is running and its username. |
 | PUT | `/api/tg/subscription` | Stores the starred vaults (up to 100 addresses) of a browser-generated `sub_id`. Body: `{ "sub_id": "...", "vaults": ["0x..."] }`. |
 | POST | `/api/sync` | Starts a sync. Needs `Authorization: Bearer <SYNC_TOKEN>`. Returns 202, or waits and returns 200 with `?await=1`. Returns 403 if `SYNC_TOKEN` is not set, 401 for a wrong token, 409 while a sync is running and 413 for a body over 1 KB. |

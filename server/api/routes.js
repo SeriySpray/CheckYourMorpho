@@ -1012,9 +1012,9 @@ export function handleGetPendingEvents(req, res, url) {
     }
 
     const db = getDatabase();
-    const nowSec = Math.floor(Date.now() / 1000);
-    const conditions = ["ve.status = 'pending'", 've.valid_at > ?'];
-    const params = [nowSec];
+    // Past valid_at stays: a change whose timelock elapsed but was not executed yet is still pending ("executable now")
+    const conditions = ["ve.status = 'pending'", 've.valid_at IS NOT NULL'];
+    const params = [];
 
     if (parsed.addresses.length === 1) {
       conditions.push('ve.vault_address = ?');
