@@ -1026,12 +1026,110 @@ export default {
     }],
   ],
 
+  renderTelegramStrip: [
+    ['без бота смужка прихована; з ботом без обраних - Connect на бота без коду; з обраними і непідключеним чатом - Connect з кодом; підключений - Open chat і кількість vault-ів', ({ renderTelegramStrip, __state: s }) => {
+      const els = {};
+      const realGet = document.getElementById;
+      document.getElementById = id => (els[id] ??= realGet.call(document, id) ?? makeElement());
+      try {
+        localStorage.setItem('cym_tg_sub', 'abcdefghijklmnopqrstuv');
+        const ADDR = '0x1111111111111111111111111111111111111111';
+        s.tgUsername = null; s.tgConnected = false; s.deps.getPinnedAddresses = () => [ADDR];
+        renderTelegramStrip();
+        assert.ok(els['activity-tg'].classList.contains('hidden'));
+        s.tgUsername = 'cym_bot'; s.deps.getPinnedAddresses = () => [];
+        renderTelegramStrip();
+        assert.ok(!els['activity-tg'].classList.contains('hidden'));
+        assert.equal(els['activity-tg-link'].textContent, 'Connect');
+        assert.equal(els['activity-tg-link'].href, 'https://t.me/cym_bot?start=abcdefghijklmnopqrstuv'); // the code is there even without favorites: the chat's list is pulled in after connecting
+        s.deps.getPinnedAddresses = () => [ADDR];
+        renderTelegramStrip();
+        assert.equal(els['activity-tg-link'].href, 'https://t.me/cym_bot?start=abcdefghijklmnopqrstuv');
+        assert.equal(els['activity-tg-title'].textContent, 'Telegram alerts');
+        s.tgConnected = true;
+        renderTelegramStrip();
+        assert.equal(els['activity-tg-link'].textContent, 'Open chat');
+        assert.equal(els['activity-tg-link'].href, 'https://t.me/cym_bot');
+        assert.equal(els['activity-tg-title'].textContent, 'Telegram connected');
+        assert.equal(els['activity-tg-note'].textContent, '@cym_bot  |  alerts for 1 vault');
+        assert.ok(els['activity-tg'].classList.contains('connected'));
+      } finally { document.getElementById = realGet; s.tgUsername = null; s.tgConnected = false; }
+    }],
+    ['syncTelegram зберігає connected з відповіді сервера', async ({ syncTelegram, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot'; s.deps.getPinnedAddresses = () => [];
+      await withFetch(async () => jsonResponse({ vaults: 0, connected: true }), () => syncTelegram());
+      assert.equal(s.tgConnected, true);
+      await withFetch(async () => jsonResponse({ vaults: 0, connected: false }), () => syncTelegram());
+      assert.equal(s.tgConnected, false);
+      s.tgUsername = null;
+    }],
+  ],
+
+  ensureSubId: [
+    ['створює код один раз і зберігає його, наступні виклики повертають той самий', ({ ensureSubId }) => {
+      localStorage.removeItem('cym_tg_sub');
+      const id = ensureSubId();
+      assert.match(id, /^[A-Za-z0-9_-]{22}$/);
+      assert.equal(localStorage.getItem('cym_tg_sub'), id);
+      assert.equal(ensureSubId(), id);
+    }],
+  ],
+  pullTelegram: [
+    ['підключений код: список чату замінює локальні обрані і перемальовує; без змін нічого не застосовує; непідключений лишає як є', async ({ pullTelegram, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot'; s.activeScope = 'favorites';
+      const A1 = '0x1111111111111111111111111111111111111111', A2 = '0x2222222222222222222222222222222222222222';
+      let local = [A1]; let applied = null; let url;
+      s.deps.getPinnedAddresses = () => local;
+      s.deps.applyPinnedAddresses = list => { applied = list; local = list; };
+      s.deps.apiFetch = async () => jsonResponse({ events: [] });
+      const run = body => withFetch(async u => { url = u; return jsonResponse(body); }, () => pullTelegram());
+      assert.equal(await run({ connected: true, vaults: [A1.toUpperCase().replace('0X', '0x'), A2, 'junk'] }), true);
+      assert.equal(url, '/api/tg/subscription?sub_id=existing-subscription-id');
+      assert.deepEqual(applied, [A1, A2]); assert.equal(s.tgConnected, true);
+      applied = null;
+      assert.equal(await run({ connected: true, vaults: [A2, A1] }), false);
+      assert.equal(applied, null);
+      assert.equal(await run({ connected: false, vaults: null }), false);
+      assert.equal(applied, null); assert.equal(s.tgConnected, false);
+      assert.equal(await withFetch(async () => { throw new Error('offline'); }, () => pullTelegram()), false);
+      s.tgUsername = null;
+      localStorage.removeItem('cym_tg_sub');
+      assert.equal(await pullTelegram(), false);
+    }],
+  ],
+  pullTelegramOnReturn: [
+    ['при поверненні на вкладку питає чат, але не частіше ніж раз на 5 секунд і не з прихованої вкладки', async ({ pullTelegramOnReturn, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot'; s.deps.getPinnedAddresses = () => [];
+      let calls = 0;
+      const fetchStub = async () => { calls++; return jsonResponse({ connected: false, vaults: null }); };
+      const realState = document.visibilityState;
+      try {
+        document.visibilityState = 'hidden';
+        s.lastPullAt = 0;
+        await withFetch(fetchStub, async () => { pullTelegramOnReturn(); await new Promise(r => setImmediate(r)); });
+        assert.equal(calls, 0);
+        document.visibilityState = 'visible';
+        await withFetch(fetchStub, async () => { pullTelegramOnReturn(); await new Promise(r => setImmediate(r)); pullTelegramOnReturn(); await new Promise(r => setImmediate(r)); });
+        assert.equal(calls, 1);
+      } finally { document.visibilityState = realState; s.tgUsername = null; }
+    }],
+  ],
+
   scheduleTelegramSync: [
-    ['ставить відкладену синхронізацію лише коли бот увімкнено і в браузері є id підписки', ({ scheduleTelegramSync, __state: s }) => {
+    ['ставить відкладену синхронізацію лише коли бот увімкнено і є id підписки або обрані vault-и', ({ scheduleTelegramSync, __state: s }) => {
       s.tgSyncTimer = null;
       localStorage.removeItem('cym_tg_sub');
+      s.deps.getPinnedAddresses = () => [];
       s.tgUsername = 'cym_bot'; scheduleTelegramSync();
       assert.equal(s.tgSyncTimer, null);
+      s.deps.getPinnedAddresses = () => ['0x1111111111111111111111111111111111111111'];
+      scheduleTelegramSync(); // the first favorite creates the subscription id
+      assert.notEqual(s.tgSyncTimer, null);
+      clearTimeout(s.tgSyncTimer); s.tgSyncTimer = null;
+      s.deps.getPinnedAddresses = () => [];
       localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
       s.tgUsername = null; scheduleTelegramSync();
       assert.equal(s.tgSyncTimer, null);

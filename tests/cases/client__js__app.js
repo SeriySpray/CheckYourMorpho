@@ -829,6 +829,12 @@ const base = {
       assert.deepEqual(g(), ['0xa']);
     }),
   ],
+  applyPinnedAddresses: [
+    T('записує список без дублів у нижньому регістрі і перемальовує', ({ applyPinnedAddresses: f }) => {
+      f(['0xABC', '0xabc', '0xdef']);
+      assert.equal(localStorage.getItem('cym_pinned_vaults'), '["0xabc","0xdef"]');
+    }),
+  ],
   isVaultPinned: [
     T('порожня адреса -> false; перевірка за сховищем без урахування регістру', ({ isVaultPinned: f }) => {
       pin('0xabc');

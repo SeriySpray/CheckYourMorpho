@@ -53,6 +53,14 @@
       <span class="stale-indicator hidden" role="status"><span class="stale-dot" aria-hidden="true"></span><span class="stale-text"></span></span>
     </div>
 
+    <div id="activity-tg" class="activity-tg hidden">
+      <div class="activity-tg-text">
+        <span id="activity-tg-title" class="activity-tg-title">Telegram alerts</span>
+        <span id="activity-tg-note" class="activity-tg-note"></span>
+      </div>
+      <a id="activity-tg-link" class="activity-tg-btn" href="#" target="_blank" rel="noopener">Connect</a>
+    </div>
+
     <!-- Pinned vaults strip (populated dynamically by app.js; hidden while an audit is open) -->
     <div class="pinned-viewport">
       <section id="pinned-rich-pills" class="pinned-rich-pills-container hidden" aria-label="Pinned Vaults Watchlist"></section>
@@ -261,11 +269,6 @@
             <button type="button" id="activity-scope-all" class="activity-scope-btn" aria-pressed="false">All</button>
           </div>
         </div>
-        <button type="button" id="activity-close-btn" class="activity-close-btn" title="Close activity panel (Esc)" aria-label="Close activity panel">
-          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-        </button>
       </div>
 
       <div id="activity-list-container" class="activity-list-container" role="tabpanel" tabindex="0">
@@ -278,7 +281,6 @@
         <span></span>
         <div class="activity-footer-meta">
           <span id="activity-updated-at" class="activity-updated-at"></span>
-          <a id="activity-tg-link" class="activity-atom-link hidden" href="#" target="_blank" rel="noopener">Connect Telegram</a>
         </div>
       </div>
     </div>

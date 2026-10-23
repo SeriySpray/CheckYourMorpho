@@ -50,6 +50,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 let seenTsMemoryFallback = null;
 let tgUsername = null;
+let tgConnected = false; // the server's answer to the last favorites push: the chat is bound and active
 let tgSyncTimer = null;
 let showReallocMemoryFallback = null;
 
@@ -773,6 +774,16 @@ export function readTelegramPairing(search) {
   return code && /^[A-Za-z0-9_-]{16,64}$/.test(code) ? code : null;
 }
 
+/** This browser's subscription id, created on first use. Only the server's PUT or the bot's /start stores it there. */
+function ensureSubId() {
+  let subId = readSubId();
+  if (!subId) {
+    subId = newSubId();
+    try { localStorage.setItem(STORAGE_KEY_TG_SUB, subId); } catch { /* the id is only needed for this session then */ }
+  }
+  return subId;
+}
+
 function readSubId() {
   try { return localStorage.getItem(STORAGE_KEY_TG_SUB); } catch { return null; }
 }
@@ -783,19 +794,16 @@ function readSubId() {
  */
 async function syncTelegram() {
   if (!tgUsername) return null;
-  let subId = readSubId();
-  if (!subId) {
-    subId = newSubId();
-    try { localStorage.setItem(STORAGE_KEY_TG_SUB, subId); } catch { /* the id is only needed for this session then */ }
-  }
+  const subId = ensureSubId();
   const vaults = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress).slice(0, 100);
   try {
-    await fetch('/api/tg/subscription', {
+    const res = await fetch('/api/tg/subscription', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sub_id: subId, vaults }),
       signal: AbortSignal.timeout(10000)
     });
+    tgConnected = Boolean((await res.json())?.connected);
   } catch { /* the next render or favorites change retries */ }
   return subId;
 }
@@ -804,9 +812,67 @@ async function syncTelegram() {
  * Keeps the bot's list equal to the favorites: a browser that has a subscription id pushes every change (debounced).
  */
 function scheduleTelegramSync() {
-  if (!tgUsername || !readSubId()) return;
+  const hasFavs = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).some(isValidAddress);
+  const hadSubId = Boolean(readSubId());
+  renderTelegramStrip();
+  if (!tgUsername || (!hadSubId && !hasFavs)) return;
   clearTimeout(tgSyncTimer);
-  tgSyncTimer = setTimeout(() => syncTelegram(), 1500);
+  tgSyncTimer = setTimeout(async () => { await syncTelegram(); renderTelegramStrip(); }, 1500);
+}
+
+/** The Telegram strip: "Connect" with the code link while the chat is not bound, "Open chat" once it is. Hidden without a bot. */
+function renderTelegramStrip() {
+  const strip = document.getElementById('activity-tg');
+  const link = document.getElementById('activity-tg-link');
+  if (!strip || !link) return;
+  strip.classList.toggle('hidden', !tgUsername);
+  if (!tgUsername) return;
+  const count = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress).length;
+  const connected = tgConnected;
+  strip.classList.toggle('connected', connected);
+  document.getElementById('activity-tg-title').textContent = connected ? 'Telegram connected' : 'Telegram alerts';
+  document.getElementById('activity-tg-note').textContent = connected
+    ? `@${tgUsername}  |  ${count > 0 ? `alerts for ${count} vault${count === 1 ? '' : 's'}` : 'star vaults to get alerts'}`
+    : 'Urgent changes, a daily digest and pending changes pinned in a chat.';
+  link.textContent = connected ? 'Open chat' : 'Connect';
+  // The code in the link is what lets the chat adopt this browser's favorites and this browser adopt the chat's
+  link.href = connected ? `https://t.me/${encodeURIComponent(tgUsername)}` : buildTelegramUrl(tgUsername, ensureSubId());
+}
+
+const PULL_MIN_GAP_MS = 5000;
+let lastPullAt = 0;
+
+/**
+ * Catches this browser up with its chat: when the code is bound to a chat, the chat's favorites replace the local ones
+ * (a device that just connected receives what the other devices saved). Returns true when the local list changed.
+ */
+async function pullTelegram() {
+  const subId = readSubId();
+  if (!tgUsername || !subId) return false;
+  lastPullAt = Date.now();
+  let changed = false;
+  try {
+    const res = await fetch(`/api/tg/subscription?sub_id=${encodeURIComponent(subId)}`, { signal: AbortSignal.timeout(10000) });
+    const body = await res.json();
+    tgConnected = Boolean(body?.connected);
+    if (tgConnected && Array.isArray(body.vaults) && deps.applyPinnedAddresses) {
+      const remote = body.vaults.filter(isValidAddress).map(a => a.toLowerCase());
+      const local = new Set((deps.getPinnedAddresses ? deps.getPinnedAddresses(false) : []).map(a => String(a).toLowerCase()));
+      if (remote.length !== local.size || remote.some(a => !local.has(a))) {
+        deps.applyPinnedAddresses(remote);
+        fetchActivityData(true);
+        changed = true;
+      }
+    }
+  } catch { /* offline: the next focus or page load asks again */ }
+  renderTelegramStrip();
+  return changed;
+}
+
+/** Pull again when the tab comes back to the front, which is where the user returns after pressing Connect in Telegram. */
+function pullTelegramOnReturn() {
+  if (document.visibilityState === 'hidden' || Date.now() - lastPullAt < PULL_MIN_GAP_MS) return;
+  pullTelegram();
 }
 
 async function loadTelegramConfig() {
@@ -964,7 +1030,6 @@ function renderActivityPanel() {
   const tabUpcoming = document.getElementById('activity-tab-upcoming');
   const tabHistory = document.getElementById('activity-tab-history');
   const updatedAt = document.getElementById('activity-updated-at');
-  const tgLink = document.getElementById('activity-tg-link');
   const reallocCb = document.getElementById('activity-show-realloc-cb');
 
   if (upcomingCount) {
@@ -996,16 +1061,10 @@ function renderActivityPanel() {
   if (updatedAt) {
     updatedAt.textContent = formatUpdatedAge(lastFetchTs);
   }
-  if (tgLink) {
-    const hasFavs = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).some(isValidAddress);
-    tgLink.classList.toggle('hidden', !(tgUsername && hasFavs));
-    if (tgUsername && hasFavs) {
-      clearTimeout(tgSyncTimer);
-      tgSyncTimer = setTimeout(async () => {
-        const subId = await syncTelegram();
-        if (subId) tgLink.href = buildTelegramUrl(tgUsername, subId);
-      }, 300);
-    }
+  renderTelegramStrip();
+  if (tgUsername && (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).some(isValidAddress)) {
+    clearTimeout(tgSyncTimer);
+    tgSyncTimer = setTimeout(async () => { await syncTelegram(); renderTelegramStrip(); }, 300);
   }
 
   if (!list) return;
@@ -1303,11 +1362,6 @@ function setupActivityEvents() {
     btn.addEventListener('click', () => toggleActivityPanel());
   }
 
-  const closeBtn = document.getElementById('activity-close-btn');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => closeActivityPanel());
-  }
-
   // Scope selectors
   const scopeFav = document.getElementById('activity-scope-fav');
   const scopeAll = document.getElementById('activity-scope-all');
@@ -1409,10 +1463,16 @@ export async function initActivity(dependencies = {}) {
     try { localStorage.setItem(STORAGE_KEY_TG_SUB, paired); } catch { /* the code is then used only until the page is closed */ }
     try { const url = new URL(location.href); url.searchParams.delete('tg'); history.replaceState(null, '', url); } catch { /* the address bar keeps the code */ }
   }
-  loadTelegramConfig().then(() => {
-    scheduleTelegramSync();
+  loadTelegramConfig().then(async () => {
+    // The strip is on the main page too: its state must be right before the panel is ever opened. A connected browser
+    // takes the chat's favorites first; one that is not connected pushes its own so the chat can adopt them later.
+    await pullTelegram();
+    if (!tgConnected) scheduleTelegramSync();
+    renderTelegramStrip();
     if (isPanelOpen) renderActivityPanel();
   });
+  document.addEventListener?.('visibilitychange', pullTelegramOnReturn);
+  globalThis.addEventListener?.('focus', pullTelegramOnReturn);
   // Initial fetch for unseen count badge
   return fetchActivityData();
 }

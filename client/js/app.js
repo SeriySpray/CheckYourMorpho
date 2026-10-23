@@ -173,6 +173,7 @@ async function initApp() {
   initActivity({
     apiFetch,
     getPinnedAddresses,
+    applyPinnedAddresses,
     openVaultAudit: (v, pos) => openVaultAudit(v, pos),
     getVault: (addr) => {
       const key = (addr || '').toLowerCase();
@@ -794,6 +795,13 @@ function savePinnedAddresses(addresses) {
     pinnedMemoryFallback = addresses;
     console.error('Failed to save pinned vaults to localStorage:', err);
   }
+}
+
+/** Replaces the favorites with a list that came from elsewhere (the Telegram chat) and redraws everything that shows them. */
+function applyPinnedAddresses(addresses) {
+  savePinnedAddresses([...new Set(addresses.map(a => String(a).toLowerCase()))]);
+  renderPinnedRichPills();
+  renderVaultExplorer();
 }
 
 function isVaultPinned(address, pinnedSet = null) {

@@ -857,20 +857,6 @@ body.audit-open .explorer-filters-grid { display: none; }
 .activity-scope-btn.active { background: var(--fg); color: var(--ink-0); }
 .activity-scope-btn:focus-visible { outline-offset: -2px; }
 
-.activity-close-btn {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  margin-bottom: 4px;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: var(--fg-3);
-}
-
-.activity-close-btn:hover { color: var(--fg); background: var(--ink-2); }
-
 .activity-list-container { flex: none; }
 .activity-list-container:focus-visible { outline-offset: -2px; }
 .activity-events-list { list-style: none; }
@@ -1027,7 +1013,36 @@ body.audit-open .explorer-filters-grid { display: none; }
 .activity-realloc-toggle input[type="checkbox"]:checked { background: var(--fg); border-color: var(--fg); }
 .activity-realloc-toggle input[type="checkbox"]:checked::after { transform: translateX(11px); background: var(--ink-0); }
 .activity-footer-meta { display: flex; align-items: center; gap: 10px; }
-.activity-atom-link { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Telegram strip above the tabs: where the bot is connected, and the state once it is */
+.activity-tg {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px var(--pad-x) 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+}
+.activity-tg-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.activity-tg-title { font: 500 13px var(--font-sans); color: var(--fg); }
+.activity-tg-note { font: 400 12px var(--font-mono); color: var(--fg-3); overflow-wrap: anywhere; }
+.activity-tg-btn {
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid var(--fg);
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--ink-0);
+  font: 500 12px var(--font-mono);
+  text-decoration: none;
+  transition: opacity 160ms var(--ease-out);
+}
+.activity-tg-btn:hover { opacity: 0.85; }
+.activity-tg.connected .activity-tg-btn { background: none; color: var(--fg); border-color: var(--line-2); }
+.activity-tg.connected .activity-tg-btn:hover { border-color: var(--fg); opacity: 1; }
 
 /* Activity beside an open audit: the ledger is a narrow column, so the toolbar and rows stack */
 @media (min-width: 769px) {
