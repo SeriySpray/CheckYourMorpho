@@ -57,27 +57,27 @@ export default {
       assert.equal(m, [
         '<b>Cap increase pending</b>',
         '<b>Alpha USDC</b>  |  Base\n<code>0x1111...1111</code>',
-        'Cap: 10% to 25%, adds 15% of vault assets\nThe curator is raising how much the vault may put into this market. Once applied, more deposits can flow there.\nSeverity: Warning',
+        'Cap: from 10% to 25% of vault assets\nThe curator is raising how much the vault may put into this market. Once applied, more deposits can flow there.\nSeverity: Warning',
         `<b>Takes effect</b> ${kyivTime(NOW + 7200)} Kyiv time (in 2h).\nDepositors can still withdraw until then.`
       ].join('\n\n'));
     }],
     ['cap absolute без старого значення: none, компактні числа; cap без ліміту читається як unlimited', ({ formatUrgent }) => {
       const m = formatUrgent(ev('pending_cap_increase', { details: { capKind: 'absolute', oldCap: null, newCap: 2_500_000, tvlShareAdded: 0.2 } }), null, NOW);
       assert.match(m, /^<b>Cap increase pending<\/b>\n\n<b>Vault<\/b>\n<code>0x1111\.\.\.1111<\/code>/);
-      assert.match(m, /Cap: none to 2\.5M, adds 20% of vault assets/);
+      assert.match(m, /Cap: from not set to 2\.5M, adds 20% of vault assets/);
       const open = formatUrgent(ev('pending_cap_increase', { details: { capKind: 'absolute', oldCap: null, newCap: 3.4e32, tvlShareAdded: 9e23 } }), 'V', NOW);
-      assert.match(open, /Cap: none to unlimited, adds over 1000% of vault assets/);
+      assert.match(open, /Cap: from not set to unlimited, adds over 1000% of vault assets/);
     }],
     ['timelock, bad debt, відтік TVL; не pending-події без рядка про набуття чинності', ({ formatUrgent }) => {
       const tl = formatUrgent(ev('pending_timelock_change', { row: { severity: 'critical' }, details: { oldTimelock: 172800, newTimelock: 3600 } }), 'V', NOW);
       assert.match(tl, /^<b>Timelock change pending<\/b>[\s\S]*\nTimelock: 2d to 1h\n[\s\S]*Severity: Critical/);
       const bd = formatUrgent(ev('bad_debt_appeared', { row: { status: 'final', severity: 'critical', valid_at: null }, details: { badDebtUsd: 12_000, supplyUsd: 3_400_000 } }), 'V', NOW);
       assert.match(bd, /^<b>Bad debt appeared<\/b>/);
-      assert.match(bd, /Bad debt: \$12\.0K in a market holding \$3\.4M of the vault/);
+      assert.match(bd, /Bad debt: \$12K in a market holding \$3\.4M of the vault/);
       assert.ok(!bd.includes('Takes effect'));
       const tvl = formatUrgent(ev('tvl_drop', { row: { status: 'final', valid_at: null }, details: { previousTvlUsd: 10_000_000, currentTvlUsd: 7_000_000 } }), 'V', NOW);
       assert.match(tvl, /^<b>Large TVL outflow<\/b>/);
-      assert.match(tvl, /TVL: \$10\.0M to \$7\.0M/);
+      assert.match(tvl, /TVL: \$10M to \$7M/);
     }],
     ['невідомий тип лишає заголовок події; timelock уже минув: повідомляє, що змінити можна будь-коли', ({ formatUrgent }) => {
       assert.match(formatUrgent(ev('pending_abdicate', { row: { title: 'Stored title' } }), 'V', NOW), /^<b>Stored title<\/b>/);
@@ -93,8 +93,8 @@ export default {
       const b = ev('pending_cap_increase', { row: { title: 'Pending absolute cap increase for cbBTC/USDC', severity: 'critical', valid_at: NOW + 3600 }, details: { capKind: 'absolute', oldCap: null, newCap: 5_000_000, tvlShareAdded: 0.56 } });
       const m = formatUrgentGroup([a, b], 'Alpha', NOW);
       assert.equal(m.split('\n')[0], '<b>Cap increase pending (2 changes)</b>');
-      assert.match(m, /<b>Pending relative cap increase for cbBTC collateral<\/b>\nCap: none to 50%, adds 50% of vault assets/);
-      assert.match(m, /<b>Pending absolute cap increase for cbBTC\/USDC<\/b>\nCap: none to 5\.0M, adds 56% of vault assets/);
+      assert.match(m, /<b>Relative cap increase for cbBTC collateral<\/b>\nCap: from not set to 50% of vault assets/);
+      assert.match(m, /<b>Absolute cap increase for cbBTC\/USDC<\/b>\nCap: from not set to 5M, adds 56% of vault assets/);
       assert.match(m, /Severity: Critical/);
       assert.ok(m.includes(`<b>Takes effect</b> ${kyivTime(NOW + 3600)} Kyiv time (in 1h)`));
     }],

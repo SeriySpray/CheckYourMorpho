@@ -1140,6 +1140,17 @@ export default {
       assert.deepEqual(JSON.parse(direct.body), { enabled: false, username: null });
     }],
   ],
+  handleGetTelegramSubscription: [
+    ['невалідний код -> 400; непідключений -> connected false; підключений віддає список', async mod => sandbox(async db => {
+      const get = id => { const res = mockRes(); mod.handleGetTelegramSubscription(mockReq('GET', '/api/tg/subscription'), res, id); return { status: res.statusCode, body: JSON.parse(res.body) }; };
+      assert.equal(get('short').status, 400);
+      assert.equal(get(null).status, 400);
+      const subId = 'abcdefghijklmnopqrstuv';
+      assert.deepEqual(get(subId), { status: 200, body: { connected: false, vaults: null } });
+      db.prepare('INSERT INTO tg_subscriptions (sub_id, chat_id, vaults_json, created_at, updated_at) VALUES (?, 5, ?, 1, 1)').run(subId, JSON.stringify([addr(1)]));
+      assert.deepEqual(get(subId), { status: 200, body: { connected: true, vaults: [addr(1)] } });
+    })],
+  ],
   handlePutTelegramSubscription: [
     ['зберігає підписку за sub_id і віддає кількість vault-ів; повторний PUT оновлює список', async mod => sandbox(async db => {
       const put = async body => { const res = mockRes(); await mod.handlePutTelegramSubscription(bodyReq('PUT', '/api/tg/subscription', jsonChunks(body)), res); return { status: res.statusCode, body: JSON.parse(res.body) }; };

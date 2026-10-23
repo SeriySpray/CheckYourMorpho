@@ -66,7 +66,33 @@ export default {
   pairingUrl: [['the site link carries the code, URL-encoded', ({ pairingUrl: f }) => {
     assert.equal(f('abcDEF123_-xyzABC9876'), 'https://checkyourmorpho.duckdns.org/?tg=abcDEF123_-xyzABC9876'); assert.equal(f('a b'), 'https://checkyourmorpho.duckdns.org/?tg=a%20b');
   }]],
+  getSubscription: [
+    ['невалідний код - помилка; невідомий або непідключений - connected false без списку; підключений віддає список', ({ getSubscription, upsertSubscription }) => {
+      const db = makeDb();
+      assert.deepEqual(getSubscription(db, 'short'), { ok: false, error: 'Invalid sub_id' });
+      assert.deepEqual(getSubscription(db, null), { ok: false, error: 'Invalid sub_id' });
+      assert.deepEqual(getSubscription(db, SUB), { ok: true, connected: false, vaults: null });
+      upsertSubscription(db, SUB, [A, B], NOW);
+      assert.deepEqual(getSubscription(db, SUB), { ok: true, connected: false, vaults: null });
+      db.prepare('UPDATE tg_subscriptions SET chat_id = 9, bound_at = ?').run(NOW);
+      assert.deepEqual(getSubscription(db, SUB), { ok: true, connected: true, vaults: [A, B] });
+      db.close();
+    }],
+  ],
   upsertSubscription: [
+    ['список належить чату: зміна з одного коду оновлює всі коди цього чату, але не чужі', ({ upsertSubscription }) => {
+      const db = makeDb();
+      const other = 'zyxwvutsrqponmlkjihgfe';
+      upsertSubscription(db, SUB, [A], NOW); upsertSubscription(db, other, [A], NOW);
+      db.prepare('UPDATE tg_subscriptions SET chat_id = 9, bound_at = ?').run(NOW);
+      upsertSubscription(db, 'strangerstrangerstranger', [A], NOW);
+      db.prepare("UPDATE tg_subscriptions SET chat_id = 10 WHERE sub_id = 'strangerstrangerstranger'").run();
+      assert.equal(upsertSubscription(db, SUB, [A, B], NOW + 5).connected, true);
+      const lists = Object.fromEntries(db.prepare('SELECT sub_id, vaults_json FROM tg_subscriptions').all().map(r => [r.sub_id, JSON.parse(r.vaults_json)]));
+      assert.deepEqual(lists[other], [A, B]);
+      assert.deepEqual(lists.strangerstrangerstranger, [A]);
+      db.close();
+    }],
     ['створює підписку з унікальними адресами в нижньому регістрі; повторний виклик оновлює список і зберігає прив\'язку чату', ({ upsertSubscription }) => {
       const db = makeDb();
       assert.deepEqual(upsertSubscription(db, SUB, [A.toUpperCase().replace('0X', '0x'), A, B], NOW), { ok: true, vaults: 2, connected: false });
@@ -128,12 +154,24 @@ export default {
       assert.equal(r.chat_id, 66); assert.equal(r.active, 1);
       db.close();
     }],
+    ['/start з нового пристрою об\'єднує список чату зі списком пристрою і віддає його всім кодам чату', async ({ handleBotUpdate, upsertSubscription }) => {
+      const db = makeDb(); const tg = makeTg();
+      const second = 'zyxwvutsrqponmlkjihgfe';
+      bound(db, { chat: 55, vaults: [A] });
+      upsertSubscription(db, second, [B], NOW);
+      await handleBotUpdate(db, tg, update(1, 55, `/start ${second}`), NOW + 5);
+      const lists = Object.fromEntries(db.prepare('SELECT sub_id, vaults_json, active FROM tg_subscriptions').all().map(r => [r.sub_id, { v: JSON.parse(r.vaults_json), a: r.active }]));
+      assert.deepEqual(lists[second], { v: [A, B], a: 1 });
+      assert.deepEqual(lists[SUB], { v: [A, B], a: 0 });
+      assert.match(tg.sent()[0].text, /You follow 2 vaults/);
+      db.close();
+    }],
     ['/list показує vault-и чату, /stop вимикає підписку, після чого /list порожній', async ({ handleBotUpdate }) => {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, vaults: [A, B] });
       await handleBotUpdate(db, tg, update(1, 55, '/list'), NOW);
       assert.equal(tg.sent()[0].text, '<b>You follow 2 vaults</b>\n\n<b>Alpha USDC</b>  |  Ethereum\n<code>0x1111...1111</code>\n\n<b>Beta WETH</b>  |  Ethereum\n<code>0x2222...2222</code>');
-      await handleBotUpdate(db, tg, update(2, 55, '/stop'), NOW);
+      await handleBotUpdate(db, tg, update(2, 55, '/pause'), NOW);
       assert.equal(db.prepare('SELECT active FROM tg_subscriptions').get().active, 0);
       await handleBotUpdate(db, tg, update(3, 55, '/list'), NOW);
       assert.match(tg.sent()[2].text, /No vaults followed/);
@@ -151,18 +189,18 @@ export default {
       assert.match(tg.sent()[0].text, /^<b>Upcoming changes<\/b>/);
       tg.calls.length = 0;
       await handleBotUpdate(db, tg, update(3, 55, '/upcoming'), NOW + 5);
-      assert.deepEqual(tg.calls.map(c => c.method), ['pinChatMessage', 'sendMessage']);
-      assert.match(tg.sent()[0].text, /^<b>Upcoming changes are up to date<\/b>/);
+      assert.deepEqual(tg.calls.map(c => c.method), ['deleteMessage', 'sendMessage', 'pinChatMessage']);
+      assert.match(tg.sent()[0].text, /^<b>Upcoming changes<\/b>/);
       db.close();
     }],
     ['/list додає вердикт, MQI і кількість очікуваних змін; /status рахує зміни, які вже можна застосувати', async ({ handleBotUpdate }) => {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, vaults: [A, B] });
-      db.prepare('INSERT INTO vault_samples (vault_address, hour_bucket, sampled_at, mqi_percent, verdict_level) VALUES (?, ?, ?, 98, ?)').run(A, Math.floor(NOW / 3600), NOW, 'red');
+      db.prepare('INSERT INTO vault_samples (vault_address, hour_bucket, sampled_at, mqi_percent, verdict_level, verdict_reasons) VALUES (?, ?, ?, 98, ?, ?)').run(A, Math.floor(NOW / 3600), NOW, 'red', 'Critical Crowded Exit Deficit');
       urgent(db, { kind: 'pending_guardian_change', status: 'pending', validAt: NOW - 60, key: 'pg-ready', details: {} });
       urgent(db, { kind: 'pending_market_removal', status: 'pending', validAt: NOW + 600, key: 'pm-wait', details: {} });
       await handleBotUpdate(db, tg, update(1, 55, '/list'), NOW);
-      assert.match(tg.sent()[0].text, /<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\nVerdict: RED  \|  MQI 98%  \|  2 pending changes/);
+      assert.match(tg.sent()[0].text, /<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\nRisk: exit risk under stress  \|  Market quality 98%  \|  2 pending changes/);
       assert.match(tg.sent()[0].text, /<code>0x2222\.\.\.2222<\/code>\n\n?$|<code>0x2222\.\.\.2222<\/code>$/);
       await handleBotUpdate(db, tg, update(2, 55, '/status'), NOW);
       assert.match(tg.sent()[1].text, /Pending changes: 2 \(1 can be applied now\)\. \/upcoming shows them\./);
@@ -189,7 +227,39 @@ export default {
       assert.match(tg.sent()[2].text, /<b>Alerts on<\/b>/);
       db.close();
     }],
-    ['/pause вимикає, /resume вмикає знову і починає з чистого аркуша (bound_at оновлюється); /stop працює як /pause', async ({ handleBotUpdate }) => {
+    ['/stop повністю відписує: знімає закріплення, видаляє підписку, надіслане і стан закріпленого; чужі чати не чіпає; після нього /list веде на сайт', async ({ handleBotUpdate }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db, { chat: 55, vaults: [A] });
+      bound(db, { sub: 'zyxwvutsrqponmlkjihgfe', chat: 66, vaults: [B] });
+      await handleBotUpdate(db, tg, update(1, 55, '/upcoming'), NOW);
+      db.prepare("INSERT INTO tg_sent (sub_id, message_key, sent_at) VALUES (?, 'k', ?)").run(SUB, NOW);
+      tg.calls.length = 0;
+      await handleBotUpdate(db, tg, update(2, 55, '/stop'), NOW + 1);
+      assert.deepEqual(tg.calls.map(c => c.method), ['unpinChatMessage', 'sendMessage']);
+      assert.equal(tg.calls[0].payload.chat_id, 55);
+      assert.match(tg.sent()[0].text, /^<b>Unsubscribed<\/b>/);
+      assert.deepEqual(db.prepare('SELECT chat_id FROM tg_subscriptions').all().map(r => r.chat_id), [66]);
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM tg_sent').get().c, 0);
+      assert.equal(db.prepare("SELECT COUNT(*) AS c FROM sync_state WHERE key = 'tg_pin:55'").get().c, 0);
+      await handleBotUpdate(db, tg, update(3, 55, '/list'), NOW + 2);
+      assert.match(tg.sent()[1].text, /No vaults followed/);
+      db.close();
+    }],
+    ['/stop без закріпленого повідомлення і з помилкою unpin все одно відписує', async ({ handleBotUpdate }) => {
+      const db = makeDb();
+      bound(db, { chat: 55, vaults: [A] });
+      const plain = makeTg();
+      await handleBotUpdate(db, plain, update(1, 55, '/stop'), NOW);
+      assert.deepEqual(plain.calls.map(c => c.method), ['sendMessage']);
+      bound(db, { chat: 55, vaults: [A] });
+      db.prepare("INSERT INTO sync_state (key, value, updated_at) VALUES ('tg_pin:55', ?, ?)").run(JSON.stringify({ message_id: 5, hash: 'x', pinned: true }), NOW);
+      const failing = makeTg({ fail: { unpinChatMessage: [{ code: 400, message: 'Bad Request: message to unpin not found' }] } });
+      await handleBotUpdate(db, failing, update(2, 55, '/stop'), NOW);
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM tg_subscriptions').get().c, 0);
+      assert.match(failing.sent()[0].text, /^<b>Unsubscribed<\/b>/);
+      db.close();
+    }],
+    ['/pause вимикає, /resume вмикає знову і починає з чистого аркуша (bound_at оновлюється)', async ({ handleBotUpdate }) => {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, at: NOW - 1000 });
       await handleBotUpdate(db, tg, update(1, 55, '/pause'), NOW);
@@ -200,8 +270,6 @@ export default {
       await handleBotUpdate(db, tg, update(3, 55, '/resume'), NOW + 5);
       const r = db.prepare('SELECT active, bound_at FROM tg_subscriptions').get();
       assert.equal(r.active, 1); assert.equal(r.bound_at, NOW + 5);
-      await handleBotUpdate(db, tg, update(4, 55, '/stop'), NOW + 6);
-      assert.equal(db.prepare('SELECT active FROM tg_subscriptions').get().active, 0);
       await handleBotUpdate(db, tg, update(5, 99, '/resume'), NOW);
       assert.match(tg.sent().at(-1).text, /sync here by themselves/);
       db.close();
@@ -252,14 +320,14 @@ export default {
       assert.match(tg.calls[0].payload.text, /1 pending change in the 1 vault you follow/);
       db.close();
     }],
-    ['force закріплює ще раз навіть без змін; без vault-ів нічого не шле', async ({ syncUpcomingPin }) => {
+    ['force замінює повідомлення новим навіть без змін (чат міг бути очищений у користувача): видаляє старе, надсилає і закріплює; без vault-ів нічого не шле', async ({ syncUpcomingPin }) => {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, vaults: [A] });
       const sub = db.prepare('SELECT * FROM tg_subscriptions').get();
       await syncUpcomingPin(db, tg, sub, NOW);
       tg.calls.length = 0;
-      assert.equal(await syncUpcomingPin(db, tg, sub, NOW + 5, true), 'unchanged');
-      assert.deepEqual(tg.calls.map(c => c.method), ['pinChatMessage']);
+      assert.equal(await syncUpcomingPin(db, tg, sub, NOW + 5, true), 'sent');
+      assert.deepEqual(tg.calls.map(c => c.method), ['deleteMessage', 'sendMessage', 'pinChatMessage']);
       assert.equal(await syncUpcomingPin(db, tg, { ...sub, vaults_json: '[]' }, NOW), 'skipped');
       db.close();
     }],
@@ -278,6 +346,22 @@ export default {
       assert.equal(JSON.parse(db.prepare("SELECT value FROM sync_state WHERE key = 'tg_pin:55'").get().value).message_id, tg.calls[2].payload.message_id);
       db.close();
     }],
+    ['чат видалено і запущено знову: закріплення старого повідомлення дає "not found", бот надсилає нове і закріплює його (ні на /start, ні в тіку не залишається без закріплення)', async ({ syncUpcomingPin }) => {
+      const db = makeDb();
+      bound(db, { chat: 55, vaults: [A] });
+      const sub = () => db.prepare('SELECT * FROM tg_subscriptions').get();
+      const tg = makeTg();
+      await syncUpcomingPin(db, tg, sub(), NOW);
+      const first = JSON.parse(db.prepare("SELECT value FROM sync_state WHERE key = 'tg_pin:55'").get().value).message_id;
+      const again = makeTg({ fail: { pinChatMessage: [{ code: 400, message: 'Bad Request: message to pin not found' }] } });
+      const st = JSON.parse(db.prepare("SELECT value FROM sync_state WHERE key = 'tg_pin:55'").get().value);
+      db.prepare("UPDATE sync_state SET value = ? WHERE key = 'tg_pin:55'").run(JSON.stringify({ ...st, pinned: false }));
+      assert.equal(await syncUpcomingPin(db, again, sub(), NOW + 60), 'sent');
+      assert.deepEqual(again.calls.map(c => c.method), ['pinChatMessage', 'sendMessage', 'pinChatMessage']);
+      const saved = JSON.parse(db.prepare("SELECT value FROM sync_state WHERE key = 'tg_pin:55'").get().value);
+      assert.notEqual(saved.message_id, first); assert.equal(saved.pinned, true);
+      db.close();
+    }],
     ['невдале закріплення не дублює повідомлення: наступний виклик лише закріплює; 403 вимикає підписку', async ({ syncUpcomingPin }) => {
       const db = makeDb();
       bound(db, { chat: 55, vaults: [A] });
@@ -291,6 +375,33 @@ export default {
       db.prepare("DELETE FROM sync_state WHERE key = 'tg_pin:55'").run();
       assert.equal(await syncUpcomingPin(db, blocked, sub(), NOW + 120), 'blocked');
       assert.equal(sub().active, 0);
+      db.close();
+    }],
+  ],
+  refreshPinnedFor: [
+    ['без запущеного бота нічого не робить', async ({ refreshPinnedFor }) => {
+      const db = makeDb();
+      bound(db, { chat: 55, vaults: [A] });
+      assert.equal(await refreshPinnedFor(db, SUB), 'skipped');
+      db.close();
+    }],
+    ['з ботом: одразу оновлює закріплене повідомлення чату після зміни списку; призупинена або непідключена підписка пропускається', async ({ refreshPinnedFor, startNotifications, upsertSubscription }) => {
+      const db = makeDb();
+      const tg = makeTg();
+      const fetchImpl = async (url, init) => { const m = url.split('/').pop(); if (m === 'getUpdates') { await new Promise(x => setTimeout(x, 15)); return { status: 200, json: async () => ({ ok: true, result: [] }) }; } const r = await tg.call(m, JSON.parse(init.body)); return { status: 200, json: async () => ({ ok: true, result: m === 'getMe' ? { username: 'bot' } : r }) }; };
+      const handle = await startNotifications(db, { token: 'T', fetchImpl, sleep: noSleep, tickMs: 3600000 });
+      try {
+        bound(db, { chat: 55, vaults: [A] });
+        assert.equal(await refreshPinnedFor(db, SUB), 'sent');
+        assert.match(tg.sent().at(-1).text, /1 vault you follow/);
+        upsertSubscription(db, SUB, [A, B], NOW);
+        assert.equal(await refreshPinnedFor(db, SUB), 'edited');
+        assert.match(tg.calls.findLast(c => c.method === 'editMessageText').payload.text, /2 vaults you follow/);
+        assert.equal(await refreshPinnedFor(db, SUB), 'unchanged');
+        db.prepare('UPDATE tg_subscriptions SET active = 0').run();
+        assert.equal(await refreshPinnedFor(db, SUB), 'skipped');
+        assert.equal(await refreshPinnedFor(db, 'unknownunknownunknownun'), 'skipped');
+      } finally { handle.stop(); }
       db.close();
     }],
   ],
@@ -337,7 +448,7 @@ export default {
       assert.equal(await dispatchUrgent(db, tg, NOW + 60, noSleep), 1);
       assert.equal(await dispatchUrgent(db, tg, NOW + 120, noSleep), 0);
       assert.equal(tg.sent().length, 1);
-      assert.match(tg.sent()[0].text, /^<b>Large TVL outflow<\/b>\n\n<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n\nTVL: \$2\.0M to \$1\.0M/);
+      assert.match(tg.sent()[0].text, /^<b>Large TVL outflow<\/b>\n\n<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n\nTVL: \$2M to \$1M/);
       assert.equal(tg.sent()[0].chat_id, 777);
       db.close();
     }],
@@ -409,7 +520,7 @@ export default {
       const early = Date.UTC(2026, 0, 15, 6, 0) / 1000;
       assert.equal(await dispatchDigest(db, tg, early, noSleep), 0);
       assert.equal(await dispatchDigest(db, tg, NOW, noSleep), 1);
-      assert.match(tg.sent()[0].text, /^<b>Daily digest<\/b>\n\n2026-01-15  \|  1 vault with changes\n\n<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n- Verdict changed from GREEN to RED$/);
+      assert.match(tg.sent()[0].text, /^<b>Daily digest<\/b>\n\n2026-01-15  \|  1 vault with changes\n\n<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\n- Risk worsened: no risk flags changed to risk flags$/);
       assert.equal(await dispatchDigest(db, tg, NOW + 600, noSleep), 0);
       assert.equal(tg.sent().length, 1);
       assert.equal(db.prepare("SELECT value FROM sync_state WHERE key = 'last_digest_date'").get().value, '2026-01-15');

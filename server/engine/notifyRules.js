@@ -56,9 +56,10 @@ export function kyivTime(seconds) {
 function compact(n) {
   if (!isNum(n)) return 'unknown';
   if (n >= 1e15) return 'unlimited';
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  const one = x => x.toFixed(1).replace(/\.0$/, '');
+  if (n >= 1e9) return `${one(n / 1e9)}B`;
+  if (n >= 1e6) return `${one(n / 1e6)}M`;
+  if (n >= 1e3) return `${one(n / 1e3)}K`;
   return String(Math.round(n * 100) / 100);
 }
 
@@ -123,8 +124,9 @@ const KIND_MEANING = {
 function detailLine(event, d) {
   if (event.kind === 'pending_cap_increase') {
     const rel = d.capKind === 'relative';
-    const fmt = v => (v === null || v === undefined ? 'none' : rel ? percent(v) : compact(v));
-    return `Cap: ${fmt(d.oldCap)} to ${fmt(d.newCap)}${isNum(d.tvlShareAdded) ? `, adds ${shareText(d.tvlShareAdded)} of vault assets` : ''}`;
+    const fmt = v => (v === null || v === undefined ? 'not set' : rel ? percent(v) : compact(v));
+    // A relative cap is already a share of vault assets, so it needs no "adds" part
+    return `Cap: from ${fmt(d.oldCap)} to ${fmt(d.newCap)}${rel ? ' of vault assets' : isNum(d.tvlShareAdded) ? `, adds ${shareText(d.tvlShareAdded)} of vault assets` : ''}`;
   }
   if (event.kind === 'pending_timelock_change') return `Timelock: ${duration(d.oldTimelock)} to ${duration(d.newTimelock)}`;
   if (event.kind === 'bad_debt_appeared') return `Bad debt: $${compact(d.badDebtUsd)} in a market holding $${compact(d.supplyUsd)} of the vault${d.afterDataGap ? ' (first seen after a gap in data, may be older)' : ''}`;
@@ -164,7 +166,9 @@ export function formatUrgentGroup(events, vaultName, nowSec = Math.floor(Date.no
   const worst = events.reduce((a, e) => ((SEVERITY_RANK[e.severity] || 0) > (SEVERITY_RANK[a.severity] || 0) ? e : a));
   const items = events.slice(0, GROUP_LINES_SHOWN).map(e => {
     const detail = detailLine(e, parseDetails(e));
-    return `<b>${escapeHtml(e.title)}</b>${detail ? `\n${escapeHtml(detail)}` : ''}`;
+    // The message title already says "pending", so the line starts with the change itself
+    const title = String(e.title).replace(/^Pending\s+/i, '').replace(/^./, c => c.toUpperCase());
+    return `<b>${escapeHtml(title)}</b>${detail ? `\n${escapeHtml(detail)}` : ''}`;
   });
   if (events.length > GROUP_LINES_SHOWN) items.push(`and ${events.length - GROUP_LINES_SHOWN} more`);
   const blocks = [vaultBlock(vaultName, worst.chain_id, worst.vault_address), items.join('\n\n'), [KIND_MEANING[worst.kind], severityLine(worst)].filter(Boolean).join('\n')];

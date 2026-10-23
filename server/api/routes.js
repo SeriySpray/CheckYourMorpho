@@ -14,7 +14,7 @@ import { TOKEN_CLASSES } from '../data/tokenClasses.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
 import { formatUnits } from '../services/normalizers.js';
-import { getBotInfo, upsertSubscription } from '../services/telegramService.js';
+import { getBotInfo, upsertSubscription, getSubscription, refreshPinnedFor } from '../services/telegramService.js';
 import { getTokenData } from '../services/tokenCollector.js';
 
 
@@ -433,12 +433,27 @@ export async function handlePutTelegramSubscription(req, res) {
     return;
   }
   try {
-    const result = upsertSubscription(getDatabase(), body?.sub_id, body?.vaults);
+    const db = getDatabase();
+    const result = upsertSubscription(db, body?.sub_id, body?.vaults);
     if (!result.ok) { sendJson(res, 400, { error: result.error }); return; }
     sendJson(res, 200, { vaults: result.vaults, connected: result.connected });
+    // The answer does not wait for Telegram; a failed refresh is retried by the next tick
+    refreshPinnedFor(db, body.sub_id).catch(err => console.error('[Telegram] Refreshing the pinned message failed:', err.message));
   } catch (err) {
     console.error('[API] Failed to store the Telegram subscription:', err);
     sendJson(res, 500, { error: 'Failed to store the subscription' });
+  }
+}
+
+/** GET /api/tg/subscription?sub_id=...: the favorites the chat holds, for a browser that has just been connected to it. */
+export function handleGetTelegramSubscription(req, res, subId) {
+  try {
+    const result = getSubscription(getDatabase(), subId);
+    if (!result.ok) { sendJson(res, 400, { error: result.error }); return; }
+    sendJson(res, 200, { connected: result.connected, vaults: result.vaults });
+  } catch (err) {
+    console.error('[API] Failed to read the Telegram subscription:', err);
+    sendJson(res, 500, { error: 'Failed to read the subscription' });
   }
 }
 
@@ -1126,6 +1141,11 @@ export function handleRequest(req, res) {
 
   if (pathname === '/api/tg/config' && isRead) {
     handleGetTelegramConfig(req, res);
+    return;
+  }
+
+  if (pathname === '/api/tg/subscription' && isRead) {
+    handleGetTelegramSubscription(req, res, parsedUrl.searchParams.get('sub_id'));
     return;
   }
 
