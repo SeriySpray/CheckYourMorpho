@@ -1044,6 +1044,13 @@ body.audit-open .explorer-filters-grid { display: none; }
 .activity-tg.connected .activity-tg-btn { background: none; color: var(--fg); border-color: var(--line-2); }
 .activity-tg.connected .activity-tg-btn:hover { border-color: var(--fg); opacity: 1; }
 
+/* Beside an open audit the ledger is a narrow column: the strip shrinks to one slim row, the explanation only when it carries state */
+body.audit-open .activity-tg { margin: 12px var(--pad-x) 0; padding: 8px 8px 8px 12px; gap: 10px; border-radius: 8px; }
+body.audit-open .activity-tg-title { font-size: 12px; }
+body.audit-open .activity-tg-note { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.audit-open .activity-tg:not(.connected) .activity-tg-note { display: none; }
+body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
+
 /* Activity beside an open audit: the ledger is a narrow column, so the toolbar and rows stack */
 @media (min-width: 769px) {
   body.audit-open .activity-nav-left { flex-wrap: wrap; row-gap: 6px; justify-content: flex-start; }
