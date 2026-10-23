@@ -1107,6 +1107,23 @@ export default {
       assert.equal(await pullTelegram(), false);
     }],
   ],
+  setTgDirty: [
+    ['позначка про недоставлену зміну живе в сховищі і зникає після доставки; readTgDirty читає її назад', ({ setTgDirty, readTgDirty, __state: s }) => {
+      localStorage.removeItem('cym_tg_dirty');
+      assert.equal(readTgDirty(), false);
+      setTgDirty(true);
+      assert.equal(s.tgDirty, true); assert.equal(localStorage.getItem('cym_tg_dirty'), '1'); assert.equal(readTgDirty(), true);
+      setTgDirty(false);
+      assert.equal(s.tgDirty, false); assert.equal(localStorage.getItem('cym_tg_dirty'), null); assert.equal(readTgDirty(), false);
+    }],
+  ],
+  readTgDirty: [
+    ['заблокований localStorage не кидає виняток', ({ readTgDirty }) => {
+      const real = localStorage.getItem;
+      localStorage.getItem = () => { throw new Error('blocked'); };
+      try { assert.equal(readTgDirty(), false); } finally { localStorage.getItem = real; }
+    }],
+  ],
   flushTelegramSync: [
     ['є непереданий зміни - відправляє одразу з keepalive і скасовує очікування; нічого не змінилось або бота немає - не відправляє', async ({ flushTelegramSync, onFavoritesChanged, __state: s }) => {
       localStorage.setItem('cym_tg_sub', 'existing-subscription-id');

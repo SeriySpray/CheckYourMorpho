@@ -401,6 +401,58 @@ export default {
       assert.equal(await refreshPinnedFor(db, SUB), 'skipped');
       db.close();
     }],
+    ['код неактивного пристрою того ж чату теж оновлює закріплене повідомлення; зайнятий чат отримує ще один прохід, а не чекає хвилину', async ({ refreshPinnedFor, startNotifications, upsertSubscription }) => {
+      const db = makeDb();
+      const second = 'zyxwvutsrqponmlkjihgfe';
+      let editStarted = null; let release = null;
+      const tg = makeTg();
+      const fetchImpl = async (url, init) => {
+        const m = url.split('/').pop();
+        if (m === 'getUpdates') { await new Promise(x => setTimeout(x, 15)); return { status: 200, json: async () => ({ ok: true, result: [] }) }; }
+        if (m === 'editMessageText' && release) { editStarted(); await new Promise(x => { release = x; }); }
+        const r = await tg.call(m, JSON.parse(init.body));
+        return { status: 200, json: async () => ({ ok: true, result: m === 'getMe' ? { username: 'bot' } : r }) };
+      };
+      const handle = await startNotifications(db, { token: 'T', fetchImpl, sleep: noSleep, tickMs: 3600000 });
+      try {
+        bound(db, { chat: 55, vaults: [A] });
+        upsertSubscription(db, second, [A], NOW);
+        db.prepare('UPDATE tg_subscriptions SET chat_id = 55, active = 0, bound_at = ? WHERE sub_id = ?').run(NOW - 50, second);
+        assert.equal(await refreshPinnedFor(db, second), 'sent'); // the phone's code is not the active one
+        upsertSubscription(db, second, [A, B], NOW + 5);
+        db.prepare('UPDATE tg_subscriptions SET vaults_json = ? WHERE chat_id = 55').run(JSON.stringify([A, B]));
+        // a second save lands while the first update is still running
+        const started = new Promise(r => { editStarted = r; });
+        release = () => {};
+        const first = refreshPinnedFor(db, SUB);
+        await started;
+        db.prepare('UPDATE tg_subscriptions SET vaults_json = ? WHERE chat_id = 55').run(JSON.stringify([B]));
+        assert.equal(await refreshPinnedFor(db, SUB), 'skipped');
+        release(); release = null;
+        await first;
+        const edits = tg.calls.filter(c => c.method === 'editMessageText');
+        assert.equal(edits.length, 2);
+        assert.match(edits.at(-1).payload.text, /1 vault you follow/);
+      } finally { handle.stop(); }
+      db.close();
+    }],
+    ['невдале оновлення повторюється за кілька секунд без очікування хвилинного тіку', async ({ refreshPinnedFor, startNotifications }) => {
+      const db = makeDb();
+      const tg = makeTg({ fail: { sendMessage: [{ code: 500, message: 'Internal' }] } });
+      const fetchImpl = async (url, init) => {
+        const m = url.split('/').pop();
+        if (m === 'getUpdates') { await new Promise(x => setTimeout(x, 15)); return { status: 200, json: async () => ({ ok: true, result: [] }) }; }
+        try { const r = await tg.call(m, JSON.parse(init.body)); return { status: 200, json: async () => ({ ok: true, result: m === 'getMe' ? { username: 'bot' } : r }) }; } catch (e) { return { status: e.code, json: async () => ({ ok: false, error_code: e.code, description: e.message }) }; }
+      };
+      const handle = await startNotifications(db, { token: 'T', fetchImpl, sleep: noSleep, tickMs: 3600000 });
+      try {
+        bound(db, { chat: 55, vaults: [A] });
+        assert.equal(await refreshPinnedFor(db, SUB, 30), 'retry');
+        await new Promise(x => setTimeout(x, 120));
+        assert.equal(tg.sent().length, 2); // the failed attempt and the retry that went through
+      } finally { handle.stop(); }
+      db.close();
+    }],
     ['з ботом: одразу оновлює закріплене повідомлення чату після зміни списку; призупинена або непідключена підписка пропускається', async ({ refreshPinnedFor, startNotifications, upsertSubscription }) => {
       const db = makeDb();
       const tg = makeTg();

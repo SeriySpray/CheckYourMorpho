@@ -398,17 +398,27 @@ export async function dispatchPins(db, tg, nowSec = Math.floor(Date.now() / 1000
 }
 
 const pinBusy = new Set();
+const pinAgain = new Set();
+const RETRY_PIN_MS = 4000;
 
 /**
- * Called when the site saves a subscription: brings that chat's pinned Upcoming message up to date at once instead of
- * waiting for the next tick. Does nothing without a running bot, for an unbound or paused subscription, or while the
- * same chat is already being updated. Returns the syncUpcomingPin result or 'skipped'.
+ * Called when the site saves a subscription: brings the pinned Upcoming message of that code's chat up to date at once
+ * instead of waiting for the next tick. The code may belong to any device of the chat, the message follows the chat's
+ * active code. Does nothing without a running bot or for an unbound or paused chat. A call that arrives while the chat is
+ * being updated runs once more afterwards, and a failed update is tried again after a few seconds.
+ * Returns the syncUpcomingPin result or 'skipped'.
  */
-export async function refreshPinnedFor(db, subId) {
-  const sub = liveTg && db.prepare('SELECT * FROM tg_subscriptions WHERE sub_id = ? AND chat_id IS NOT NULL AND active = 1').get(subId);
-  if (!sub || pinBusy.has(sub.chat_id)) return 'skipped';
+export async function refreshPinnedFor(db, subId, retryMs = RETRY_PIN_MS) {
+  const row = liveTg && db.prepare('SELECT chat_id FROM tg_subscriptions WHERE sub_id = ? AND chat_id IS NOT NULL').get(subId);
+  const sub = row && db.prepare('SELECT * FROM tg_subscriptions WHERE chat_id = ? AND active = 1 ORDER BY bound_at DESC LIMIT 1').get(row.chat_id);
+  if (!sub) return 'skipped';
+  if (pinBusy.has(sub.chat_id)) { pinAgain.add(sub.chat_id); return 'skipped'; }
   pinBusy.add(sub.chat_id);
-  try { return await syncUpcomingPin(db, liveTg, sub); } finally { pinBusy.delete(sub.chat_id); }
+  let res;
+  try { res = await syncUpcomingPin(db, liveTg, sub); } finally { pinBusy.delete(sub.chat_id); }
+  if (pinAgain.delete(sub.chat_id)) return refreshPinnedFor(db, subId, retryMs);
+  if (res === 'retry') setTimeout(() => refreshPinnedFor(db, subId, retryMs).catch(() => {}), retryMs).unref?.();
+  return res;
 }
 
 /**

@@ -46,11 +46,13 @@ const EVENT_KINDS = Object.freeze([
 const STORAGE_KEY_SEEN = 'cym_activity_seen_ts';
 const STORAGE_KEY_SHOW_REALLOC = 'cym_activity_show_reallocations';
 const STORAGE_KEY_TG_SUB = 'cym_tg_sub';
+const STORAGE_KEY_TG_DIRTY = 'cym_tg_dirty';
+const TG_SYNC_DEBOUNCE_MS = 400;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 let seenTsMemoryFallback = null;
 let tgUsername = null;
-let tgDirty = false; // the favorites changed here and the server does not know yet: a pull must not overwrite them
+let tgDirty = false; // the favorites changed here and the server does not know yet: a pull must not overwrite them (kept in storage too)
 let favChangeSeq = 0; // counts local favorites changes, so an answer to an older request is recognised
 let tgConnected = false; // the server's answer to the last favorites push: the chat is bound and active
 let tgSyncTimer = null;
@@ -786,6 +788,16 @@ function ensureSubId() {
   return subId;
 }
 
+/** Marks the favorites as not yet delivered to the server. Stored, so a closed page or a dropped request still gets delivered next time. */
+function setTgDirty(value) {
+  tgDirty = value;
+  try { if (value) localStorage.setItem(STORAGE_KEY_TG_DIRTY, '1'); else localStorage.removeItem(STORAGE_KEY_TG_DIRTY); } catch { /* kept in memory only */ }
+}
+
+function readTgDirty() {
+  try { return localStorage.getItem(STORAGE_KEY_TG_DIRTY) === '1'; } catch { return false; }
+}
+
 function readSubId() {
   try { return localStorage.getItem(STORAGE_KEY_TG_SUB); } catch { return null; }
 }
@@ -809,7 +821,7 @@ async function syncTelegram({ keepalive = false } = {}) {
       signal: AbortSignal.timeout(10000)
     });
     tgConnected = Boolean((await res.json())?.connected);
-    if (res.ok && seq === favChangeSeq) tgDirty = false;
+    if (res.ok && seq === favChangeSeq) setTgDirty(false);
   } catch { /* the next render or favorites change retries */ }
   return subId;
 }
@@ -828,9 +840,9 @@ function scheduleTelegramSync() {
   const hasFavs = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).some(isValidAddress);
   const hadSubId = Boolean(readSubId());
   renderTelegramStrip();
-  if (!tgUsername || (!hadSubId && !hasFavs)) { tgDirty = false; return; }
+  if (!tgUsername || (!hadSubId && !hasFavs)) { if (tgDirty) setTgDirty(false); return; }
   clearTimeout(tgSyncTimer);
-  tgSyncTimer = setTimeout(async () => { await syncTelegram(); renderTelegramStrip(); }, 1500);
+  tgSyncTimer = setTimeout(async () => { await syncTelegram(); renderTelegramStrip(); }, TG_SYNC_DEBOUNCE_MS);
 }
 
 /** The Telegram strip: "Connect" with the code link while the chat is not bound, "Open chat" once it is. Hidden without a bot. */
@@ -1365,7 +1377,7 @@ async function loadMoreHistory() {
  */
 export function onFavoritesChanged() {
   fetchActivityData(true);
-  if (tgUsername) { favChangeSeq++; tgDirty = true; }
+  if (tgUsername) { favChangeSeq++; setTgDirty(true); }
   scheduleTelegramSync();
 }
 
@@ -1482,6 +1494,7 @@ export async function initActivity(dependencies = {}) {
     try { localStorage.setItem(STORAGE_KEY_TG_SUB, paired); } catch { /* the code is then used only until the page is closed */ }
     try { const url = new URL(location.href); url.searchParams.delete('tg'); history.replaceState(null, '', url); } catch { /* the address bar keeps the code */ }
   }
+  tgDirty = readTgDirty(); // a change that never reached the server before the page closed is sent first
   loadTelegramConfig().then(async () => {
     // The strip is on the main page too: its state must be right before the panel is ever opened. A connected browser
     // takes the chat's favorites first; one that is not connected pushes its own so the chat can adopt them later.
@@ -1493,6 +1506,7 @@ export async function initActivity(dependencies = {}) {
   document.addEventListener?.('visibilitychange', pullTelegramOnReturn);
   globalThis.addEventListener?.('focus', pullTelegramOnReturn);
   globalThis.addEventListener?.('pagehide', flushTelegramSync);
+  globalThis.addEventListener?.('online', flushTelegramSync);
   // Initial fetch for unseen count badge
   return fetchActivityData();
 }
