@@ -50,6 +50,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 let seenTsMemoryFallback = null;
 let tgUsername = null;
+let tgDirty = false; // the favorites changed here and the server does not know yet: a pull must not overwrite them
+let favChangeSeq = 0; // counts local favorites changes, so an answer to an older request is recognised
 let tgConnected = false; // the server's answer to the last favorites push: the chat is bound and active
 let tgSyncTimer = null;
 let showReallocMemoryFallback = null;
@@ -792,20 +794,31 @@ function readSubId() {
  * Sends the current favorites to the server under this browser's subscription id (created on first use).
  * Runs when the panel renders, so the Telegram link is a plain navigation and not a popup after an await.
  */
-async function syncTelegram() {
+async function syncTelegram({ keepalive = false } = {}) {
   if (!tgUsername) return null;
   const subId = ensureSubId();
+  const seq = favChangeSeq;
   const vaults = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress).slice(0, 100);
   try {
+    // keepalive lets the request finish after the page is hidden or closed
     const res = await fetch('/api/tg/subscription', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sub_id: subId, vaults }),
+      keepalive,
       signal: AbortSignal.timeout(10000)
     });
     tgConnected = Boolean((await res.json())?.connected);
+    if (res.ok && seq === favChangeSeq) tgDirty = false;
   } catch { /* the next render or favorites change retries */ }
   return subId;
+}
+
+/** Sends a favorites change that is still waiting for its debounce, now. Used when the user is about to leave the page. */
+function flushTelegramSync() {
+  if (!tgDirty || !tgUsername) return null;
+  clearTimeout(tgSyncTimer);
+  return syncTelegram({ keepalive: true });
 }
 
 /**
@@ -815,7 +828,7 @@ function scheduleTelegramSync() {
   const hasFavs = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).some(isValidAddress);
   const hadSubId = Boolean(readSubId());
   renderTelegramStrip();
-  if (!tgUsername || (!hadSubId && !hasFavs)) return;
+  if (!tgUsername || (!hadSubId && !hasFavs)) { tgDirty = false; return; }
   clearTimeout(tgSyncTimer);
   tgSyncTimer = setTimeout(async () => { await syncTelegram(); renderTelegramStrip(); }, 1500);
 }
@@ -850,12 +863,16 @@ async function pullTelegram() {
   const subId = readSubId();
   if (!tgUsername || !subId) return false;
   lastPullAt = Date.now();
+  // A change made here is newer than anything the chat holds: send it first and keep the local list
+  if (tgDirty) { await flushTelegramSync(); renderTelegramStrip(); return false; }
+  const seq = favChangeSeq;
   let changed = false;
   try {
     const res = await fetch(`/api/tg/subscription?sub_id=${encodeURIComponent(subId)}`, { signal: AbortSignal.timeout(10000) });
     const body = await res.json();
     tgConnected = Boolean(body?.connected);
-    if (tgConnected && Array.isArray(body.vaults) && deps.applyPinnedAddresses) {
+    // The list may also have changed while the request was on its way
+    if (tgConnected && seq === favChangeSeq && !tgDirty && Array.isArray(body.vaults) && deps.applyPinnedAddresses) {
       const remote = body.vaults.filter(isValidAddress).map(a => a.toLowerCase());
       const local = new Set((deps.getPinnedAddresses ? deps.getPinnedAddresses(false) : []).map(a => String(a).toLowerCase()));
       if (remote.length !== local.size || remote.some(a => !local.has(a))) {
@@ -871,7 +888,8 @@ async function pullTelegram() {
 
 /** Pull again when the tab comes back to the front, which is where the user returns after pressing Connect in Telegram. */
 function pullTelegramOnReturn() {
-  if (document.visibilityState === 'hidden' || Date.now() - lastPullAt < PULL_MIN_GAP_MS) return;
+  if (document.visibilityState === 'hidden') { flushTelegramSync(); return; }
+  if (Date.now() - lastPullAt < PULL_MIN_GAP_MS) return;
   pullTelegram();
 }
 
@@ -1347,6 +1365,7 @@ async function loadMoreHistory() {
  */
 export function onFavoritesChanged() {
   fetchActivityData(true);
+  if (tgUsername) { favChangeSeq++; tgDirty = true; }
   scheduleTelegramSync();
 }
 
@@ -1473,6 +1492,7 @@ export async function initActivity(dependencies = {}) {
   });
   document.addEventListener?.('visibilitychange', pullTelegramOnReturn);
   globalThis.addEventListener?.('focus', pullTelegramOnReturn);
+  globalThis.addEventListener?.('pagehide', flushTelegramSync);
   // Initial fetch for unseen count badge
   return fetchActivityData();
 }

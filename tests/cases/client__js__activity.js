@@ -1091,12 +1091,49 @@ export default {
       applied = null;
       assert.equal(await run({ connected: true, vaults: [A2, A1] }), false);
       assert.equal(applied, null);
+      // a local change that the server has not seen yet is never overwritten: it is sent first
+      s.tgDirty = true; applied = null; let sent = 0;
+      assert.equal(await withFetch(async (u, init) => { if (init?.method === 'PUT') sent++; return jsonResponse({ connected: true, vaults: [A2], vaults_: 0 }); }, () => pullTelegram()), false);
+      assert.equal(applied, null); assert.equal(sent, 1); assert.equal(s.tgDirty, false);
+      // a change made while the pull request was on its way wins over its answer
+      applied = null;
+      assert.equal(await withFetch(async () => { s.favChangeSeq++; return jsonResponse({ connected: true, vaults: [A2] }); }, () => pullTelegram()), false);
+      assert.equal(applied, null);
       assert.equal(await run({ connected: false, vaults: null }), false);
       assert.equal(applied, null); assert.equal(s.tgConnected, false);
       assert.equal(await withFetch(async () => { throw new Error('offline'); }, () => pullTelegram()), false);
       s.tgUsername = null;
       localStorage.removeItem('cym_tg_sub');
       assert.equal(await pullTelegram(), false);
+    }],
+  ],
+  flushTelegramSync: [
+    ['є непереданий зміни - відправляє одразу з keepalive і скасовує очікування; нічого не змінилось або бота немає - не відправляє', async ({ flushTelegramSync, onFavoritesChanged, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot'; s.tgDirty = false; s.tgSyncTimer = null;
+      s.deps.getPinnedAddresses = () => ['0x1111111111111111111111111111111111111111'];
+      s.deps.apiFetch = async () => jsonResponse({ events: [] });
+      const puts = [];
+      const stub = async (url, init) => { puts.push(init); return jsonResponse({ vaults: 1, connected: true }); };
+      await withFetch(stub, async () => {
+        assert.equal(flushTelegramSync(), null);
+        onFavoritesChanged();
+        assert.equal(s.tgDirty, true); assert.notEqual(s.tgSyncTimer, null);
+        await flushTelegramSync();
+      });
+      assert.equal(puts.length, 1); assert.equal(puts[0].keepalive, true);
+      assert.equal(s.tgDirty, false);
+      s.tgUsername = null; assert.equal(flushTelegramSync(), null);
+    }],
+    ['відповідь на застарілий запит не скидає позначку: зміна під час PUT лишає тягнення вимкненим', async ({ syncTelegram, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot'; s.tgDirty = true;
+      s.deps.getPinnedAddresses = () => [];
+      await withFetch(async () => { s.favChangeSeq++; return jsonResponse({ vaults: 0, connected: true }); }, () => syncTelegram());
+      assert.equal(s.tgDirty, true);
+      await withFetch(async () => jsonResponse({ vaults: 0, connected: true }), () => syncTelegram());
+      assert.equal(s.tgDirty, false);
+      s.tgUsername = null;
     }],
   ],
   pullTelegramOnReturn: [
