@@ -296,6 +296,21 @@ export default {
       db.close();
     }],
   ],
+  vaultsWithTruncatedAdminEvents: [
+    ['повна сторінка, що не дістає до watermark, потребує догрузки; неповна або та, що дістає, - ні', ({ vaultsWithTruncatedAdminEvents: f }) => {
+      const db = makeDb();
+      db.prepare('INSERT INTO vault_watch_state (vault_address, state_json, updated_at) VALUES (?, ?, ?)').run(V1_ADDR, JSON.stringify({ last_admin_event_ts: NOW - 1000 }), NOW);
+      const items = (from, n) => Array.from({ length: n }, (_, i) => ({ timestamp: from + i }));
+      const cut = { address: V1_ADDR, adminEvents: { items: items(NOW - 500, 25) } };
+      const reaches = { address: V1_ADDR.toUpperCase(), adminEvents: { items: items(NOW - 1000, 25) } };
+      const short = { address: V1_ADDR, adminEvents: { items: items(NOW - 500, 24) } };
+      const fresh = { address: V2_ADDR, adminEvents: { items: items(NOW - 500, 25) } };
+      const out = f(db, [cut, reaches, short, fresh, { address: V2_ADDR }], 25, NOW);
+      assert.deepEqual(out.map(o => [o.rawVault, o.sinceTs]), [[cut, NOW - 1000], [fresh, NOW - 7 * DAY]]);
+      db.close();
+    }]
+  ],
+
   dropRepeatEvents: [
     ['відкидає повтор останньої збереженої події і повтор усередині пакета, порядок решти зберігає', ({ dropRepeatEvents }) => {
       const db = makeDb();

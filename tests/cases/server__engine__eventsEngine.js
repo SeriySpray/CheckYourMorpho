@@ -121,6 +121,31 @@ export default {
       assert.equal(details.totalWithdrawnAssets, 500);
       assert.equal(details.volumeUsd, 500);
     }],
+    ['reallocation: LLTV ринку у відсотках для кожного руху, пил дешевший за $1 не стає подією', ({ diffAdminEvents }) => {
+      const leg = (hash, type, amount, marketId, lltv) => ({
+        hash, timestamp: NOW - 100, type,
+        data: { [type === 'reallocateSupply' ? 'suppliedAssets' : 'withdrawnAssets']: amount, market: { marketId, lltv, collateralAsset: { symbol: 'cbBTC' }, loanAsset: { symbol: 'USDC', decimals: 6 } } }
+      });
+      const raw = [
+        leg('0xbig', 'reallocateWithdraw', '2000000000', '0xa', '860000000000000000'),
+        leg('0xbig', 'reallocateSupply', '2000000000', '0xb', '915000000000000000'),
+        leg('0xdust', 'reallocateWithdraw', '4854', '0xa', '860000000000000000'),
+        leg('0xdust', 'reallocateSupply', '4854', '0xb', '915000000000000000')
+      ];
+      const { events } = diffAdminEvents(baseCtx(), raw, { last_admin_event_ts: NOW - 500 }, NOW);
+      assert.equal(events.length, 1);
+      const d = JSON.parse(events[0].details_json);
+      assert.deepEqual(d.movements.map(m => [m.marketLabel, m.lltvPercent]), [['cbBTC/USDC', 86], ['cbBTC/USDC', 91.5]]);
+    }],
+    ['submitCap лише ставить збільшення cap у чергу: final-події немає, setCap після acceptCap - є', ({ diffAdminEvents }) => {
+      const market = { marketId: '0xm1', loanAsset: { symbol: 'USDC', decimals: 6 }, collateralAsset: { symbol: 'PT-x' } };
+      const raw = [
+        { hash: '0xs', timestamp: NOW - 200, type: 'submitCap', data: { cap: '4000000000000', market } },
+        { hash: '0xa', timestamp: NOW - 100, type: 'setCap', data: { cap: '4000000000000', market } }
+      ];
+      const { events } = diffAdminEvents(baseCtx(), raw, { last_admin_event_ts: NOW - 500 }, NOW);
+      assert.deepEqual(events.map(e => [e.kind, JSON.parse(e.details_json).rawType]), [['cap_changed', 'setCap']]);
+    }],
     ['класифікує setFee (WAD і частку): warning при прирості <= 5 в.п. і critical при прирості > 5 в.п.', ({ diffAdminEvents }) => {
       const rawWarn = [{ hash: '0xf1', timestamp: NOW - 50, type: 'setFee', data: { fee: '100000000000000000' } }]; // 10% (from 5% = +5pp)
       const r1 = diffAdminEvents(baseCtx(), rawWarn, { fee: 0.05, last_admin_event_ts: NOW - 100 }, NOW);
@@ -179,7 +204,7 @@ export default {
           ['guardian_changed', 'warning'],
           ['owner_changed', 'critical'],
           ['allocator_changed', 'warning'],
-          ['skim_recipient_changed', 'critical'],
+          ['skim_recipient_changed', 'info'],
           ['supply_queue_changed', 'info'],
           ['withdraw_queue_changed', 'info'],
           ['market_removal_revoked', 'info'],
@@ -190,6 +215,23 @@ export default {
     }],
   ],
   diffPendingConfigs: [
+    ['occurred_at - це час подачі (valid_at мінус timelock), а не час першої синхронізації', ({ diffPendingConfigs }) => {
+      const v1 = { functionName: 'SetGuardian', validAt: NOW - 30 * DAY, txHash: '0xg', decodedData: { __typename: 'VaultSetGuardianPendingData', guardian: { address: '0x3333333333333333333333333333333333333333' } } };
+      const v2 = { functionName: 'IncreaseAbsoluteCap', validAt: NOW + DAY, txHash: '0xc', decodedData: { cap: '1000000', config: { id: '0xcfg', type: 'MarketV1', data: {} } } };
+      const ctx = baseCtx({ timelock: 3 * DAY, timelocks: [{ functionName: 'increaseAbsoluteCap', selector: '0xf6f98fd5', duration: 7 * DAY }] });
+      const { events } = diffPendingConfigs(ctx, [v1, v2], [], NOW);
+      assert.equal(events[0].occurred_at, NOW - 33 * DAY);
+      assert.equal(events[1].occurred_at, NOW - 6 * DAY);
+      const unknown = diffPendingConfigs(baseCtx({ timelock: null }), [v1], [], NOW).events[0];
+      assert.equal(unknown.occurred_at, NOW);
+    }],
+    ['relative cap понад 100% як старе значення - це не реальне значення: oldCap = null', ({ diffPendingConfigs }) => {
+      const item = { functionName: 'IncreaseRelativeCap', validAt: NOW + DAY, txHash: '0xr', decodedData: { cap: '1000000000000000000', config: { id: '0xcfg', type: 'MarketV1', data: {} } } };
+      const { events } = diffPendingConfigs(baseCtx({ capsById: { '0xcfg': { absolute: 50000, relative: 50000 } } }), [item], [], NOW);
+      const d = JSON.parse(events[0].details_json);
+      assert.equal(d.oldCap, null);
+      assert.equal(d.newCap, 1);
+    }],
     ['cap V2: частка TVL, що додається, рахується від старого cap за config.id (relative - різниця часток, absolute - від активів vault-а)', ({ diffPendingConfigs }) => {
       const ctx = baseCtx({ assetsHuman: 1_000_000, capsById: { c1: { absolute: 100_000, relative: 0.1 }, c2: { absolute: 0, relative: 0 } } });
       const item = (fn, id, cap) => ({ functionName: fn, validAt: NOW + 3600, txHash: '0xh' + id, decodedData: { __typename: 'VaultV2IncreaseCapPendingData', cap, config: { id, type: 'Collateral', data: { collateralToken: { symbol: 'cbBTC' } } } } });
@@ -271,16 +313,25 @@ export default {
     }],
     ['переводить зниклі pending-події в applied (коли now >= valid_at) або revoked (коли now < valid_at)', ({ diffPendingConfigs }) => {
       const existing = [
-        { id: 10, dedupe_key: 'pending:0x1:SetCap:0xa:1749990000:0xm1:200', status: 'pending', valid_at: NOW - 10 },
-        { id: 11, dedupe_key: 'pending:0x1:SetCap:0xb:1750090000:0xm1:300', status: 'pending', valid_at: NOW + 5000 }
+        { id: 10, dedupe_key: 'pending:0x1:SetCap:0xa:1749990000:0xm1:200', status: 'pending', valid_at: NOW - 10, title: 'Pending supply cap increase for WETH/USDC' },
+        { id: 11, dedupe_key: 'pending:0x1:SetCap:0xb:1750090000:0xm1:300', status: 'pending', valid_at: NOW + 5000, title: 'Pending guardian change' }
       ];
       const { events, statusUpdates } = diffPendingConfigs(baseCtx(), [], existing, NOW);
       assert.equal(events.length, 0);
       assert.deepEqual(statusUpdates, [
-        { id: 10, dedupe_key: existing[0].dedupe_key, status: 'applied' },
-        { id: 11, dedupe_key: existing[1].dedupe_key, status: 'revoked' }
+        { id: 10, dedupe_key: existing[0].dedupe_key, status: 'applied', title: 'Supply cap increase for WETH/USDC executed' },
+        { id: 11, dedupe_key: existing[1].dedupe_key, status: 'revoked', title: 'Guardian change revoked' }
       ]);
     }],
+  ],
+  settledTitle: [
+    ['прибирає "Pending" і додає executed або revoked; інші заголовки й статуси не чіпає', ({ settledTitle }) => {
+      assert.equal(settledTitle('Pending absolute cap increase for mGLO collateral', 'applied'), 'Absolute cap increase for mGLO collateral executed');
+      assert.equal(settledTitle('Pending guardian change', 'revoked'), 'Guardian change revoked');
+      assert.equal(settledTitle('Pending guardian change', 'pending'), 'Pending guardian change');
+      assert.equal(settledTitle('Supply cap updated for X', 'applied'), 'Supply cap updated for X');
+      assert.equal(settledTitle(null, 'applied'), '');
+    }]
   ],
   flagTier: [
     ['CRITICAL і HIGH - red, MEDIUM - yellow, стрес-прапорці crowded exit - yellow попри свій рівень, невідоме - null', ({ flagTier }) => {

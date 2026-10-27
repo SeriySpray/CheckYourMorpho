@@ -6,6 +6,76 @@ import { CONFIG } from '../config.js';
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Fields of a V1 vault admin event, shared by the vault list query and the per-vault backfill
+const ADMIN_EVENT_ITEMS = `items {
+  hash
+  timestamp
+  type
+  data {
+    __typename
+    ... on SetGuardianEventData { guardian }
+    ... on SetCuratorEventData { curatorAddress }
+    ... on OwnershipEventData { owner }
+    ... on SetIsAllocatorEventData { allocator isAllocator }
+    ... on SetSkimRecipientEventData { skimRecipient }
+    ... on SetFeeEventData { fee }
+    ... on SetFeeRecipientEventData { feeRecipient }
+    ... on TimelockEventData { timelock }
+    ... on CapEventData {
+      cap
+      market {
+        marketId
+        loanAsset { symbol decimals }
+        collateralAsset { symbol }
+      }
+    }
+    ... on SetSupplyQueueEventData {
+      supplyQueue { marketId }
+    }
+    ... on SetWithdrawQueueEventData {
+      withdrawQueue { marketId }
+    }
+    ... on ReallocateSupplyEventData {
+      suppliedAssets
+      suppliedShares
+      market {
+        marketId
+        lltv
+        collateralAsset { symbol }
+        loanAsset { symbol decimals }
+      }
+    }
+    ... on ReallocateWithdrawEventData {
+      withdrawnAssets
+      withdrawnShares
+      market {
+        marketId
+        lltv
+        collateralAsset { symbol }
+        loanAsset { symbol decimals }
+      }
+    }
+    ... on RevokeCapEventData {
+      market {
+        marketId
+        collateralAsset { symbol }
+        loanAsset { symbol }
+      }
+    }
+    ... on RevokePendingMarketRemovalEventData {
+      market {
+        marketId
+        collateralAsset { symbol }
+        loanAsset { symbol }
+      }
+    }
+    ... on SkimEventData {
+      amount
+      asset { address symbol decimals }
+    }
+  }
+}`;
+
 /**
  * Sends a GraphQL query to the Morpho API with retries and timeout
  * @param {string} query
@@ -93,6 +163,37 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
   }
 
   throw new Error(`Morpho API request failed: maximum retries (${maxRetries}) exceeded`);
+}
+
+const ADMIN_PAGE_SIZE = 100;
+const ADMIN_MAX_PAGES = 50;
+
+/**
+ * Fetches the admin events of one V1 vault, newest first, page by page until `sinceTs` is passed.
+ * The vault list query only carries the latest 25 events: a busy vault or a sync gap needs more,
+ * and a cut in the middle of a transaction would keep only some of its reallocation legs.
+ */
+export async function fetchVaultAdminEvents(address, chainId, sinceTs) {
+  const query = `
+    query GetVaultAdminEvents($address: String!, $chainId: Int!, $first: Int!, $skip: Int!) {
+      vaultByAddress(address: $address, chainId: $chainId) {
+        adminEvents(first: $first, skip: $skip) {
+          ${ADMIN_EVENT_ITEMS}
+        }
+      }
+    }
+  `;
+  const items = [];
+  for (let page = 0; page < ADMIN_MAX_PAGES; page++) {
+    const data = await fetchMorphoGraphQL(query, { address, chainId: Number(chainId), first: ADMIN_PAGE_SIZE, skip: page * ADMIN_PAGE_SIZE });
+    const list = data?.vaultByAddress?.adminEvents?.items;
+    if (!Array.isArray(list)) throw new Error(`Malformed adminEvents response for ${address}`);
+    items.push(...list);
+    const oldest = list.length ? Math.min(...list.map(i => Number(i.timestamp || 0))) : 0;
+    if (list.length < ADMIN_PAGE_SIZE || oldest <= sinceTs) return items;
+    await sleep(CONFIG.api.pageThrottleMs);
+  }
+  throw new Error(`adminEvents of ${address} exceed ${ADMIN_MAX_PAGES * ADMIN_PAGE_SIZE} items since ${sinceTs}`);
 }
 
 /**
@@ -257,72 +358,7 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
             }
           }
           adminEvents(first: 25) {
-            items {
-              hash
-              timestamp
-              type
-              data {
-                __typename
-                ... on SetGuardianEventData { guardian }
-                ... on SetCuratorEventData { curatorAddress }
-                ... on OwnershipEventData { owner }
-                ... on SetIsAllocatorEventData { allocator isAllocator }
-                ... on SetSkimRecipientEventData { skimRecipient }
-                ... on SetFeeEventData { fee }
-                ... on SetFeeRecipientEventData { feeRecipient }
-                ... on TimelockEventData { timelock }
-                ... on CapEventData {
-                  cap
-                  market {
-                    marketId
-                    loanAsset { symbol decimals }
-                    collateralAsset { symbol }
-                  }
-                }
-                ... on SetSupplyQueueEventData {
-                  supplyQueue { marketId }
-                }
-                ... on SetWithdrawQueueEventData {
-                  withdrawQueue { marketId }
-                }
-                ... on ReallocateSupplyEventData {
-                  suppliedAssets
-                  suppliedShares
-                  market {
-                    marketId
-                    collateralAsset { symbol }
-                    loanAsset { symbol decimals }
-                  }
-                }
-                ... on ReallocateWithdrawEventData {
-                  withdrawnAssets
-                  withdrawnShares
-                  market {
-                    marketId
-                    collateralAsset { symbol }
-                    loanAsset { symbol decimals }
-                  }
-                }
-                ... on RevokeCapEventData {
-                  market {
-                    marketId
-                    collateralAsset { symbol }
-                    loanAsset { symbol }
-                  }
-                }
-                ... on RevokePendingMarketRemovalEventData {
-                  market {
-                    marketId
-                    collateralAsset { symbol }
-                    loanAsset { symbol }
-                  }
-                }
-                ... on SkimEventData {
-                  amount
-                  asset { address symbol decimals }
-                }
-              }
-            }
+            ${ADMIN_EVENT_ITEMS}
           }
         }
       }

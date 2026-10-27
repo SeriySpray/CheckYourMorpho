@@ -46,7 +46,9 @@ export const SEVERITY_RANK = Object.freeze({
   critical: 3
 });
 
-const INITIAL_ADMIN_BACKFILL_SECONDS = 7 * 86400;
+export const INITIAL_ADMIN_BACKFILL_SECONDS = 7 * 86400;
+// Reallocations moving less than this are rounding dust from allocator bots, not news for a depositor
+const MIN_REALLOCATION_USD = 1;
 const ZERO_ADDRESS_RE = /^0x0+$/i;
 
 const normAddr = addr => String(addr || '').trim().toLowerCase();
@@ -72,6 +74,12 @@ const marketLabelFromData = market => {
   const coll = market.collateralAsset?.symbol || market.collateral_asset_symbol || 'Idle';
   const loan = market.loanAsset?.symbol || market.loan_asset_symbol || '';
   return loan ? `${coll}/${loan}` : coll;
+};
+
+/** LLTV in percent (86, 91.5) from the WAD string the API returns; null when unknown. */
+const lltvPercentOf = raw => {
+  const n = Number(raw);
+  return raw !== null && raw !== undefined && raw !== '' && Number.isFinite(n) && n > 0 ? Math.round(n / 1e14) / 100 : null;
 };
 
 const extractMarketId = market =>
@@ -154,7 +162,8 @@ const mapSingleAdminEvent = (vaultContext, ev, trackingState, nowSec, disambigua
       details = { ...details, oldTimelock, newTimelock };
       if (newTimelock !== null) trackingState.timelock = newTimelock;
     }
-  } else if (type === 'setCap' || type === 'submitCap') {
+  } else if (type === 'setCap') {
+    // submitCap only queues a cap increase behind the timelock: the pending event covers it until acceptCap emits setCap
     kind = 'cap_changed';
     const market = data.market || null;
     const marketId = extractMarketId(market);
@@ -210,7 +219,7 @@ const mapSingleAdminEvent = (vaultContext, ev, trackingState, nowSec, disambigua
     details = { ...details, allocator, isAllocator };
   } else if (type === 'setSkimRecipient') {
     kind = 'skim_recipient_changed';
-    severity = 'critical';
+    severity = 'info'; // skim only collects stray tokens, never deposits
     const skimRecipient = data.skimRecipient || null;
     title = 'Skim recipient updated';
     details = { ...details, skimRecipient };
@@ -218,13 +227,13 @@ const mapSingleAdminEvent = (vaultContext, ev, trackingState, nowSec, disambigua
     kind = 'supply_queue_changed';
     severity = 'info';
     const queue = Array.isArray(data.supplyQueue) ? data.supplyQueue.map(extractMarketId).filter(Boolean) : [];
-    title = `Supply queue updated (${queue.length} markets)`;
+    title = `Supply queue updated (${queue.length} market${queue.length === 1 ? '' : 's'})`;
     details = { ...details, supplyQueue: queue };
   } else if (type === 'setWithdrawQueue') {
     kind = 'withdraw_queue_changed';
     severity = 'info';
     const queue = Array.isArray(data.withdrawQueue) ? data.withdrawQueue.map(extractMarketId).filter(Boolean) : [];
-    title = `Withdraw queue updated (${queue.length} markets)`;
+    title = `Withdraw queue updated (${queue.length} market${queue.length === 1 ? '' : 's'})`;
     details = { ...details, withdrawQueue: queue };
   } else if (type === 'revokePendingMarketRemoval' || type === 'revokeMarketRemoval') {
     kind = 'market_removal_revoked';
@@ -389,7 +398,7 @@ export function diffAdminEvents(vaultContext, rawAdminEvents = [], prevState = n
       const label = marketLabelFromData(market);
       const decimals = market?.loanAsset?.decimals ?? defaultDecimals;
       if (!byMarket.has(marketId)) {
-        byMarket.set(marketId, { marketId, marketLabel: label, suppliedAssets: 0, withdrawnAssets: 0 });
+        byMarket.set(marketId, { marketId, marketLabel: label, lltvPercent: lltvPercentOf(market?.lltv), suppliedAssets: 0, withdrawnAssets: 0 });
       }
       const entry = byMarket.get(marketId);
       if (item.type === 'reallocateSupply') {
@@ -406,6 +415,7 @@ export function diffAdminEvents(vaultContext, rawAdminEvents = [], prevState = n
     const movements = [...byMarket.values()];
     const volumeTokens = Math.max(totalSupplied, totalWithdrawn);
     const volumeUsd = priceUsd > 0 ? Math.round(volumeTokens * priceUsd * 100) / 100 : null;
+    if (volumeUsd !== null && volumeUsd < MIN_REALLOCATION_USD) continue;
     const dedupeKey = buildDedupeKey('admin_event', {
       vaultAddress,
       hash: grp.hash,
@@ -582,7 +592,9 @@ const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelock
       : toHumanTokenAmount(rawCap, decimals);
     const isRelative = fn === 'IncreaseRelativeCap';
     const prevCap = cfgId ? vaultContext.capsById?.[cfgId] : null;
-    const oldCapHuman = prevCap ? (isRelative ? prevCap.relative : prevCap.absolute) : null;
+    const prevValue = prevCap ? (isRelative ? prevCap.relative : prevCap.absolute) : null;
+    // A relative cap above 100% is not a real previous value (seen once in API data); unknown beats a wrong "from"
+    const oldCapHuman = isRelative && prevValue > 1 ? null : prevValue;
     if (oldCapHuman && newCapHuman !== null && newCapHuman > oldCapHuman * 2) {
       severity = 'critical';
     }
@@ -632,11 +644,32 @@ const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelock
     title,
     details_json: JSON.stringify(details),
     dedupe_key: dedupeKey,
-    occurred_at: nowSec,
+    occurred_at: submittedAt(validAt, fn, vaultContext, currentTimelocks, nowSec),
     valid_at: validAt,
     detected_at: nowSec
   };
 };
+
+/**
+ * When a pending change was submitted: valid_at minus the timelock that guards it.
+ * Matters on first observation of a vault, whose pending changes may be months old; falls back to now.
+ */
+const submittedAt = (validAt, fn, vaultContext, currentTimelocks, nowSec) => {
+  const v2Fn = fn ? fn[0].toLowerCase() + fn.slice(1) : '';
+  const raw = currentTimelocks[v2Fn] !== undefined ? currentTimelocks[v2Fn] : vaultContext?.timelock;
+  const tl = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+  if (!Number.isFinite(validAt) || !Number.isFinite(tl) || tl < 0) return nowSec;
+  const at = validAt - tl;
+  return at > 0 && at < nowSec ? at : nowSec;
+};
+
+/** "Pending absolute cap increase for X" -> "Absolute cap increase for X executed" once the change settles. */
+export function settledTitle(title, status) {
+  const t = String(title || '');
+  if (!/^Pending /.test(t) || (status !== 'applied' && status !== 'revoked')) return t;
+  const rest = t.slice('Pending '.length);
+  return `${rest[0].toUpperCase()}${rest.slice(1)} ${status === 'applied' ? 'executed' : 'revoked'}`;
+}
 
 /**
  * Diffs currently active V1/V2 pendingConfigs against existing 'pending' rows in vault_events.
@@ -685,7 +718,8 @@ export function diffPendingConfigs(vaultContext, rawPendingConfigs = [], existin
       statusUpdates.push({
         id: row.id,
         dedupe_key: row.dedupe_key,
-        status: nextStatus
+        status: nextStatus,
+        title: settledTitle(row.title, nextStatus)
       });
     }
   }

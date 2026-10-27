@@ -189,6 +189,25 @@ export default {
       assert.equal(r.length, 2);
     }],
   ],
+  fetchVaultAdminEvents: [
+    ['гортає сторінки по 100, доки найстаріша подія не дійде до sinceTs, і повертає все разом', async ({ fetchVaultAdminEvents: f }) => {
+      const vars = [];
+      const pageOf = (from) => Array.from({ length: 100 }, (_, i) => ({ hash: '0x' + (from - i), timestamp: from - i }));
+      const impl = async (_u, init) => {
+        const v = JSON.parse(init.body).variables; vars.push(v);
+        return jsonResponse({ data: { vaultByAddress: { adminEvents: { items: pageOf(1000 - v.skip) } } } });
+      };
+      const r = await fastTimers({}, () => withFetch(impl, () => f('0xv', '8453', 850)));
+      assert.equal(r.length, 200);
+      assert.deepEqual(vars.map(v => [v.address, v.chainId, v.first, v.skip]), [['0xv', 8453, 100, 0], ['0xv', 8453, 100, 100]]);
+    }],
+    ['неповна сторінка завершує; зламана відповідь - помилка, а не порожній список', async ({ fetchVaultAdminEvents: f }) => {
+      const r = await noRetries(() => withFetch(async () => jsonResponse({ data: { vaultByAddress: { adminEvents: { items: [{ timestamp: 5 }] } } } }), () => f('0xv', 1, 0)));
+      assert.equal(r.length, 1);
+      await assert.rejects(noRetries(() => withFetch(async () => jsonResponse({ data: { vaultByAddress: null } }), () => f('0xv', 1, 0))), /Malformed adminEvents/);
+    }]
+  ],
+
   fetchAllVaults: [
     ['некоректна відповідь -> Malformed vaults', async ({ fetchAllVaults: f }) => {
       await assert.rejects(noRetries(() => withFetch(async () => jsonResponse({ data: {} }), () => f())), /Malformed vaults/);

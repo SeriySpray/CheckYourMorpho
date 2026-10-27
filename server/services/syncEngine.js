@@ -1,7 +1,7 @@
 import { getDatabase, checkpointDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
-import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory } from './morphoApi.js';
-import { syncVaultEvents } from './eventsService.js';
+import { fetchAllVaults, fetchAllVaultV2s, fetchCuratorDirectory, fetchVaultAdminEvents } from './morphoApi.js';
+import { syncVaultEvents, vaultsWithTruncatedAdminEvents } from './eventsService.js';
 import { refreshTokenTags } from './tokenTags.js';
 import {
   normalizeVault,
@@ -338,6 +338,17 @@ export async function syncAllVaults(options = {}) {
     console.log('[SyncEngine] Fetching Morpho Vaults V2...');
     const rawVaultsV2 = await fetchAllVaultV2s(options.chainIds ?? null);
     console.log(`[SyncEngine] Fetched ${rawVaultsV2.length} V2 vaults from Morpho GraphQL.`);
+
+    // Complete the admin events of vaults whose 25-item page does not reach the last seen event
+    for (const { rawVault, sinceTs } of vaultsWithTruncatedAdminEvents(db, rawVaultsV1)) {
+      try {
+        rawVault.adminEvents.items = await fetchVaultAdminEvents(rawVault.address, rawVault.chain?.id, sinceTs);
+      } catch (err) {
+        // Skip the vault this round: diffing a cut page would move its watermark past the missing events
+        console.warn(`[SyncEngine] Admin events of ${rawVault.address} incomplete, retrying next sync: ${err.message}`);
+        rawVault.adminEvents = null;
+      }
+    }
 
     const v1ByAddress = new Map(rawVaultsV1.map(rv => [(rv.address || '').toLowerCase(), rv]));
 

@@ -7,7 +7,8 @@ import {
   diffDerivedState,
   detectTvlOutflow,
   verdictReasons,
-  isRepeatEvent
+  isRepeatEvent,
+  INITIAL_ADMIN_BACKFILL_SECONDS
 } from '../engine/eventsEngine.js';
 import { formatUnits } from './normalizers.js';
 
@@ -107,6 +108,29 @@ export function removeRepeatEvents(db, { dryRun = false } = {}) {
 }
 
 /**
+ * V1 vaults whose adminEvents page came back full while its oldest item is still newer than the vault's watermark:
+ * older events are missing from the page. Returns [{ rawVault, sinceTs }] to complete with fetchVaultAdminEvents.
+ */
+export function vaultsWithTruncatedAdminEvents(db, rawVaultsV1 = [], pageSize = 25, nowSec = Math.floor(Date.now() / 1000)) {
+  const watermarks = new Map();
+  for (const r of db.prepare('SELECT vault_address, state_json FROM vault_watch_state').all()) {
+    try {
+      const ts = JSON.parse(r.state_json)?.last_admin_event_ts;
+      if (ts !== null && ts !== undefined) watermarks.set(String(r.vault_address).toLowerCase(), Number(ts));
+    } catch { /* unreadable state: treated as first observation */ }
+  }
+  const out = [];
+  for (const rv of Array.isArray(rawVaultsV1) ? rawVaultsV1 : []) {
+    const items = rv?.adminEvents?.items;
+    if (!rv?.address || !Array.isArray(items) || items.length < pageSize) continue;
+    const sinceTs = watermarks.get(String(rv.address).toLowerCase()) ?? nowSec - INITIAL_ADMIN_BACKFILL_SECONDS;
+    const oldest = Math.min(...items.map(i => Number(i?.timestamp || 0)));
+    if (oldest > sinceTs) out.push({ rawVault: rv, sinceTs });
+  }
+  return out;
+}
+
+/**
  * Computes and persists vault events (admin events, pending timelock configs, bad debt, delisting and 24h TVL outflow),
  * hourly vault samples
  * and updates vault_watch_state in a single SQLite transaction.
@@ -161,7 +185,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     }
   }
 
-  const pendingRows = db.prepare("SELECT id, vault_address, dedupe_key, status, valid_at FROM vault_events WHERE status = 'pending'").all();
+  const pendingRows = db.prepare("SELECT id, vault_address, dedupe_key, status, valid_at, title FROM vault_events WHERE status = 'pending'").all();
   const pendingByVault = new Map();
   for (const r of pendingRows) {
     const k = String(r.vault_address).toLowerCase();
@@ -336,7 +360,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
 
   const updatePendingStmt = db.prepare(`
     UPDATE vault_events
-    SET status = ?
+    SET status = ?, title = COALESCE(?, title)
     WHERE id = ?
   `);
 
@@ -385,7 +409,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     }
 
     for (const upd of statusUpdates) {
-      const res = updatePendingStmt.run(upd.status, upd.id);
+      const res = updatePendingStmt.run(upd.status, upd.title ?? null, upd.id);
       updatedPendingCount += Number(res?.changes || 0);
     }
 
