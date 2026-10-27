@@ -173,7 +173,7 @@ const ADMIN_MAX_PAGES = 50;
  * The vault list query only carries the latest 25 events: a busy vault or a sync gap needs more,
  * and a cut in the middle of a transaction would keep only some of its reallocation legs.
  */
-export async function fetchVaultAdminEvents(address, chainId, sinceTs) {
+export async function fetchVaultAdminEvents(address, chainId, sinceTs, maxPages = ADMIN_MAX_PAGES) {
   const query = `
     query GetVaultAdminEvents($address: String!, $chainId: Int!, $first: Int!, $skip: Int!) {
       vaultByAddress(address: $address, chainId: $chainId) {
@@ -184,7 +184,7 @@ export async function fetchVaultAdminEvents(address, chainId, sinceTs) {
     }
   `;
   const items = [];
-  for (let page = 0; page < ADMIN_MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const data = await fetchMorphoGraphQL(query, { address, chainId: Number(chainId), first: ADMIN_PAGE_SIZE, skip: page * ADMIN_PAGE_SIZE });
     const list = data?.vaultByAddress?.adminEvents?.items;
     if (!Array.isArray(list)) throw new Error(`Malformed adminEvents response for ${address}`);
@@ -193,7 +193,7 @@ export async function fetchVaultAdminEvents(address, chainId, sinceTs) {
     if (list.length < ADMIN_PAGE_SIZE || oldest <= sinceTs) return items;
     await sleep(CONFIG.api.pageThrottleMs);
   }
-  throw new Error(`adminEvents of ${address} exceed ${ADMIN_MAX_PAGES * ADMIN_PAGE_SIZE} items since ${sinceTs}`);
+  throw new Error(`adminEvents of ${address} exceed ${maxPages * ADMIN_PAGE_SIZE} items since ${sinceTs}`);
 }
 
 /**
