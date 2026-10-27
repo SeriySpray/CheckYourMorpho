@@ -492,7 +492,7 @@ export async function syncAllVaults(options = {}) {
 
     try {
       const evStats = syncVaultEvents(db, rawVaultsV1, rawVaultsV2, { chainIds: options.chainIds ?? null });
-      console.log(`[Events] Processed ${evStats.vaultsProcessed} vaults: +${evStats.insertedCount} events, ${evStats.updatedPendingCount} pending updated, ${evStats.prunedCount} pruned.`);
+      console.log(`[Events] Processed ${evStats.vaultsProcessed} vaults: +${evStats.insertedCount} events (${evStats.repeatsSkipped} repeats skipped), ${evStats.updatedPendingCount} pending updated, ${evStats.prunedCount} pruned.`);
     } catch (evErr) {
       console.error('[Events] Failed to sync vault events:', evErr.message);
     }

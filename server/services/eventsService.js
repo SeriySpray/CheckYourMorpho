@@ -6,7 +6,8 @@ import {
   buildWatchState,
   diffDerivedState,
   detectTvlOutflow,
-  verdictReasons
+  verdictReasons,
+  isRepeatEvent
 } from '../engine/eventsEngine.js';
 import { formatUnits } from './normalizers.js';
 
@@ -43,6 +44,66 @@ export function pruneOldEvents(db, nowSec = Math.floor(Date.now() / 1000), reten
     WHERE occurred_at < ? AND status != 'pending'
   `).run(cutoff);
   return Number(res?.changes || 0);
+}
+
+const repeatKey = (ev) => `${String(ev.vault_address).toLowerCase()}|${ev.kind}`;
+
+/**
+ * Drops events that only repeat the latest stored event of the same vault and kind (see isRepeatEvent).
+ * Candidates are checked in time order, so a repeat inside one batch is caught too. Returns the events to keep, in input order.
+ */
+export function dropRepeatEvents(db, events) {
+  if (!Array.isArray(events) || events.length === 0) return [];
+  const latest = new Map();
+  const rows = db.prepare(`
+    SELECT e.vault_address, e.kind, e.severity, e.status, e.title, e.details_json, e.occurred_at
+    FROM vault_events e
+    JOIN (SELECT MAX(id) AS id FROM vault_events WHERE status = 'final' GROUP BY vault_address, kind) m ON m.id = e.id
+  `).all();
+  for (const r of rows) latest.set(repeatKey(r), r);
+  const repeats = new Set();
+  for (const ev of [...events].sort((a, b) => Number(a.occurred_at) - Number(b.occurred_at))) {
+    const key = repeatKey(ev);
+    if (isRepeatEvent(ev, latest.get(key))) repeats.add(ev);
+    else if (String(ev.status || 'final') === 'final') latest.set(key, ev);
+  }
+  return events.filter(ev => !repeats.has(ev));
+}
+
+/**
+ * Deletes stored events that only repeat an earlier one of the same vault and kind, by the same rule as dropRepeatEvents.
+ * With dryRun nothing is deleted. Returns { total, byKind }.
+ */
+export function removeRepeatEvents(db, { dryRun = false } = {}) {
+  const rows = db.prepare(`
+    SELECT id, vault_address, kind, severity, status, title, details_json, occurred_at
+    FROM vault_events WHERE status = 'final'
+    ORDER BY vault_address, kind, occurred_at, id
+  `).all();
+  const kept = new Map();
+  const ids = [];
+  const byKind = {};
+  for (const r of rows) {
+    const key = repeatKey(r);
+    if (isRepeatEvent(r, kept.get(key))) {
+      ids.push(r.id);
+      byKind[r.kind] = (byKind[r.kind] || 0) + 1;
+    } else {
+      kept.set(key, r);
+    }
+  }
+  if (!dryRun && ids.length > 0) {
+    const del = db.prepare('DELETE FROM vault_events WHERE id = ?');
+    db.exec('BEGIN IMMEDIATE TRANSACTION;');
+    try {
+      for (const id of ids) del.run(id);
+      db.exec('COMMIT;');
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      throw err;
+    }
+  }
+  return { total: ids.length, byKind };
 }
 
 /**
@@ -298,13 +359,14 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     WHERE vault_address = ?
   `);
 
+  const freshEvents = dropRepeatEvents(db, eventsToInsert);
   let insertedCount = 0;
   let updatedPendingCount = 0;
   let prunedCount = 0;
 
   db.exec('BEGIN IMMEDIATE TRANSACTION;');
   try {
-    for (const ev of eventsToInsert) {
+    for (const ev of freshEvents) {
       const res = insertEventStmt.run(
         ev.vault_address,
         ev.chain_id,
@@ -348,6 +410,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
 
   return {
     insertedCount,
+    repeatsSkipped: eventsToInsert.length - freshEvents.length,
     updatedPendingCount,
     prunedCount,
     vaultsProcessed: vaults.length,

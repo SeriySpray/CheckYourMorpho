@@ -446,4 +446,31 @@ export default {
       assert.equal(a.dedupe_key, b.dedupe_key); assert.notEqual(a.dedupe_key, c.dedupe_key);
     }],
   ],
+  isRepeatEvent: [
+    ['черга з тим самим набором ринків - повтор, навіть у іншому порядку; інший склад - ні', ({ isRepeatEvent }) => {
+      const q = (list, t = NOW) => ({ kind: 'supply_queue_changed', status: 'final', title: 'Supply queue updated (2 markets)', occurred_at: t, details_json: JSON.stringify({ txHash: '0x' + t, supplyQueue: list }) });
+      assert.equal(isRepeatEvent(q(['0xA', '0xb'], NOW + 30 * DAY), q(['0xa', '0xB'])), true, 'регістр і час не важать');
+      assert.equal(isRepeatEvent(q(['0xb', '0xa']), q(['0xa', '0xb'])), true, 'перестановка тих самих ринків - не нова інформація');
+      assert.equal(isRepeatEvent(q(['0xa', '0xc']), q(['0xa', '0xb'])), false, 'інший ринок у черзі');
+      assert.equal(isRepeatEvent(q(['0xa']), q(['0xa', '0xb'])), false);
+      assert.equal(isRepeatEvent(q(['0xa']), null), false);
+    }],
+    ['відтік TVL: повтор, якщо за добу вже був не менш серйозний; ескалація до critical і нова доба - ні', ({ isRepeatEvent }) => {
+      const t = (severity, at) => ({ kind: 'tvl_drop', status: 'final', severity, title: `Vault TVL dropped`, occurred_at: at, details_json: '{}' });
+      assert.equal(isRepeatEvent(t('warning', NOW + 3600), t('warning', NOW)), true);
+      assert.equal(isRepeatEvent(t('warning', NOW + 3600), t('critical', NOW)), true);
+      assert.equal(isRepeatEvent(t('critical', NOW + 3600), t('warning', NOW)), false, 'ескалація - нова інформація');
+      assert.equal(isRepeatEvent(t('warning', NOW + DAY), t('warning', NOW)), false, 'через добу - нове вікно');
+    }],
+    ['інші події: той самий заголовок і деталі без txHash за добу; парні переходи, pending і реалокації - ніколи', ({ isRepeatEvent }) => {
+      const e = (kind, title, details, at = NOW, status = 'final') => ({ kind, status, title, occurred_at: at, details_json: JSON.stringify(details) });
+      assert.equal(isRepeatEvent(e('fee_changed', 'Fee 10%', { txHash: '0x2', newFee: 0.1 }, NOW + 60), e('fee_changed', 'Fee 10%', { txHash: '0x1', newFee: 0.1 })), true);
+      assert.equal(isRepeatEvent(e('fee_changed', 'Fee 20%', { newFee: 0.2 }, NOW + 60), e('fee_changed', 'Fee 10%', { newFee: 0.1 })), false);
+      assert.equal(isRepeatEvent(e('verdict_worsened', 'G to R', {}, NOW + 60), e('verdict_worsened', 'G to R', {})), false);
+      assert.equal(isRepeatEvent(e('pending_cap_increase', 'Cap', {}, NOW + 60, 'pending'), e('pending_cap_increase', 'Cap', {}, NOW, 'pending')), false);
+      assert.equal(isRepeatEvent(e('reallocation', 'R', {}, NOW + 60), e('reallocation', 'R', {})), false);
+      assert.equal(isRepeatEvent(e('fee_changed', 'Fee 10%', {}, NOW + 60), e('curator_changed', 'Fee 10%', {})), false, 'різні типи');
+      assert.equal(isRepeatEvent({ ...e('fee_changed', 'F', {}), details_json: 'not json' }, e('fee_changed', 'F', {}, NOW + 60)), true, 'зламаний JSON = порожні деталі');
+    }]
+  ],
 };

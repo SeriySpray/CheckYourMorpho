@@ -296,4 +296,45 @@ export default {
       db.close();
     }],
   ],
+  dropRepeatEvents: [
+    ['відкидає повтор останньої збереженої події і повтор усередині пакета, порядок решти зберігає', ({ dropRepeatEvents }) => {
+      const db = makeDb();
+      const q = (id, list, at) => ({ vault_address: V1_ADDR, chain_id: 1, kind: 'supply_queue_changed', source: 'admin_event', severity: 'info', status: 'final',
+        title: 'Supply queue updated', details_json: JSON.stringify({ supplyQueue: list }), dedupe_key: `q${id}`, occurred_at: at, valid_at: null, detected_at: at });
+      const stored = q(1, ['0xa', '0xb'], NOW - 600);
+      db.prepare(`INSERT INTO vault_events (vault_address, chain_id, kind, source, severity, status, title, details_json, dedupe_key, occurred_at, valid_at, detected_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(...Object.values(stored));
+      const same = q(2, ['0xA', '0xb'], NOW);
+      const changed = q(3, ['0xb', '0xc'], NOW + 60);
+      const backAgain = q(4, ['0xc', '0xb'], NOW + 120);
+      const otherVault = { ...q(5, ['0xa', '0xb'], NOW), vault_address: V2_ADDR };
+      assert.deepEqual(dropRepeatEvents(db, [otherVault, backAgain, changed, same]).map(e => e.dedupe_key), ['q5', 'q3']);
+      assert.deepEqual(dropRepeatEvents(db, []), []);
+      db.close();
+    }]
+  ],
+
+  removeRepeatEvents: [
+    ['dryRun лише рахує, звичайний запуск видаляє повтори і лишає першу подію', ({ removeRepeatEvents }) => {
+      const db = makeDb();
+      const ins = db.prepare(`INSERT INTO vault_events (vault_address, chain_id, kind, source, severity, status, title, details_json, dedupe_key, occurred_at, valid_at, detected_at)
+        VALUES (?, 1, ?, 'x', ?, ?, ?, ?, ?, ?, NULL, ?)`);
+      const add = (key, kind, severity, details, at, status = 'final') => ins.run(V1_ADDR, kind, severity, status, kind, JSON.stringify(details), key, at, at);
+      add('a', 'withdraw_queue_changed', 'info', { withdrawQueue: ['0x1'] }, NOW);
+      add('b', 'withdraw_queue_changed', 'info', { withdrawQueue: ['0x1'] }, NOW + 100);
+      add('c', 'withdraw_queue_changed', 'info', { withdrawQueue: ['0x1'] }, NOW + 200);
+      add('d', 'tvl_drop', 'warning', {}, NOW);
+      add('e', 'tvl_drop', 'critical', {}, NOW + 100);
+      add('f', 'tvl_drop', 'warning', {}, NOW + 200);
+      add('g', 'pending_cap_increase', 'warning', {}, NOW, 'pending');
+      add('h', 'pending_cap_increase', 'warning', {}, NOW + 1, 'pending');
+      const dry = removeRepeatEvents(db, { dryRun: true });
+      assert.deepEqual(dry, { total: 3, byKind: { withdraw_queue_changed: 2, tvl_drop: 1 } });
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM vault_events').get().c, 8, 'dryRun нічого не видаляє');
+      removeRepeatEvents(db);
+      assert.deepEqual(db.prepare('SELECT dedupe_key AS k FROM vault_events ORDER BY k').all().map(r => r.k), ['a', 'd', 'e', 'g', 'h']);
+      assert.equal(removeRepeatEvents(db).total, 0, 'повторний запуск нічого не знаходить');
+      db.close();
+    }]
+  ],
 };

@@ -426,16 +426,16 @@ const EXPLAINERS = {
     }))
   }),
   supply_queue_changed: (d) => ({
-    summary: 'Order of markets for new deposits changed',
+    summary: 'Markets that receive new deposits changed',
     what: `The supply queue was updated; it now lists ${(d.supplyQueue || []).length} markets.`,
-    impact: 'New deposits are placed into markets in this order. It is routine and changes nothing for money already deposited.',
+    impact: 'New deposits go only to the markets in this queue, in this order. Money already deposited stays where it is.',
     facts: [],
     markets: d.supplyQueue || []
   }),
   withdraw_queue_changed: (d) => ({
-    summary: 'Order of markets used for withdrawals changed',
+    summary: 'Markets that pay out withdrawals changed',
     what: `The withdraw queue was updated; it now lists ${(d.withdrawQueue || []).length} markets.`,
-    impact: 'Withdrawals take cash from markets in this order. It is routine; a market missing from the queue cannot be used to pay out withdrawals.',
+    impact: 'Withdrawals take cash from these markets in this order. A market missing from the queue cannot be used to pay out withdrawals.',
     facts: [],
     markets: d.withdrawQueue || []
   })

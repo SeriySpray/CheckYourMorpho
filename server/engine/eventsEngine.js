@@ -917,3 +917,42 @@ export function detectTvlOutflow(vaultContext, currentAssets, windowMaxAssets, w
     detected_at: nowSec
   };
 }
+
+const REPEAT_WINDOW_SECONDS = 86400;
+// Transitions that come in opposite pairs: a repeat of one always has the reverse in between, so it is real news
+const PAIRED_KINDS = new Set(['verdict_worsened', 'verdict_improved', 'collateral_class_share_crossed']);
+const QUEUE_KEYS = Object.freeze({ supply_queue_changed: 'supplyQueue', withdraw_queue_changed: 'withdrawQueue' });
+
+const parseDetails = (json) => {
+  try { return JSON.parse(json || '{}') || {}; } catch { return {}; }
+};
+
+/**
+ * True when `ev` tells nothing new compared with `prev`, the latest kept event of the same vault and kind:
+ * - a queue event with the same set of markets as the previous one: bots re-set unchanged queues or only swap the order back and forth;
+ * - a TVL outflow within 24h of an earlier one that was at least as severe (the sliding window re-detects the same outflow);
+ * - any other final event with the same title and details (txHash aside) within 24h.
+ * Pending timelocked changes, reallocations and paired transitions are never treated as repeats.
+ */
+export function isRepeatEvent(ev, prev) {
+  if (!ev || !prev || ev.kind !== prev.kind) return false;
+  if (String(ev.status || 'final') !== 'final' || String(prev.status || 'final') !== 'final') return false;
+  if (ev.kind === 'reallocation' || PAIRED_KINDS.has(ev.kind)) return false;
+  const d = parseDetails(ev.details_json);
+  const p = parseDetails(prev.details_json);
+
+  const queueKey = QUEUE_KEYS[ev.kind];
+  if (queueKey) {
+    const a = Array.isArray(d[queueKey]) ? d[queueKey].map(x => String(x).toLowerCase()) : null;
+    const b = Array.isArray(p[queueKey]) ? p[queueKey].map(x => String(x).toLowerCase()) : null;
+    return Boolean(a && b) && a.length === b.length && a.every(x => b.includes(x));
+  }
+
+  if (!(Math.abs(Number(ev.occurred_at) - Number(prev.occurred_at)) < REPEAT_WINDOW_SECONDS)) return false;
+  if (ev.kind === 'tvl_drop') {
+    return (SEVERITY_RANK[prev.severity] || 0) >= (SEVERITY_RANK[ev.severity] || 0);
+  }
+  const { txHash: _a, ...restD } = d;
+  const { txHash: _b, ...restP } = p;
+  return ev.title === prev.title && JSON.stringify(restD) === JSON.stringify(restP);
+}
