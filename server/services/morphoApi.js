@@ -18,10 +18,18 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
 
   while (attempt <= maxRetries) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), CONFIG.api.requestTimeoutMs);
+    let timer;
+    // The abort alone once left fetch pending forever (sync stuck for 22 h on 2026-10-26), so the timer also rejects
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`Request timed out after ${CONFIG.api.requestTimeoutMs}ms`));
+      }, CONFIG.api.requestTimeoutMs);
+    });
+    deadline.catch(() => {});
 
     try {
-      const res = await fetch(CONFIG.api.morphoGraphqlUrl, {
+      const res = await Promise.race([deadline, fetch(CONFIG.api.morphoGraphqlUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,7 +38,7 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
         },
         body: JSON.stringify({ query, variables }),
         signal: controller.signal
-      });
+      })]);
 
       if (res.status === 429) {
         attempt++;
@@ -39,7 +47,7 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
         }
         const retryAfterSec = parseInt(res.headers.get('retry-after') || '0', 10);
         const backoff = retryAfterSec > 0
-          ? retryAfterSec * 1000
+          ? Math.min(retryAfterSec * 1000, 60000)
           : (1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 500);
         console.warn(`[MorphoAPI] Rate limited (429). Retrying in ${backoff}ms (attempt ${attempt}/${maxRetries})...`);
         await sleep(backoff);
@@ -50,7 +58,7 @@ export async function fetchMorphoGraphQL(query, variables = {}) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
-      const json = await res.json();
+      const json = await Promise.race([deadline, res.json()]);
       if (json.errors && json.errors.length > 0 && json.data) {
         console.warn(`[MorphoAPI] Partial GraphQL response, ${json.errors.length} error(s): ${json.errors[0]?.message}`);
         return json.data;

@@ -122,6 +122,19 @@ export default {
         assert.deepEqual(data, { ok: 1 }); assert.equal(s.calls, 2);
       } finally { clearTimeout(t); }
     }],
+    ['запит, що ігнорує abort і ніколи не завершується, все одно падає за requestTimeoutMs', async ({ fetchMorphoGraphQL: f }) => {
+      const s = sequence([() => new Promise(() => {})]);
+      await fastTimers({ retries: 0, timeoutMs: 20 }, () => assert.rejects(withFetch(s.impl, () => f('q')), /timed out after 20ms/));
+    }],
+    ['тіло відповіді, що ніколи не читається, падає за requestTimeoutMs', async ({ fetchMorphoGraphQL: f }) => {
+      const stuck = { ok: true, status: 200, statusText: '200', headers: new Headers(), json: () => new Promise(() => {}) };
+      await fastTimers({ retries: 0, timeoutMs: 20 }, () => assert.rejects(withFetch(async () => stuck, () => f('q')), /timed out after 20ms/));
+    }],
+    ['429 з величезним Retry-After чекає не більше 60 с', async ({ fetchMorphoGraphQL: f }) => {
+      const s = sequence([jsonResponse({}, 429, { 'Retry-After': '86400' }), jsonResponse({ data: { ok: 1 } })]);
+      const delays = await fastTimers({ retries: 1 }, async d => { await withFetch(s.impl, () => f('q')); return d; });
+      assert.deepEqual(delays, [60000]);
+    }],
   ],
   fetchPaginatedVaults: [
     ['збирає одну неповну сторінку', async ({ fetchPaginatedVaults: f }) => {
