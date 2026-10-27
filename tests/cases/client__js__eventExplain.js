@@ -75,8 +75,8 @@ export default {
     }],
     ['частка менше одиниці у відсотках, розмір у доларах за ціною активу', ({ explainCap }) => {
       const x = explainCap({ marketLabel: 'cbBTC/USDC', oldCap: 1_000_000, newCap: 3_000_000, tvlShareAdded: 0.2 }, { sym: 'USDC', price: 1, tvl: 10_000_000 }, false);
-      assert.equal(x.summary, "Up to 20% of the vault's current size can go to cbBTC/USDC");
-      assert.match(x.impact, /3\.0M USDC \(about \$3\.0M\)/); assert.match(x.impact, /^The allocator/);
+      assert.equal(x.summary, "Cap on cbBTC/USDC grows by 20% of the vault's current size", 'tvlShareAdded - це приріст, а не весь cap');
+      assert.match(x.impact, /3\.0M USDC \(about \$3\.0M\)/); assert.match(x.impact, /^The allocator/); assert.match(x.impact, /more than before/);
     }]
   ],
   explainTimelock: [
@@ -129,6 +129,16 @@ export default {
       const broken = explainEvent({ kind: 'reallocation', title: 'T', details: { movements: 'oops' } }, null, NOW);
       assert.deepEqual(broken.movements, []);
       assert.ok(explainEvent({ kind: 'bad_debt_appeared', title: 'T', details: null }, null, NOW).what.length > 0);
+    }],
+    ['текст іде за статусом: pending - "Once executed", applied - минулий час, revoked - скасовано без наслідків', ({ explainEvent }) => {
+      const ev = status => ({ kind: 'pending_cap_increase', status, title: 'T', valid_at: NOW + 60, details: { marketLabel: 'cbBTC/USDC', oldCap: null, newCap: 1_000_000, capWasZero: true } });
+      const pending = explainEvent(ev('pending'), vault, NOW);
+      assert.match(pending.impact, /^Once executed/); assert.match(pending.what, /submitted/);
+      const applied = explainEvent(ev('applied'), vault, NOW);
+      assert.match(applied.impact, /^The allocator/); assert.match(applied.what, /The curator set/); assert.match(applied.timing, /in effect/);
+      const revoked = explainEvent({ ...ev('revoked'), kind: 'pending_market_removal' }, vault, NOW);
+      assert.match(revoked.summary, /^Cancelled: cbBTC\/USDC leaves the vault/);
+      assert.equal(revoked.impact, 'It never took effect, so nothing changed for depositors.');
     }],
     ['усі типи з бази без потрібних полів не друкують порожніх місць, undefined чи NaN', ({ explainEvent }) => {
       const kinds = ['pending_cap_increase', 'cap_changed', 'pending_market_removal', 'market_removal_revoked', 'cap_revoked', 'pending_timelock_change',

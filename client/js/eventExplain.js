@@ -156,12 +156,13 @@ function explainCap(d, c, pending) {
   }
 
   const isNew = d.capWasZero === true || (!hasOld && !relative);
+  const raised = !isNew && share && Number(d.oldCap) > 0; // share is then the increment, not the whole cap
   const collateral = collateralOf(label);
   const headline = `${unlimited ? 'any amount' : `up to ${share || size.replace(/ of deposits$/, '')}`} can go to ${target}`;
   return {
-    summary: isNew ? `New exposure: ${headline}` : headline[0].toUpperCase() + headline.slice(1),
+    summary: raised ? `Cap on ${target} grows by ${share}` : (isNew ? `New exposure: ${headline}` : headline[0].toUpperCase() + headline.slice(1)),
     what: `The curator ${pending ? 'submitted' : 'set'} a higher ${relative ? 'relative ' : ''}cap for ${target}.${isNew ? ' The vault has no allocation limit there today, so this opens a new exposure.' : ''}`,
-    impact: `${when} allocator can put ${unlimited ? '' : 'up to '}${size} into ${label ? 'this market' : 'it'}${share ? `, ${share}` : ''}. `
+    impact: `${when} allocator can put ${unlimited ? '' : 'up to '}${size} into ${label ? 'this market' : 'it'}${share ? `, ${share}${raised ? ' more than before' : ''}` : ''}. `
       + (collateral
         ? `Your deposit then depends more on ${collateral} and on the oracle that prices it: if the collateral loses value faster than liquidators can act, the market takes bad debt and the vault's depositors share the loss.`
         : 'Your deposit then depends more on whatever that target lends against; open the vault audit to see its markets.'),
@@ -245,7 +246,7 @@ function explainAllocator(d, c, pending) {
 }
 
 const EXPLAINERS = {
-  pending_cap_increase: (d, c) => explainCap(d, c, true),
+  pending_cap_increase: (d, c) => explainCap(d, c, c.pending),
   cap_changed: (d, c) => {
     if (Number(d.newCap) === 0) {
       return {
@@ -277,13 +278,13 @@ const EXPLAINERS = {
     facts: [{ label: 'Market', value: d.marketLabel || shortAddress(d.marketId) }]
   }),
 
-  pending_timelock_change: (d, c) => explainTimelock(d, c, true),
+  pending_timelock_change: (d, c) => explainTimelock(d, c, c.pending),
   timelock_changed: (d, c) => explainTimelock(d, c, false),
-  pending_guardian_change: (d, c) => explainGuardian(d, c, true),
+  pending_guardian_change: (d, c) => explainGuardian(d, c, c.pending),
   guardian_changed: (d, c) => explainGuardian(d, c, false),
-  pending_fee_change: (d, c) => explainFee(d, c, true),
+  pending_fee_change: (d, c) => explainFee(d, c, c.pending),
   fee_changed: (d, c) => explainFee(d, c, false),
-  pending_allocator_change: (d, c) => explainAllocator(d, c, true),
+  pending_allocator_change: (d, c) => explainAllocator(d, c, c.pending),
   allocator_changed: (d, c) => explainAllocator(d, c, false),
 
   curator_changed: (d) => !d.curator ? null : ({
@@ -336,7 +337,7 @@ const EXPLAINERS = {
       summary: open ? `Anyone will be able to ${gate.who.split(' (')[0]}` : `Only approved addresses could ${gate.who.split(' (')[0]}`,
       what: `The curator submitted ${open ? 'the removal of the' : 'a new'} gate controlling who can ${gate.who}.`,
       impact: open
-        ? 'Without a gate this action is open to everyone. Removing a gate makes access permissionless.'
+        ? 'Without a gate, anyone can do this.'
         : `A gate is a contract that approves or blocks addresses. After execution only addresses it allows can ${gate.who}.${gate.exit ? ' This gate sits on the way out, so it could block your withdrawal.' : ''}`,
       facts: [{ label: 'Setter', value: d.functionName, mono: true }, ...(open ? [] : [{ label: 'Gate', value: d.gate, mono: true }])]
     };
@@ -417,7 +418,7 @@ const EXPLAINERS = {
   reallocation: (d) => ({
     summary: `${usd(d.volumeUsd) || 'Funds'} moved between ${d.marketsCount || 'several'} markets`,
     what: `The allocator moved ${usd(d.volumeUsd) || 'funds'} between ${d.marketsCount || 'several'} markets in one transaction.`,
-    impact: 'Reallocations are routine. They change which collateral your deposit is exposed to, so the list below shows where the money went.',
+    impact: 'Reallocations are routine, but each one changes which collateral your deposit is exposed to.',
     facts: [],
     movements: (Array.isArray(d.movements) ? d.movements : []).map(m => ({
       label: m.marketLabel || shortAddress(m.marketId),
@@ -464,7 +465,8 @@ export function explainEvent(event, vault = null, nowSec = Math.floor(Date.now()
     vault,
     sym: vault?.asset?.symbol || 'tokens',
     price: Number(vault?.asset?.priceUsd) || 0,
-    tvl: Number(vault?.totalAssetsUsd) || 0
+    tvl: Number(vault?.totalAssetsUsd) || 0,
+    pending: !['applied', 'revoked', 'final'].includes(String(event?.status || '').toLowerCase())
   };
   const explainer = EXPLAINERS[String(event?.kind || '')];
   let out = null;
@@ -474,10 +476,11 @@ export function explainEvent(event, vault = null, nowSec = Math.floor(Date.now()
     out = null; // malformed details: the generic text below is still correct
   }
   const title = String(event?.title || '');
+  const revoked = String(event?.status || '').toLowerCase() === 'revoked';
   return {
-    summary: out?.summary || '',
+    summary: out?.summary ? (revoked ? `Cancelled: ${out.summary}` : out.summary) : '',
     what: out?.what || title,
-    impact: out?.impact || '',
+    impact: revoked ? 'It never took effect, so nothing changed for depositors.' : (out?.impact || ''),
     timing: describeTiming(event, nowSec),
     facts: (out?.facts || []).filter(f => f && f.value !== '' && f.value !== null && f.value !== undefined),
     movements: out?.movements || [],
