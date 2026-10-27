@@ -121,7 +121,7 @@ export default {
       assert.equal(details.totalWithdrawnAssets, 500);
       assert.equal(details.volumeUsd, 500);
     }],
-    ['reallocation: LLTV ринку у відсотках для кожного руху, пил дешевший за $1 не стає подією', ({ diffAdminEvents }) => {
+    ['reallocation: LLTV ринку у відсотках для кожного руху, реалокація на $0.00 не стає подією, а 50 центів лишаються', ({ diffAdminEvents }) => {
       const leg = (hash, type, amount, marketId, lltv) => ({
         hash, timestamp: NOW - 100, type,
         data: { [type === 'reallocateSupply' ? 'suppliedAssets' : 'withdrawnAssets']: amount, market: { marketId, lltv, collateralAsset: { symbol: 'cbBTC' }, loanAsset: { symbol: 'USDC', decimals: 6 } } }
@@ -130,11 +130,13 @@ export default {
         leg('0xbig', 'reallocateWithdraw', '2000000000', '0xa', '860000000000000000'),
         leg('0xbig', 'reallocateSupply', '2000000000', '0xb', '915000000000000000'),
         leg('0xdust', 'reallocateWithdraw', '4854', '0xa', '860000000000000000'),
-        leg('0xdust', 'reallocateSupply', '4854', '0xb', '915000000000000000')
+        leg('0xdust', 'reallocateSupply', '4854', '0xb', '915000000000000000'),
+        leg('0xcents', 'reallocateWithdraw', '500000', '0xa', '860000000000000000'),
+        leg('0xcents', 'reallocateSupply', '500000', '0xb', '915000000000000000')
       ];
       const { events } = diffAdminEvents(baseCtx(), raw, { last_admin_event_ts: NOW - 500 }, NOW);
-      assert.equal(events.length, 1);
-      const d = JSON.parse(events[0].details_json);
+      assert.deepEqual(events.map(e => JSON.parse(e.details_json).volumeUsd).sort((a, b) => a - b), [0.5, 2000]);
+      const d = JSON.parse(events.find(e => JSON.parse(e.details_json).volumeUsd === 2000).details_json);
       assert.deepEqual(d.movements.map(m => [m.marketLabel, m.lltvPercent]), [['cbBTC/USDC', 86], ['cbBTC/USDC', 91.5]]);
     }],
     ['submitCap лише ставить збільшення cap у чергу: final-події немає, setCap після acceptCap - є', ({ diffAdminEvents }) => {

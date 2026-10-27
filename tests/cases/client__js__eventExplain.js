@@ -144,6 +144,10 @@ export default {
       assert.equal(x.summary, '$1.2K moved between 1 market');
       assert.equal(x.movements[0].label, 'cbBTC/USDC · LLTV 86%');
     }],
+    ['реалокація на 50 центів показує центи, а не $1 чи $0', ({ explainEvent }) => {
+      const x = explainEvent({ kind: 'reallocation', status: 'final', details: { volumeUsd: 0.5, marketsCount: 2, movements: [] } }, null, NOW);
+      assert.ok(x.what.includes('$0.50'), x.what);
+    }],
     ['дві різні ринки з тією самою парою й LLTV (різні oracle) розрізняє короткий marketId', ({ explainEvent }) => {
       const m = (id, lltv, s, w) => ({ marketId: id, marketLabel: 'WBTC/USDT', lltvPercent: lltv, suppliedAssets: s, withdrawnAssets: w });
       const x = explainEvent({ kind: 'reallocation', status: 'final', details: { volumeUsd: 3000, marketsCount: 3, movements: [m('0x3c5a24aa', 86, 2000, 0), m('0xa921efbb', 86, 1000, 0), m('0x1111', 91.5, 0, 3000)] } }, null, NOW);

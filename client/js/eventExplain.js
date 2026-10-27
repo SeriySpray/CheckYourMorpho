@@ -16,6 +16,7 @@ function usd(value) {
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  if (abs < 1) return `${sign}$${abs.toFixed(2)}`; // cents stay visible: $0.50, not $1 or $0
   return `${sign}$${Math.round(abs)}`;
 }
 

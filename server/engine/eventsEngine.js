@@ -47,8 +47,6 @@ export const SEVERITY_RANK = Object.freeze({
 });
 
 export const INITIAL_ADMIN_BACKFILL_SECONDS = 7 * 86400;
-// Reallocations moving less than this are rounding dust from allocator bots, not news for a depositor
-const MIN_REALLOCATION_USD = 1;
 const ZERO_ADDRESS_RE = /^0x0+$/i;
 
 const normAddr = addr => String(addr || '').trim().toLowerCase();
@@ -415,7 +413,8 @@ export function diffAdminEvents(vaultContext, rawAdminEvents = [], prevState = n
     const movements = [...byMarket.values()];
     const volumeTokens = Math.max(totalSupplied, totalWithdrawn);
     const volumeUsd = priceUsd > 0 ? Math.round(volumeTokens * priceUsd * 100) / 100 : null;
-    if (volumeUsd !== null && volumeUsd < MIN_REALLOCATION_USD) continue;
+    // A reallocation worth $0.00 moves nothing; any real amount, even cents, is kept
+    if (volumeUsd === 0) continue;
     const dedupeKey = buildDedupeKey('admin_event', {
       vaultAddress,
       hash: grp.hash,

@@ -3,7 +3,7 @@
  * Handles bell button, unread counts, upcoming timelocked changes, and past event history.
  */
 
-import { explainEvent, formatEventDate } from './eventExplain.js?v=20261028_labels';
+import { explainEvent, formatEventDate } from './eventExplain.js?v=20261028_cents';
 
 // Mirrors server/engine/eventsEngine.js EVENT_KINDS
 const EVENT_KINDS = Object.freeze([
@@ -341,7 +341,9 @@ function formatEventDetails(details, kind = '') {
   // 10. Reallocation
   if (k === 'reallocation') {
     if (details.volumeUsd) {
-      return `$${formatCompactNumber(details.volumeUsd)} volume across ${details.marketsCount || 0} markets`;
+      const v = Number(details.volumeUsd);
+      const n = Number(details.marketsCount) || 0;
+      return `$${v < 1 ? v.toFixed(2) : formatCompactNumber(v)} volume across ${n} market${n === 1 ? '' : 's'}`;
     }
     if (details.marketsCount) return `${details.marketsCount} markets`;
     return '';
