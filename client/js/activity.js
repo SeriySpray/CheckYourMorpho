@@ -3,6 +3,8 @@
  * Handles bell button, unread counts, upcoming timelocked changes, and past event history.
  */
 
+import { explainEvent, formatEventDate } from './eventExplain.js?v=20261027_events';
+
 // Mirrors server/engine/eventsEngine.js EVENT_KINDS
 const EVENT_KINDS = Object.freeze([
   // Admin events (V1)
@@ -85,6 +87,7 @@ let isLoading = false;
 let fetchError = null;
 let eventsBound = false;
 let periodicTimer = null;
+let detailEvent = null; // event shown in the detail view; a snapshot, so list refreshes do not close or change it
 
 /**
  * Formats countdown string for pending timelocked events.
@@ -235,7 +238,9 @@ function formatCapDetails(details) {
     const oldCap = details.oldCap !== null && details.oldCap !== undefined && details.oldCap !== '' ? Number(details.oldCap) : null;
     const newCap = details.newCap !== null && details.newCap !== undefined && details.newCap !== '' ? Number(details.newCap) : null;
 
-    if (oldCap !== null && newCap !== null) {
+    if (newCap !== null && newCap >= 1e12) {
+      text = 'No cap limit'; // idle markets get caps like 2e15 tokens, which only means "unlimited"
+    } else if (oldCap !== null && newCap !== null) {
       let multStr = '';
       if (oldCap > 0 && newCap > 0 && newCap > oldCap) {
         const ratio = newCap / oldCap;
@@ -627,7 +632,8 @@ function groupEvents(events, isUpcoming = false) {
       valid_at: nearestValidAt,
       occurred_at: newestOccurredAt,
       detected_at: newestDetectedAt,
-      groupedCount: count
+      groupedCount: count,
+      members: grp // the detail view lists every change of the transaction
     });
   }
 
@@ -937,9 +943,12 @@ function buildEventRowViewModel(event, vaultLookup, nowSec = Math.floor(Date.now
 
   return {
     id: event.id,
+    event,
     vault,
     vaultAddress: addr,
-    isClickable: Boolean(vault),
+    isClickable: true, // every row opens its detail view; the vault audit is a button there
+    canAudit: Boolean(vault),
+    summary: explainEvent(event, vault, nowSec).summary,
     severity: sev,
     severityRaw: sevRaw,
     status: statusRaw,
@@ -971,15 +980,16 @@ function renderActivityRow(vm, onRowClick) {
     li.className = 'activity-row is-clickable';
     li.tabIndex = 0;
     li.setAttribute('role', 'button');
-    li.setAttribute('aria-label', `${vm.severity}: ${vm.vaultName} - ${vm.title}`);
+    li.dataset.eventId = String(vm.id);
+    li.setAttribute('aria-label', `${vm.severity}: ${vm.vaultName} - ${vm.title}. Open details`);
     li.addEventListener('click', () => {
-      if (onRowClick) onRowClick(vm.vault);
+      if (onRowClick) onRowClick(vm);
     });
     li.addEventListener('keydown', (e) => {
       if (e.target !== li) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        if (onRowClick) onRowClick(vm.vault);
+        if (onRowClick) onRowClick(vm);
       }
     });
   } else {
@@ -1006,6 +1016,7 @@ function renderActivityRow(vm, onRowClick) {
       </div>
       <div class="activity-event-title">${escape(vm.title)}</div>
       ${vm.detail ? `<div class="activity-event-detail" title="${escape(vm.detail)}">${escape(vm.detail)}</div>` : ''}
+      ${vm.summary ? `<div class="activity-event-summary">${escape(vm.summary)}</div>` : ''}
     </div>
     <div class="activity-row-right">
       ${rightHtml}
@@ -1013,6 +1024,131 @@ function renderActivityRow(vm, onRowClick) {
   `;
 
   return li;
+}
+
+// Block explorers for transaction and address links; chains missing here show the hash without a link
+const EXPLORERS = Object.freeze({
+  1: 'etherscan.io',
+  8453: 'basescan.org',
+  42161: 'arbiscan.io',
+  10: 'optimistic.etherscan.io',
+  137: 'polygonscan.com'
+});
+
+/**
+ * Builds the HTML of the event detail view: plain-language explanation, timing, money movements and raw facts.
+ */
+function buildEventDetailHtml(ev, nowSec = Math.floor(Date.now() / 1000)) {
+  const esc = deps.escapeHtml || (s => String(s ?? ''));
+  const isUpcoming = String(ev.status || '').toLowerCase() === 'pending';
+  const vm = buildEventRowViewModel(ev, deps.getVault, nowSec, isUpcoming);
+  const x = explainEvent(ev, vm.vault, nowSec);
+  const d = ev.details && typeof ev.details === 'object' ? ev.details : {};
+  const validAt = ev.valid_at ?? ev.validAt ?? null;
+  const occurredAt = ev.occurred_at ?? ev.occurredAt ?? null;
+  const explorer = EXPLORERS[vm.chainId] || null;
+  const sym = vm.vault?.asset?.symbol || '';
+
+  const when = isUpcoming
+    ? (vm.isExecutable ? `Executable now, since ${formatEventDate(validAt)}` : `Executable ${vm.countdown}, ${formatEventDate(validAt)}`)
+    : [formatRelativeTime(occurredAt, nowSec), formatEventDate(occurredAt)].filter(Boolean).join(', ');
+
+  const section = (heading, body) => body ? `<section class="activity-detail-section"><h4>${esc(heading)}</h4>${body}</section>` : '';
+  const para = (text) => text ? `<p>${esc(text)}</p>` : '';
+
+  const facts = [...x.facts, { label: 'Network', value: vm.chainName }];
+  if (/^0x[0-9a-fA-F]{40}$/.test(vm.vaultAddress)) facts.push({ label: 'Vault address', value: vm.vaultAddress, mono: true, link: explorer ? `https://${explorer}/address/${vm.vaultAddress}` : null });
+  const txHash = String(d.txHash || '');
+  if (/^0x[0-9a-fA-F]{64}$/.test(txHash)) facts.push({ label: 'Transaction', value: formatAddress(txHash), mono: true, title: txHash, link: explorer ? `https://${explorer}/tx/${txHash}` : null });
+  const detectedAt = ev.detected_at ?? ev.detectedAt ?? null;
+  if (detectedAt) facts.push({ label: 'Detected', value: formatEventDate(detectedAt) });
+
+  const factsHtml = `<dl class="activity-detail-facts">${facts.map(f => {
+    const val = f.link
+      ? `<a href="${esc(f.link)}" target="_blank" rel="noopener noreferrer"${f.title ? ` title="${esc(f.title)}"` : ''}>${esc(f.value)}</a>`
+      : `<span${f.title ? ` title="${esc(f.title)}"` : ''}>${esc(f.value)}</span>`;
+    return `<div><dt>${esc(f.label)}</dt><dd${f.mono ? ' class="mono"' : ''}>${val}</dd></div>`;
+  }).join('')}</dl>`;
+
+  const moves = [...x.movements].sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+  const movesHtml = moves.length ? `<ul class="activity-detail-moves">${moves.map(m => `
+    <li><span>${esc(m.label)}</span><span class="mono ${m.change >= 0 ? 'is-in' : 'is-out'}">${m.change >= 0 ? '+' : '-'}${esc(formatCompactNumber(Math.abs(m.change)))}${sym ? ` ${esc(sym)}` : ''}</span></li>`).join('')}</ul>` : '';
+  const queueHtml = x.markets.length ? `<ol class="activity-detail-queue">${x.markets.map(id => `<li class="mono" title="${esc(id)}">${esc(formatAddress(id))}</li>`).join('')}</ol>` : '';
+  const members = Array.isArray(ev.members) && ev.members.length > 1 ? ev.members : [];
+  const membersHtml = members.length ? `<ul class="activity-detail-members">${members.map(m => {
+    const line = formatEventDetails(m.details, m.kind);
+    return `<li>${esc(String(m.title || '').replace(/\s+x\d+$/, ''))}${line ? `<span>${esc(line)}</span>` : ''}</li>`;
+  }).join('')}</ul>` : '';
+
+  return `
+    <div class="activity-detail-bar">
+      <button type="button" class="activity-detail-back">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        Back to activity
+      </button>
+    </div>
+    <article class="activity-detail-body">
+      <div class="activity-row-header">
+        <span class="activity-severity activity-sev-${esc(vm.severityRaw)}">
+          <span class="activity-sev-dot" aria-hidden="true"></span>
+          <span class="activity-sev-label">${esc(vm.severity)}</span>
+        </span>
+        <span class="vault-chain-badge ${esc(vm.chainClass)}">${esc(vm.chainName)}</span>
+        <span class="activity-vault-name" title="${esc(vm.vaultName)}">${esc(vm.vaultName)}</span>
+        ${vm.statusLabel ? `<span class="activity-status-tag status-${esc(vm.statusLabel)}">${esc(vm.statusLabel)}</span>` : ''}
+      </div>
+      <h3 id="activity-detail-title" class="activity-detail-title">${esc(x.summary || vm.title)}</h3>
+      ${x.summary ? `<p class="activity-detail-subtitle">${esc(vm.title)}</p>` : ''}
+      ${when ? `<p class="activity-detail-when mono${vm.isExecutable ? ' executable' : ''}">${esc(when)}</p>` : ''}
+      ${section('What changed', para(x.what))}
+      ${section('What it means for you', para(x.impact))}
+      ${section(isUpcoming ? 'When it takes effect' : 'Status', para(x.timing))}
+      ${section(`Changes in this transaction (${members.length})`, membersHtml)}
+      ${section('Where the money went', movesHtml)}
+      ${section('Markets in the new order', queueHtml)}
+      ${section('Details', factsHtml)}
+      ${vm.canAudit ? '<button type="button" class="activity-detail-audit">Open vault audit</button>' : ''}
+    </article>
+  `;
+}
+
+/**
+ * Shows the detail view of an event in place of the list. The list keeps refreshing underneath.
+ */
+function openEventDetail(ev) {
+  const panel = deps.DOM.activityPanel || document.getElementById('activity-panel');
+  const box = document.getElementById('activity-detail');
+  if (!ev || !panel || !box) return;
+  detailEvent = ev;
+  box.innerHTML = buildEventDetailHtml(ev);
+  box.querySelector('.activity-detail-back')?.addEventListener('click', () => closeEventDetail(true));
+  box.querySelector('.activity-detail-audit')?.addEventListener('click', () => {
+    const vault = deps.getVault ? deps.getVault(ev.vault_address || ev.vaultAddress || '') : null;
+    if (!vault) return;
+    const pos = deps.getSphereParticlePos ? deps.getSphereParticlePos(vault.address) : null;
+    if (deps.openVaultAudit) deps.openVaultAudit(vault, pos);
+  });
+  panel.classList.add('is-detail');
+  box.classList.remove('hidden');
+  box.focus?.();
+}
+
+/**
+ * Returns from the detail view to the list; with restoreFocus the row of that event gets the focus back.
+ */
+function closeEventDetail(restoreFocus = false) {
+  if (!detailEvent) return;
+  const id = detailEvent.id;
+  detailEvent = null;
+  const panel = deps.DOM.activityPanel || document.getElementById('activity-panel');
+  const box = document.getElementById('activity-detail');
+  panel?.classList.remove('is-detail');
+  if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+  if (restoreFocus) {
+    const rows = document.getElementById('activity-events-list')?.querySelectorAll('[data-event-id]') || [];
+    const row = [...rows].find(r => r.dataset.eventId === String(id));
+    (row || document.getElementById('activity-list-container'))?.focus?.();
+  }
 }
 
 /**
@@ -1153,10 +1289,7 @@ function renderActivityPanel() {
 
   for (const ev of currentEvents) {
     const vm = buildEventRowViewModel(ev, deps.getVault, nowSec, isUpcoming);
-    const rowEl = renderActivityRow(vm, (vault) => {
-      const pos = deps.getSphereParticlePos ? deps.getSphereParticlePos(vault.address) : null;
-      if (deps.openVaultAudit) deps.openVaultAudit(vault, pos);
-    });
+    const rowEl = renderActivityRow(vm, (rowVm) => openEventDetail(rowVm.event));
     frag.appendChild(rowEl);
     list.appendChild(rowEl);
   }
@@ -1216,6 +1349,7 @@ export function openActivityPanel() {
  * Closes the activity panel and returns focus to the bell button.
  */
 export function closeActivityPanel() {
+  closeEventDetail();
   isPanelOpen = false;
   const btn = deps.DOM.activityBtn || document.getElementById('explorer-activity-btn');
   const panel = deps.DOM.activityPanel || document.getElementById('activity-panel');
@@ -1417,6 +1551,7 @@ function setupActivityEvents() {
 
   const switchTab = (newTab) => {
     if (activeTab === newTab) return;
+    closeEventDetail();
     activeTab = newTab;
     renderActivityPanel();
   };
@@ -1455,7 +1590,8 @@ function setupActivityEvents() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && isPanelOpen) {
       e.preventDefault();
-      closeActivityPanel();
+      if (detailEvent) closeEventDetail(true);
+      else closeActivityPanel();
     }
   });
 

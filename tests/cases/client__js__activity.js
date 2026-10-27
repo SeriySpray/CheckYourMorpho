@@ -196,6 +196,7 @@ export default {
     ['форматування абсолютного та відносного cap', ({ formatCapDetails }) => {
       assert.equal(formatCapDetails({ oldCap: 1000000, newCap: 10000000 }), 'Cap 1.0M to 10.0M (x10)');
       assert.equal(formatCapDetails({ oldCap: null, newCap: 10000000 }), 'New cap 10.0M');
+      assert.equal(formatCapDetails({ oldCap: null, newCap: 2e15 }), 'No cap limit', 'idle-ринок з величезним cap');
       assert.equal(formatCapDetails({ functionName: 'IncreaseRelativeCap', newCap: 1 }), 'Relative cap to 100%');
       assert.equal(formatCapDetails({ functionName: 'IncreaseRelativeCap', oldCap: 0.2, newCap: 0.5 }), 'Relative cap 20% to 50%');
       assert.equal(formatCapDetails(null), '');
@@ -625,7 +626,8 @@ export default {
       const event = { id: 2, vault_address: '0xunknown', severity: 'info' };
       const vm = buildEventRowViewModel(event, () => null, 1000, true);
       assert.equal(vm.vault, null);
-      assert.equal(vm.isClickable, false);
+      assert.equal(vm.isClickable, true, 'рядок відкриває деталі навіть без сховища');
+      assert.equal(vm.canAudit, false, 'кнопки аудиту немає, бо сховище невідоме');
       assert.equal(vm.vaultName, 'Unknown Vault');
       assert.equal(vm.title, '');
       assert.equal(vm.detail, '');
@@ -691,6 +693,13 @@ export default {
       assert.ok(el.innerHTML.includes('&lt;img'));
       assert.ok(el.innerHTML.includes('executable now'));
     }],
+    ['показує рядок наслідків і позначає рядок id події для повернення фокусу', ({ renderActivityRow }) => {
+      const vm = { id: 42, vault: null, isClickable: true, severity: 'WARNING', severityRaw: 'warning', chainName: 'ETH', chainClass: '',
+        vaultName: 'V', title: 'Pending guardian change', detail: '', summary: 'A new address can veto curator changes', isUpcoming: false, relativeTime: '1h ago' };
+      const el = renderActivityRow(vm, () => {});
+      assert.ok(el.innerHTML.includes('activity-event-summary') && el.innerHTML.includes('A new address can veto curator changes'));
+      assert.equal(el.dataset.eventId, '42');
+    }],
     ['відображає бейдж статусу для applied та revoked', ({ renderActivityRow }) => {
       const vmApplied = {
         id: 1, vault: null, isClickable: false, severity: 'INFO', severityRaw: 'info',
@@ -700,6 +709,80 @@ export default {
       const el = renderActivityRow(vmApplied);
       assert.ok(el.innerHTML.includes('activity-status-tag status-applied'));
       assert.ok(el.innerHTML.includes('applied'));
+    }]
+  ],
+
+  buildEventDetailHtml: [
+    ['пояснення, екранування, посилання на транзакцію лише для валідного хешу і відомої мережі', ({ buildEventDetailHtml, __state: s }) => {
+      s.deps.escapeHtml = str => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const addr = '0x1111111111111111111111111111111111111111';
+      const tx = '0x' + 'ab'.repeat(32);
+      s.deps.getVault = () => ({ address: addr, name: '<b>V</b>', chainId: 1, asset: { symbol: 'USDC', priceUsd: 1 }, totalAssetsUsd: 10_000_000 });
+      const ev = { id: 7, vault_address: addr, chain_id: 1, kind: 'pending_cap_increase', status: 'pending', severity: 'warning',
+        title: 'Pending supply cap increase for cbBTC/USDC', valid_at: 2_000_000_000, detected_at: 1_900_000_000,
+        details: { txHash: tx, marketLabel: 'cbBTC/USDC', oldCap: 1_000_000, newCap: 3_000_000, tvlShareAdded: 0.2 } };
+      const html = buildEventDetailHtml(ev, 1_999_000_000);
+      assert.ok(html.includes('What changed') && html.includes('What it means for you') && html.includes('When it takes effect'));
+      assert.ok(html.includes('cbBTC'), 'пояснення називає заставу');
+      assert.ok(html.includes(`https://etherscan.io/tx/${tx}`), 'посилання на транзакцію в Etherscan');
+      assert.ok(html.includes('&lt;b&gt;V&lt;/b&gt;'), 'назва сховища екранована');
+      assert.ok(html.includes('activity-detail-audit'), 'кнопка аудиту для відомого сховища');
+
+      s.deps.getVault = () => null;
+      const bad = buildEventDetailHtml({ ...ev, chain_id: 747474, details: { txHash: 'javascript:alert(1)' } }, 1_999_000_000);
+      assert.ok(!bad.includes('javascript:'), 'невалідний хеш не потрапляє в посилання');
+      assert.ok(!bad.includes('activity-detail-audit'), 'без сховища немає кнопки аудиту');
+      const noExplorer = buildEventDetailHtml({ ...ev, chain_id: 747474 }, 1_999_000_000);
+      assert.ok(!noExplorer.includes('href='), 'для мережі без експлорера хеш без посилання');
+    }],
+    ['згрупований рядок показує всі зміни транзакції, реалокація - куди пішли гроші', ({ buildEventDetailHtml, __state: s }) => {
+      s.deps.getVault = () => null;
+      const m = (id, label) => ({ id, kind: 'pending_cap_increase', status: 'pending', title: `Pending supply cap increase for ${label}`, details: { marketLabel: label, newCap: 5 } });
+      const grouped = { ...m(1, 'A/USDC'), title: 'Pending supply cap increase for A/USDC x2', members: [m(1, 'A/USDC'), m(2, 'B/USDC')] };
+      const html = buildEventDetailHtml(grouped, 1000);
+      assert.ok(html.includes('Changes in this transaction (2)') && html.includes('B/USDC'));
+      const re = buildEventDetailHtml({ id: 3, kind: 'reallocation', status: 'final', occurred_at: 900, title: 'Reallocation across 2 markets',
+        details: { volumeUsd: 1000, marketsCount: 2, movements: [{ marketLabel: 'X/USDC', suppliedAssets: 500, withdrawnAssets: 0 }, { marketLabel: 'Y/USDC', suppliedAssets: 0, withdrawnAssets: 500 }] } }, 1000);
+      assert.ok(html.length > 0 && re.includes('Where the money went') && re.includes('+500') && re.includes('-500'));
+    }]
+  ],
+
+  openEventDetail: [
+    ['відкриває деталі замість списку, оновлення списку їх не закриває, closeEventDetail повертає список', ({ openEventDetail, closeEventDetail, renderActivityPanel, __state: s }) => {
+      const dom = setupFakeDom();
+      s.deps.DOM = { ...dom, activityPanel: dom.panel };
+      s.deps.getVault = () => null;
+      s.deps.getPinnedAddresses = () => [];
+      s.activeScope = 'all';
+      const box = document.getElementById('activity-detail');
+      const ev = { id: 5, vault_address: '0x1', kind: 'tvl_drop', status: 'final', severity: 'critical', title: 'Vault TVL dropped by 40% in 24h', occurred_at: 1000,
+        details: { previousTvlUsd: 10_000_000, currentTvlUsd: 6_000_000, dropPercent: 40 } };
+      openEventDetail(ev);
+      assert.equal(s.detailEvent, ev);
+      assert.equal(dom.panel.classList.contains('is-detail'), true);
+      assert.ok(box.innerHTML.includes('$4.0M left the vault in 24 hours'));
+      s.cachedHistoryEvents = [ev];
+      renderActivityPanel();
+      assert.equal(s.detailEvent, ev, 'оновлення списку не закриває деталі');
+      closeEventDetail(true);
+      assert.equal(s.detailEvent, null);
+      assert.equal(dom.panel.classList.contains('is-detail'), false);
+      assert.equal(box.innerHTML, '');
+    }]
+  ],
+
+  closeEventDetail: [
+    ['без відкритих деталей нічого не робить; closeActivityPanel закриває й деталі', ({ closeEventDetail, openEventDetail, closeActivityPanel, __state: s }) => {
+      const dom = setupFakeDom();
+      s.deps.DOM = { ...dom, activityPanel: dom.panel };
+      s.deps.getVault = () => null;
+      dom.panel.classList.add('marker');
+      closeEventDetail(true);
+      assert.equal(dom.panel.classList.contains('marker'), true, 'панель не чіпається');
+      openEventDetail({ id: 9, kind: 'vault_delisted', status: 'final', title: 'Delisted', details: {} });
+      closeActivityPanel();
+      assert.equal(s.detailEvent, null);
+      assert.equal(dom.panel.classList.contains('is-detail'), false);
     }]
   ],
 
