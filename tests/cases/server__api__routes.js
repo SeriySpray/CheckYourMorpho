@@ -577,9 +577,22 @@ export default {
     }))],
     ['нові поля додано, наявні поля відповіді збережено', async mod => sandbox(async () => {
       const body = getJson(mod, '/api/status').body;
-      assert.deepEqual(Object.keys(body).sort(), ['isSyncInProgress', 'lastSuccessAt', 'lastSync', 'lastSyncResult', 'stale', 'stats', 'status']);
+      assert.deepEqual(Object.keys(body).sort(), ['isSyncInProgress', 'lastSuccessAt', 'lastSync', 'lastSyncResult', 'stale', 'stats', 'status', 'unclassifiedTokens']);
       assert.equal(typeof body.stale, 'boolean'); assert.equal(body.stale, false, 'щойно виконана синхронізація свіжа');
       assert.equal(Date.parse(body.lastSuccessAt) / 1000, body.lastSync.timestamp);
+    })],
+    ['unclassifiedTokens: застава без запису в tokenClasses.json за сумою; відомі токени, idle-ринки і пил < $1 пропускаються', async mod => sandbox(async db => {
+      const known = '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf';
+      const unk = '0x' + 'ab'.repeat(20);
+      ins(db, 'markets', M('u1', { collateral_asset_address: unk.toUpperCase().replace('0X', '0x'), collateral_asset_symbol: 'NEW' }));
+      ins(db, 'markets', M('u2', { collateral_asset_address: unk, collateral_asset_symbol: 'NEW' }));
+      ins(db, 'markets', M('k', { chain_id: 8453, collateral_asset_address: known, collateral_asset_symbol: 'cbBTC' }));
+      ins(db, 'markets', M('idle', { collateral_asset_address: null, collateral_asset_symbol: 'NONE' }));
+      ins(db, 'markets', M('dust', { collateral_asset_address: '0x' + 'cd'.repeat(20), collateral_asset_symbol: 'DUST' }));
+      ins(db, 'vaults', V(1)); ins(db, 'vaults', V(2));
+      ins(db, 'vault_allocations', A(1, 'u1', 600.4)); ins(db, 'vault_allocations', A(2, 'u2', 400)); ins(db, 'vault_allocations', A(1, 'k', 1e6));
+      ins(db, 'vault_allocations', A(1, 'idle', 5e5)); ins(db, 'vault_allocations', A(1, 'dust', 0.5));
+      assert.deepEqual(getJson(mod, '/api/status').body.unclassifiedTokens, [{ chainId: 1, address: unk, symbol: 'NEW', usd: 1000, vaults: 2 }]);
     })],
   ],
   handlePostSync: [

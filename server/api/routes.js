@@ -302,6 +302,13 @@ export function handleGetStatus(req, res) {
     const listedVaultsCount = db.prepare('SELECT COUNT(*) as count FROM vaults WHERE is_listed = 1').get()?.count || 0;
     const marketsCount = db.prepare('SELECT COUNT(*) as count FROM markets').get()?.count || 0;
     const allocationsCount = db.prepare('SELECT COUNT(*) as count FROM vault_allocations').get()?.count || 0;
+    // collateral that vaults lend against but tokenClasses.json does not know yet; idle markets have no collateral and are skipped
+    const unclassifiedTokens = db.prepare(`SELECT m.chain_id AS chainId, lower(m.collateral_asset_address) AS address, m.collateral_asset_symbol AS symbol,
+        SUM(a.supply_assets_usd) AS usd, COUNT(DISTINCT a.vault_address) AS vaults
+      FROM vault_allocations a JOIN markets m ON m.unique_key = a.market_unique_key
+      WHERE a.supply_assets_usd >= 1 AND m.collateral_asset_address LIKE '0x%' AND m.collateral_asset_address != '0x0000000000000000000000000000000000000000'
+      GROUP BY m.chain_id, lower(m.collateral_asset_address) ORDER BY usd DESC`).all()
+      .filter(t => !TOKEN_CLASSES.has(`${t.chainId}:${t.address}`)).map(t => ({ ...t, usd: Math.round(t.usd) }));
     // last_sync_all is written only by a committed full sync, and survives restarts unlike lastSyncResult
     const lastSuccessSec = syncRow ? Number(syncRow.value) : NaN;
     const hasSucceeded = Number.isFinite(lastSuccessSec) && lastSuccessSec > 0;
@@ -321,7 +328,8 @@ export function handleGetStatus(req, res) {
         listedVaultsCount,
         marketsCount,
         allocationsCount
-      }
+      },
+      unclassifiedTokens
     }, req);
   } catch (err) {
     console.error('[API] Failed to retrieve system status:', err);

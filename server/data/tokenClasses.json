@@ -2357,5 +2357,12 @@
   "subtype": "fiat_backed",
   "confidence": "high",
   "reason": "fiat-backed USD/EUR/GBP peg token"
+ },
+ "143:0xdbc05cfa3c359654704c81c3498874e2df8a7af4": {
+  "symbol": "PT-siUSD-7JAN2027-(ETH)",
+  "category": "pendle_pt",
+  "subtype": "live",
+  "confidence": "high",
+  "reason": "principal token, maturity 2027-01-07 after 2026-10-28"
  }
 }
