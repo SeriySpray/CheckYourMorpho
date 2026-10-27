@@ -72,12 +72,14 @@ const withEnv = (v, fn) => {
 
 export default {
   CHAINS: [['ethereum, base and arbitrum with all source names', ({ CHAINS: c }) => {
-    assert.deepEqual(Object.keys(c).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 143, 999, 4663, 8453, 42161, 747474]);
+    assert.deepEqual(Object.keys(c).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 143, 480, 988, 999, 4217, 4663, 5042, 8453, 42161, 747474]);
+    for (const id of Object.values(CONFIG.chains)) assert.ok(c[id], `chain ${id} synced from Morpho has collector sources`);
+    assert.ok(c[5042].kyber === 'arc' && /^0x[0-9a-fA-F]{40}$/.test(c[5042].usdc), 'Arc swaps are routed to its USDC');
     for (const id of [1, 8453, 42161]) { const v = c[id]; assert.ok(v.blockscout && v.llama && v.gecko && v.kyber && v.safe && v.explorer && v.n && v.feeds && /^0x[0-9a-fA-F]{40}$/.test(v.usdc), String(id)); }
     for (const v of Object.values(c)) assert.ok(v.llama, 'every listed chain has a price source');
     assert.equal(c[42161].safe, 'arb1');
     assert.ok(!c[143].blockscout && !c[143].explorer && !c[747474].kyber);
-    assert.deepEqual(Object.keys(c).filter(id => c[id].rpc).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 8453, 42161], 'public JSON-RPC for the EIP-1967 slots');
+    assert.deepEqual(Object.keys(c).filter(id => c[id].rpc).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 988, 4217, 5042, 8453, 42161], 'public JSON-RPC for the EIP-1967 slots');
   }]],
   isCollectorUrl: [['https on the listed hosts and Blockscout instances only', ({ isCollectorUrl: f }) => {
     for (const u of ['https://sourcify.dev/x', 'https://base.blockscout.com/api/v2/tokens/0x1', 'https://etherscan.io/readContract', 'https://api.geckoterminal.com/a', 'https://ethereum-rpc.publicnode.com/']) assert.ok(f(u), u);
@@ -100,7 +102,7 @@ export default {
       assert.ok(u.bsToken.startsWith('https://base.blockscout.com/api/v2/tokens/0xabcdef')); assert.ok(u.explorerImpl.endsWith('&v=' + impl));
       assert.ok(u.kyber.includes('/base/api/v1/routes') && u.kyber.includes('amountIn=5')); assert.ok(u.sourcify.includes('/contract/8453/') && u.sourcify.includes('fields=abi,compilation,proxyResolution,deployment'));
     }],
-    ['an unsupported chain gets only Sourcify', ({ sourceUrls: f }) => assert.deepEqual(Object.keys(f(5042, '0x' + '1'.repeat(40))), ['sourcify'])]
+    ['an unsupported chain gets only Sourcify', ({ sourceUrls: f }) => assert.deepEqual(Object.keys(f(56, '0x' + '1'.repeat(40))), ['sourcify'])]
   ],
   createFetcher: [
     ['a host that is not allowed is refused without a request', async ({ createFetcher: f }) => {
@@ -264,9 +266,9 @@ export default {
     ['everything down -> failed with empty groups; an unsupported chain asks only Sourcify and is never ok', async mod => {
       const r = await run(mod, { chainId: 1, address: SUSDE }, [[/./, { status: 500, body: 'oops' }]]);
       assert.equal(r.status, 'failed'); assert.equal(r.data.identity.name, null); assert.equal(r.data.contract.fn.mint, null); assert.deepEqual(r.data.control.controllers, []);
-      const o = await run(mod, { chainId: 5042, address: SUSDE });
+      const o = await run(mod, { chainId: 56, address: SUSDE });
       assert.equal(o.net.calls.length, 1); assert.equal(o.status, 'partial'); assert.equal(o.data.contract.sourcify_match, 'exact_match');
-      assert.equal((await run(mod, { chainId: 5042, address: SUSDE }, [[/./, { status: 500, body: '' }]])).status, 'partial');
+      assert.equal((await run(mod, { chainId: 56, address: SUSDE }, [[/./, { status: 500, body: '' }]])).status, 'partial');
     }],
     ['Sourcify does not know the contract: name and ABI come from Blockscout, a Pendle PT is still recognised, the status stays ok', async mod => {
       const pt = '0xecfafdc7741323a945a163ed068b5a3c43483957';
@@ -287,7 +289,7 @@ export default {
       assert.ok(!r.net.calls.some(u => u.includes('kyberswap'))); assert.deepEqual(r.data.liquidity.kyber, {});
     }],
     ['an unsupported chain is marked, and a Sourcify 404 there is still an answer', async mod => {
-      const r = await run(mod, { chainId: 5042, address: SUSDE }, [[/sourcify\.dev/, { status: 404, body: '' }]]);
+      const r = await run(mod, { chainId: 56, address: SUSDE }, [[/sourcify\.dev/, { status: 404, body: '' }]]);
       assert.deepEqual([r.status, r.data.meta.chain_supported, r.net.calls.length], ['partial', false, 1]);
     }],
     ['rwa.xyz is asked for every token, whatever its category', async mod => {

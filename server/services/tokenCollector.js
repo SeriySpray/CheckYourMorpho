@@ -42,7 +42,12 @@ export const CHAINS = {
   143: { llama: 'monad', gecko: 'monad', kyber: 'monad', usdc: '0x754704Bc059F8C67012fEd69BC8A327a5aafb603' },
   999: { llama: 'hyperliquid', gecko: 'hyperevm', kyber: 'hyperevm', usdc: '0xb88339CB7199b77E23DB6E890353E22632Ba630f' },
   747474: { llama: 'katana', gecko: 'katana' },
-  4663: { llama: 'robinhood', gecko: 'robinhood' } // Robinhood Chain: Blockscout answers only behind a Cloudflare challenge, so no explorer data
+  4663: { llama: 'robinhood', gecko: 'robinhood' }, // Robinhood Chain: Blockscout answers only behind a Cloudflare challenge, so no explorer data
+  480: { llama: 'wc', gecko: 'world-chain' },
+  988: { llama: 'stable', gecko: 'stable', rpc: 'rpc.stable.xyz' },
+  4217: { llama: 'tempo', gecko: 'tempo', rpc: 'tempo-rpc.publicnode.com' },
+  // Arc pays gas in USDC; its ERC-20 face sits at the 0x36.. system address
+  5042: { llama: 'arc', gecko: 'arc', kyber: 'arc', usdc: '0x3600000000000000000000000000000000000000', rpc: 'arc-rpc.publicnode.com' }
 };
 
 const HOSTS = ['sourcify.dev', 'coins.llama.fi', 'api.geckoterminal.com', 'aggregator-api.kyberswap.com', 'api.safe.global', 'api-v2.pendle.finance',
