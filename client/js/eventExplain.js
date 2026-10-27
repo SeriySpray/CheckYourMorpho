@@ -63,6 +63,12 @@ function shortAddress(addr) {
   return s.length > 12 ? `${s.slice(0, 6)}...${s.slice(-4)}` : s;
 }
 
+/** "1 market", "3 markets", "several markets". */
+function marketsPhrase(n) {
+  const k = Number(n);
+  return Number.isFinite(k) && k > 0 ? `${k} market${k === 1 ? '' : 's'}` : 'several markets';
+}
+
 /** True for a usable number (0 included). */
 function has(value) {
   return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -115,7 +121,10 @@ function collateralOf(label) {
 function explainCap(d, c, pending) {
   if (!has(d.newCap)) return null;
   const label = d.marketLabel || '';
-  const target = label || 'one allocation target';
+  // A collateral cap limits every market that lends against that token, not one market
+  const collateralCap = d.configType === 'Collateral' || / collateral$/i.test(label);
+  const target = collateralCap ? `markets with ${collateralOf(label)} collateral` : (label || 'one allocation target');
+  const into = collateralCap ? 'these markets together' : (label ? 'this market' : 'it');
   const relative = d.capKind === 'relative' || d.functionName === 'IncreaseRelativeCap';
   const unlimited = !relative && Number(d.newCap) >= NO_LIMIT_UNITS;
   const newCap = Number(d.newCap);
@@ -142,7 +151,7 @@ function explainCap(d, c, pending) {
     }
   }
   const facts = [{ label: relative ? 'Relative cap' : 'Supply cap', value: capValue }];
-  if (label) facts.push({ label: 'Market', value: label });
+  if (label) facts.push({ label: collateralCap ? 'Collateral' : 'Market', value: collateralCap ? collateralOf(label) : label });
   if (share) facts.push({ label: 'Room added', value: share });
 
   const when = pending ? 'Once executed, the' : 'The';
@@ -155,14 +164,23 @@ function explainCap(d, c, pending) {
     };
   }
 
+  if (hasOld && Number(d.oldCap) === newCap) {
+    return {
+      summary: `Cap on ${target} stays at ${capValue.split(' to ').pop()}`,
+      what: `The curator ${pending ? 'submitted' : 'set'} the same cap for ${target} that it already has.`,
+      impact: 'The limit does not change, so nothing changes for depositors.',
+      facts
+    };
+  }
+
   const isNew = d.capWasZero === true || (!hasOld && !relative);
   const raised = !isNew && share && Number(d.oldCap) > 0; // share is then the increment, not the whole cap
   const collateral = collateralOf(label);
   const headline = `${unlimited ? 'any amount' : `up to ${share || size.replace(/ of deposits$/, '')}`} can go to ${target}`;
   return {
     summary: raised ? `Cap on ${target} grows by ${share}` : (isNew ? `New exposure: ${headline}` : headline[0].toUpperCase() + headline.slice(1)),
-    what: `The curator ${pending ? 'submitted' : 'set'} a higher ${relative ? 'relative ' : ''}cap for ${target}.${isNew ? ' The vault has no allocation limit there today, so this opens a new exposure.' : ''}`,
-    impact: `${when} allocator can put ${unlimited ? '' : 'up to '}${size} into ${label ? 'this market' : 'it'}${share ? `, ${share}${raised ? ' more than before' : ''}` : ''}. `
+    what: `The curator ${pending ? 'submitted' : 'set'} a higher ${relative ? 'relative ' : ''}cap for ${target}.${isNew ? ' Until now the cap there was zero, so the vault could not lend there at all: this opens a new exposure.' : ''}`,
+    impact: `${when} allocator can put ${unlimited ? '' : 'up to '}${size} into ${into}${share ? `, ${share}${raised ? ' more than before' : ''}` : ''}. `
       + (collateral
         ? `Your deposit then depends more on ${collateral} and on the oracle that prices it: if the collateral loses value faster than liquidators can act, the market takes bad debt and the vault's depositors share the loss.`
         : 'Your deposit then depends more on whatever that target lends against; open the vault audit to see its markets.'),
@@ -388,7 +406,8 @@ const EXPLAINERS = {
   tvl_drop: (d, c) => {
     if (!has(d.previousTvlUsd) || !has(d.currentTvlUsd)) return null;
     const liq = Number(c.vault?.liquidityUsd), tvl = Number(c.vault?.totalAssetsUsd);
-    const liqNow = Number.isFinite(liq) && tvl > 0 ? ` Right now ${usd(liq)} (${percent(liq / tvl)} of the vault) can be withdrawn instantly.` : '';
+    const fresh = c.nowSec - Number(c.occurredAt) < 86400;
+    const liqNow = fresh && Number.isFinite(liq) && tvl > 0 ? ` Right now ${usd(liq)} (${percent(liq / tvl)} of the vault) can be withdrawn instantly.` : '';
     return {
       summary: `${usd(Number(d.previousTvlUsd) - Number(d.currentTvlUsd))} left the vault in 24 hours`,
       what: `Deposits fell from ${usd(d.previousTvlUsd)} to ${usd(d.currentTvlUsd)} (-${d.dropPercent}%) within 24 hours.`,
@@ -416,25 +435,25 @@ const EXPLAINERS = {
   }),
 
   reallocation: (d) => ({
-    summary: `${usd(d.volumeUsd) || 'Funds'} moved between ${d.marketsCount || 'several'} markets`,
-    what: `The allocator moved ${usd(d.volumeUsd) || 'funds'} between ${d.marketsCount || 'several'} markets in one transaction.`,
+    summary: `${usd(d.volumeUsd) || 'Funds'} moved between ${marketsPhrase(d.marketsCount)}`,
+    what: `The allocator moved ${usd(d.volumeUsd) || 'funds'} between ${marketsPhrase(d.marketsCount)} in one transaction.`,
     impact: 'Reallocations are routine, but each one changes which collateral your deposit is exposed to.',
     facts: [],
     movements: (Array.isArray(d.movements) ? d.movements : []).map(m => ({
-      label: m.marketLabel || shortAddress(m.marketId),
+      label: (m.marketLabel || shortAddress(m.marketId)) + (has(m.lltvPercent) ? ` · LLTV ${percent(m.lltvPercent, false)}` : ''),
       change: Number(m.suppliedAssets || 0) - Number(m.withdrawnAssets || 0)
     }))
   }),
   supply_queue_changed: (d) => ({
     summary: 'Markets that receive new deposits changed',
-    what: `The supply queue was updated; it now lists ${(d.supplyQueue || []).length} markets.`,
+    what: `The supply queue was updated; it now lists ${marketsPhrase((d.supplyQueue || []).length)}.`,
     impact: 'New deposits go only to the markets in this queue, in this order. Money already deposited stays where it is.',
     facts: [],
     markets: d.supplyQueue || []
   }),
   withdraw_queue_changed: (d) => ({
     summary: 'Markets that pay out withdrawals changed',
-    what: `The withdraw queue was updated; it now lists ${(d.withdrawQueue || []).length} markets.`,
+    what: `The withdraw queue was updated; it now lists ${marketsPhrase((d.withdrawQueue || []).length)}.`,
     impact: 'Withdrawals take cash from these markets in this order. A market missing from the queue cannot be used to pay out withdrawals.',
     facts: [],
     markets: d.withdrawQueue || []
@@ -449,10 +468,12 @@ export function describeTiming(event, nowSec = Math.floor(Date.now() / 1000)) {
   if (status !== 'pending') return '';
   const validAt = Number(event.valid_at ?? event.validAt);
   if (!Number.isFinite(validAt) || validAt <= 0) return '';
+  // After the timelock anyone may execute a change; a V1 market removal is completed by an allocator updating the withdraw queue
+  const who = event.kind === 'pending_market_removal' ? 'an allocator' : 'anyone';
   if (validAt > nowSec) {
-    return `The curator can execute it from ${formatEventDate(validAt)}, in ${duration(validAt - nowSec)}. Until then it can still be revoked, and depositors who disagree have time to withdraw.`;
+    return `From ${formatEventDate(validAt)}, in ${duration(validAt - nowSec)}, ${who} can execute it. Until then it can still be revoked, and depositors who disagree have time to withdraw.`;
   }
-  return `The waiting period ended on ${formatEventDate(validAt)}. The change can be executed at any moment but has not been yet.`;
+  return `The waiting period ended on ${formatEventDate(validAt)}. Since then ${who} can execute it, but no one has yet.`;
 }
 
 /**
@@ -466,7 +487,9 @@ export function explainEvent(event, vault = null, nowSec = Math.floor(Date.now()
     sym: vault?.asset?.symbol || 'tokens',
     price: Number(vault?.asset?.priceUsd) || 0,
     tvl: Number(vault?.totalAssetsUsd) || 0,
-    pending: !['applied', 'revoked', 'final'].includes(String(event?.status || '').toLowerCase())
+    pending: !['applied', 'revoked', 'final'].includes(String(event?.status || '').toLowerCase()),
+    nowSec,
+    occurredAt: event?.occurred_at ?? event?.occurredAt
   };
   const explainer = EXPLAINERS[String(event?.kind || '')];
   let out = null;

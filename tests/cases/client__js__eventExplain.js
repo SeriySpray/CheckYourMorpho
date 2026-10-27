@@ -113,7 +113,9 @@ export default {
   describeTiming: [
     ['pending у майбутньому, прострочений, applied, revoked, final', ({ describeTiming }) => {
       assert.match(describeTiming({ status: 'pending', valid_at: NOW + 3600 }, NOW), /in 1 hour/);
-      assert.match(describeTiming({ status: 'pending', valid_at: NOW - 10 }, NOW), /executed at any moment/);
+      assert.match(describeTiming({ status: 'pending', valid_at: NOW + 3600 }, NOW), /anyone can execute it/, 'після таймлоку виконати може будь-хто, не лише куратор');
+      assert.match(describeTiming({ status: 'pending', valid_at: NOW - 10 }, NOW), /Since then anyone can execute it, but no one has yet/);
+      assert.match(describeTiming({ kind: 'pending_market_removal', status: 'pending', valid_at: NOW - 10 }, NOW), /an allocator can execute it/);
       assert.match(describeTiming({ status: 'applied' }, NOW), /in effect/);
       assert.match(describeTiming({ status: 'revoked' }, NOW), /Nothing changed/);
       assert.equal(describeTiming({ status: 'final' }, NOW), '');
@@ -121,9 +123,32 @@ export default {
     }]
   ],
   explainEvent: [
+    ['новий cap: cap був нульовим, тож vault там не міг позичати (не "без ліміту")', ({ explainEvent }) => {
+      const x = explainEvent({ kind: 'pending_cap_increase', status: 'pending', details: { marketLabel: 'VVV/USDC', newCap: 5_000_000, oldCap: null, capWasZero: true, tvlShareAdded: 1.34 } }, null, NOW);
+      assert.match(x.what, /cap there was zero, so the vault could not lend there at all/);
+      assert.doesNotMatch(x.what, /no allocation limit/);
+    }],
+    ['cap на заставу описано як ліміт на всі ринки з цією заставою, а не один ринок', ({ explainEvent }) => {
+      const x = explainEvent({ kind: 'pending_cap_increase', status: 'pending', details: { configType: 'Collateral', marketLabel: 'PT-x collateral', newCap: 2_500_000, oldCap: null, capWasZero: true, capKind: 'absolute', tvlShareAdded: 0.67 } }, null, NOW);
+      assert.match(x.summary, /markets with PT-x collateral/);
+      assert.match(x.impact, /into these markets together/);
+      assert.deepEqual(x.facts.find(f => f.label === 'Collateral'), { label: 'Collateral', value: 'PT-x' });
+    }],
+    ['той самий cap повторно: зміни немає, а не "higher cap"', ({ explainEvent }) => {
+      const x = explainEvent({ kind: 'pending_cap_increase', status: 'applied', details: { marketLabel: 'WBTC/USDC', newCap: 100_000_000, oldCap: 100_000_000, capKind: 'absolute' } }, null, NOW);
+      assert.equal(x.summary, 'Cap on WBTC/USDC stays at 100.0M tokens');
+      assert.doesNotMatch(x.what, /higher/);
+    }],
+    ['реалокація: однина для одного ринку, LLTV у підписі руху', ({ explainEvent }) => {
+      const x = explainEvent({ kind: 'reallocation', status: 'final', details: { volumeUsd: 1200, marketsCount: 1, movements: [{ marketLabel: 'cbBTC/USDC', lltvPercent: 86, suppliedAssets: 1200, withdrawnAssets: 0 }] } }, null, NOW);
+      assert.equal(x.summary, '$1.2K moved between 1 market');
+      assert.equal(x.movements[0].label, 'cbBTC/USDC · LLTV 86%');
+    }],
     ['відтік TVL: сума, ліквідність зараз; невідомий тип - заголовок; зламані details не падають', ({ explainEvent }) => {
-      const x = explainEvent({ kind: 'tvl_drop', status: 'final', details: { previousTvlUsd: 10_000_000, currentTvlUsd: 6_000_000, dropPercent: 40 } }, vault, NOW);
+      const x = explainEvent({ kind: 'tvl_drop', status: 'final', occurred_at: NOW - 3600, details: { previousTvlUsd: 10_000_000, currentTvlUsd: 6_000_000, dropPercent: 40 } }, vault, NOW);
       assert.equal(x.summary, '$4.0M left the vault in 24 hours'); assert.match(x.impact, /\$2\.0M \(20% of the vault\)/);
+      const old = explainEvent({ kind: 'tvl_drop', status: 'final', occurred_at: NOW - 3 * 86400, details: { previousTvlUsd: 10_000_000, currentTvlUsd: 6_000_000, dropPercent: 40 } }, vault, NOW);
+      assert.doesNotMatch(old.impact, /Right now/, 'сьогоднішня ліквідність не підставляється до старого відтоку');
       const unknown = explainEvent({ kind: 'something_new', title: 'Raw title', details: {} }, null, NOW);
       assert.deepEqual([unknown.summary, unknown.what, unknown.impact], ['', 'Raw title', '']);
       const broken = explainEvent({ kind: 'reallocation', title: 'T', details: { movements: 'oops' } }, null, NOW);
