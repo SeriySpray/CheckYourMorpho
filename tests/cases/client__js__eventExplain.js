@@ -144,6 +144,12 @@ export default {
       assert.equal(x.summary, '$1.2K moved between 1 market');
       assert.equal(x.movements[0].label, 'cbBTC/USDC · LLTV 86%');
     }],
+    ['дві різні ринки з тією самою парою й LLTV (різні oracle) розрізняє короткий marketId', ({ explainEvent }) => {
+      const m = (id, lltv, s, w) => ({ marketId: id, marketLabel: 'WBTC/USDT', lltvPercent: lltv, suppliedAssets: s, withdrawnAssets: w });
+      const x = explainEvent({ kind: 'reallocation', status: 'final', details: { volumeUsd: 3000, marketsCount: 3, movements: [m('0x3c5a24aa', 86, 2000, 0), m('0xa921efbb', 86, 1000, 0), m('0x1111', 91.5, 0, 3000)] } }, null, NOW);
+      assert.deepEqual(x.movements.map(r => r.label), ['WBTC/USDT · LLTV 86% · 0x3c5a', 'WBTC/USDT · LLTV 86% · 0xa921', 'WBTC/USDT · LLTV 91.5%']);
+      assert.equal('marketId' in x.movements[0], false);
+    }],
     ['відтік TVL: сума, ліквідність зараз; невідомий тип - заголовок; зламані details не падають', ({ explainEvent }) => {
       const x = explainEvent({ kind: 'tvl_drop', status: 'final', occurred_at: NOW - 3600, details: { previousTvlUsd: 10_000_000, currentTvlUsd: 6_000_000, dropPercent: 40 } }, vault, NOW);
       assert.equal(x.summary, '$4.0M left the vault in 24 hours'); assert.match(x.impact, /\$2\.0M \(20% of the vault\)/);

@@ -3,7 +3,7 @@
  * Handles bell button, unread counts, upcoming timelocked changes, and past event history.
  */
 
-import { explainEvent, formatEventDate } from './eventExplain.js?v=20261028_texts';
+import { explainEvent, formatEventDate } from './eventExplain.js?v=20261028_labels';
 
 // Mirrors server/engine/eventsEngine.js EVENT_KINDS
 const EVENT_KINDS = Object.freeze([

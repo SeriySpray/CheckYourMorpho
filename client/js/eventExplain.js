@@ -63,6 +63,13 @@ function shortAddress(addr) {
   return s.length > 12 ? `${s.slice(0, 6)}...${s.slice(-4)}` : s;
 }
 
+/** Markets with the same pair and LLTV differ by oracle: those labels get the short market id. */
+function withUniqueLabels(rows) {
+  const count = new Map();
+  for (const r of rows) count.set(r.label, (count.get(r.label) || 0) + 1);
+  return rows.map(({ marketId, ...r }) => (count.get(r.label) > 1 && marketId ? { ...r, label: `${r.label} · ${String(marketId).slice(0, 6)}` } : r));
+}
+
 /** "1 market", "3 markets", "several markets". */
 function marketsPhrase(n) {
   const k = Number(n);
@@ -439,10 +446,11 @@ const EXPLAINERS = {
     what: `The allocator moved ${usd(d.volumeUsd) || 'funds'} between ${marketsPhrase(d.marketsCount)} in one transaction.`,
     impact: 'Reallocations are routine, but each one changes which collateral your deposit is exposed to.',
     facts: [],
-    movements: (Array.isArray(d.movements) ? d.movements : []).map(m => ({
+    movements: withUniqueLabels((Array.isArray(d.movements) ? d.movements : []).map(m => ({
       label: (m.marketLabel || shortAddress(m.marketId)) + (has(m.lltvPercent) ? ` · LLTV ${percent(m.lltvPercent, false)}` : ''),
+      marketId: m.marketId,
       change: Number(m.suppliedAssets || 0) - Number(m.withdrawnAssets || 0)
-    }))
+    })))
   }),
   supply_queue_changed: (d) => ({
     summary: 'Markets that receive new deposits changed',
