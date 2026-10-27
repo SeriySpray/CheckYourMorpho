@@ -162,6 +162,10 @@ export default {
       assert.deepEqual([f(500, null, 1).status, f(500, null, 1).reason], ['error', 'HTTP 500']); assert.equal(f(0, null, 1).reason, 'no response');
       assert.equal(f(404, null, 1).status, 'no_route'); assert.equal(f(200, { data: {} }, 1).status, 'error');
       assert.equal(f(200, { data: { routeSummary: { amountInUsd: '0', amountOutUsd: '0' } } }, 1).status, 'no_route');
+    }],
+    ['a route with output but no USD value for it is an error, not a 100% impact', ({ parseKyber: f }) => {
+      const r = f(200, { data: { routeSummary: { amountIn: '1239406155', amountOut: '959165120000', amountInUsd: '0', amountOutUsd: '0' } } }, 1000000);
+      assert.deepEqual([r.status, r.price_impact_pct, r.reason], ['error', null, 'output has no USD value']);
     }]
   ],
 

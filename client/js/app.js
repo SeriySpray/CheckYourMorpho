@@ -1948,11 +1948,13 @@ function tokenFactsHtml(t) {
   const can = [['mint', 'mint'], ['blacklist', 'blacklist'], ['freeze', 'freeze'], ['pause', 'pause'], ['upgrade', 'upgrade']].filter(([k]) => fn[k] === true).map(([, l]) => l);
   const ctrl = d.control?.controllers?.[0];
   const owner = ctrl && `${ctrl.role}: ${ctrl.safe ? `Safe ${ctrl.safe.threshold} of ${ctrl.safe.owner_count}` : ctrl.is_contract ? 'contract' : 'single key'}`;
-  const swap = d.liquidity?.kyber?.['1000000'];
+  const swapM = d.liquidity?.kyber?.['1000000'];
+  // Kyber refuses some $1M quotes outright (4009 "amountIn is greater than max allowed"); the $100K quote then still tells the depth
+  const [swap, size] = swapM?.status === 'ok' || swapM?.status === 'no_route' ? [swapM, '$1M'] : [d.liquidity?.kyber?.['100000'], '$100K'];
   const lines = [
     [d.contract?.sourcify_match || d.contract?.blockscout_verified ? 'source verified' : null,
       d.holders?.top10_pct != null ? `top 10 holders ${d.holders.top10_pct}%` : null,
-      swap?.status === 'ok' && swap.price_impact_pct != null ? `$1M swap impact ${swap.price_impact_pct}%` : swap?.status === 'no_route' ? 'no swap route' : null],
+      swap?.status === 'ok' && swap.price_impact_pct != null ? `${size} swap impact ${swap.price_impact_pct}%` : swap?.status === 'no_route' ? 'no swap route' : null],
     [can.length ? `can ${can.join(', ')}` : null, owner],
     [d.rwa?.issuer ? `issuer ${d.rwa.issuer}` : null, d.pendle?.days_to_expiry != null ? `expires in ${d.pendle.days_to_expiry} days` : null]
   ].map(parts => parts.filter(Boolean)).filter(parts => parts.length);

@@ -245,6 +245,8 @@ export function parseKyber(httpStatus, j, requestedUsd) {
   if (!(requestedUsd > 0)) return empty('error', 'no requested size');
   const inUsd = num(rs.amountInUsd), outUsd = num(rs.amountOutUsd);
   if (outUsd === null || !(num(rs.amountOut) > 0)) return empty('no_route', 'empty route');
+  // a USDC output Kyber left unpriced is not a 100% loss
+  if (!(outUsd > 0)) return empty('error', 'output has no USD value');
   const dexes = [];
   for (const leg of Array.isArray(rs.route) ? rs.route : []) {
     for (const swap of Array.isArray(leg) ? leg : [leg]) { const d = cleanText(swap?.exchange ?? swap?.pool, 60); if (d && !dexes.includes(d)) dexes.push(d); }

@@ -1781,6 +1781,12 @@ const base = {
       assert.ok(html.includes('data 10%, 1970-01-01, stale'));
       assert.ok(f({ data: { contract: {}, control: { controllers: [{ role: 'admin', is_contract: true }] } } }).includes('admin: contract'));
     }),
+    T('$1M відхилено Kyber: показується $100K, а без жодного котирування рядка немає', ({ tokenFactsHtml: f }) => {
+      const kyber = big => ({ data: { liquidity: { kyber: { 1000000: big, 100000: { status: 'ok', price_impact_pct: 77.5 } } } } });
+      assert.ok(f(kyber({ status: 'error', reason: '4009 amountIn is greater than max allowed' })).includes('$100K swap impact 77.5%'));
+      assert.doesNotMatch(f(kyber({ status: 'ok', price_impact_pct: 0.2 })), /\$100K/);
+      assert.doesNotMatch(f({ data: { liquidity: { kyber: { 1000000: { status: 'error' }, 100000: { status: 'error' } } } } }), /swap/);
+    }),
   ],
   loadTokenFacts: [
     T('заповнює слоти, один запит на токен, 404 - примітка, помилка - unavailable без кешу', async ({ loadTokenFacts: f }, env) => {
