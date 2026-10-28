@@ -17,6 +17,13 @@
  * unknown, so it is left out of the base and reported as unverifiedPercent instead of diluting every share.
  */
 
+// Wrappers of one underlying fail together (a BTC or ETH depeg hits all of them), so they count as one asset
+const UNDERLYING_FAMILIES = {
+  ETH: ['ETH', 'WETH', 'STETH', 'WSTETH', 'WEETH', 'EETH', 'RETH', 'CBETH', 'EZETH', 'RSETH', 'OSETH', 'WRSETH', 'PUFETH', 'SWETH', 'ETHX', 'METH', 'LSETH', 'WEETHS'],
+  BTC: ['WBTC', 'CBBTC', 'KBTC', 'BTC.B', 'TBTC', 'LBTC', 'SOLVBTC', 'SOLVBTC.BBN', 'XSOLVBTC', 'FBTC', 'UNIBTC', 'EBTC', 'MBTC']
+};
+const FAMILY_BY_SYMBOL = new Map(Object.entries(UNDERLYING_FAMILIES).flatMap(([family, symbols]) => symbols.map(sym => [sym, family])));
+
 /**
  * Checks if an allocation points to an idle/cash reserve market: nobody can borrow from it, because either
  * there is no collateral asset or the LLTV is 0 (an unknown LLTV is not treated as 0).
@@ -49,7 +56,7 @@ export function calculateHHI(vault, allocations = []) {
   const knownAssetsUsd = totalAssetsUsd - unresolvedUsd;
   const unverifiedPercent = totalAssetsUsd > 0 ? Math.round((unresolvedUsd / totalAssetsUsd) * 10000) / 100 : 0;
 
-  // Group allocations by unique collateral asset contract address (with symbol label)
+  // Group allocations by underlying family (ETH, BTC wrappers) or else by collateral contract address (with symbol label)
   // Exclude NONE collateral, 0-LLTV markets, and empty collateral addresses (these are idle/cash holding markets)
   const collateralMap = new Map();
   let totalActiveCollateralUsd = 0;
@@ -66,11 +73,14 @@ export function calculateHHI(vault, allocations = []) {
     if (isIdle) {
       idleAllocationsUsd += supplyUsd;
     } else if (supplyUsd > 0) {
-      const key = colAddr || symbol;
+      const family = FAMILY_BY_SYMBOL.get(symbol);
+      const key = family || colAddr || symbol;
       if (!collateralMap.has(key)) {
         collateralMap.set(key, { symbol, usd: 0 });
       }
-      collateralMap.get(key).usd += supplyUsd;
+      const entry = collateralMap.get(key);
+      if (family && entry.symbol !== symbol) entry.symbol = family;
+      entry.usd += supplyUsd;
       totalActiveCollateralUsd += supplyUsd;
     }
   }

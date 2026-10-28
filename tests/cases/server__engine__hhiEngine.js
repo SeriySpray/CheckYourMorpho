@@ -45,6 +45,20 @@ export default {
       assert.equal(f({ collateral_asset_symbol: 'NONE', lltv: '860000000000000000', lltv_percent: 0 }), true)],
   ],
   calculateHHI: [
+    ['wstETH і weETH рахуються одним активом ETH', ({ calculateHHI: f }) => {
+      const r = f(vault({ total_assets_usd: 100e6 }), [
+        col(1, 50e6, { collateral_asset_symbol: 'wstETH' }), col(2, 50e6, { collateral_asset_symbol: 'weETH' })
+      ]);
+      assert.equal(r.hhi, 1);
+      assert.deepEqual(r.breakdown.map(b => b.symbol), ['ETH']);
+    }],
+    ['одна обгортка лишає свій символ, ETH і BTC лишаються різними активами', ({ calculateHHI: f }) => {
+      const r = f(vault({ total_assets_usd: 100e6 }), [
+        col(1, 50e6, { collateral_asset_symbol: 'cbBTC' }), col(2, 50e6, { collateral_asset_symbol: 'WETH' })
+      ]);
+      assert.equal(r.hhi, 0.5);
+      assert.deepEqual(r.breakdown.map(b => b.symbol).sort(), ['CBBTC', 'WETH']);
+    }],
     ['порожній vault -> UNALLOCATED, hhi 0, порожній breakdown', ({ calculateHHI: f }) => {
       const r = f(vault(), []);
       assert.equal(r.tier, 'UNALLOCATED'); assert.equal(r.hhi, 0); assert.equal(r.effectiveAssets, 0);
