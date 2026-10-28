@@ -138,7 +138,7 @@
 
 @media (max-width: 760px) {
   .about-shell { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px 16px calc(64px + env(safe-area-inset-bottom, 0px)); }
-  .about-side { position: sticky; top: 0; z-index: 5; margin: 0 -16px; padding: 12px 16px 8px; background: oklch(0.115 0.004 260 / 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .about-side { position: sticky; top: 0; z-index: 5; margin: 0 -16px; padding: 12px 16px 8px; background: oklch(0.115 0.004 260 / 0.97); border-bottom: 1px solid var(--line); }
   .about-back { margin-bottom: 8px; }
   .about-side-title { display: none; }
   .about-nav { flex-direction: row; gap: 6px; overflow-x: auto; scrollbar-width: none; }

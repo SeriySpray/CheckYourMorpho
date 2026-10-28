@@ -7,8 +7,8 @@
   <meta name="description" content="Where the data on CheckYourMorpho comes from, how each number is calculated and what the audit does not check.">
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk22">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk22">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk32">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk32">
 </head>
 <body class="about-body">
   <div class="about-shell">
@@ -89,7 +89,7 @@
         <div class="about-row" role="row"><span role="cell">Restricted Exit Liquidity</span><span role="cell" class="lvl warn">Medium</span><span role="cell">Instant exit under 5% of a vault with at least $10K in deposits. Morpho keeps markets near 90% utilization, so 10-20% is normal; under 5% means the markets are past 95%. The figure includes withdrawals through force-deallocate (V2), and two vaults that share a market may both count the same free liquidity.</span></div>
         <div class="about-row" role="row"><span role="cell">Unresolved Exposure</span><span role="cell" class="lvl bad">High</span><span role="cell">A material amount sits behind an adapter or position whose markets could not be resolved.</span></div>
         <div class="about-row" role="row"><span role="cell">Unpriced Vault</span><span role="cell" class="lvl bad">High</span><span role="cell">The vault's asset has no USD price, so no amounts can be valued.</span></div>
-        <div class="about-row" role="row"><span role="cell">Negative Net APY</span><span role="cell" class="lvl bad">High / Critical</span><span role="cell">Net APY below zero. Critical below -5%.</span></div>
+        <div class="about-row" role="row"><span role="cell">Negative Net APY</span><span role="cell" class="lvl bad">Medium / High / Critical</span><span role="cell">Net APY below zero. When the gross yield is positive and fees exceed it: Medium, High below -1%. When the gross yield is negative: High, Critical below -5%.</span></div>
         <div class="about-row" role="row"><span role="cell">Unverified Markets</span><span role="cell" class="lvl warn">Medium</span><span role="cell">A material amount sits in markets whose bad debt or warning data is missing.</span></div>
         <div class="about-row" role="row"><span role="cell">Unknown Exit Liquidity</span><span role="cell" class="lvl warn">Medium</span><span role="cell">Morpho reported no liquidity figure for the vault.</span></div>
       </div>
@@ -135,6 +135,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk22"></script>
+  <script src="js/about.js?v=20261028_risk32"></script>
 </body>
 </html>

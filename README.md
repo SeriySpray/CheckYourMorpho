@@ -75,7 +75,7 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 | Unverified Markets (a material amount with bad debt or warnings data missing; left out of MQI) | MEDIUM |
 | Unpriced Vault (assets without a USD price) | HIGH |
 | Unknown Exit Liquidity (Morpho reported no liquidity figure) | MEDIUM |
-| Negative Net APY | CRITICAL below -5%, otherwise HIGH |
+| Negative Net APY | Gross yield below zero: CRITICAL below -5%, otherwise HIGH. Gross yield above zero (fees exceed it): MEDIUM, HIGH below -1% |
 
 ## API
 

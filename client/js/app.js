@@ -74,6 +74,7 @@ const DOM = {
   modalListedBadge: document.getElementById('modal-listed-badge'),
   modalVaultName: document.getElementById('modal-vault-name'),
   modalCuratorName: document.getElementById('modal-curator-name'),
+  modalDescription: document.getElementById('modal-vault-description'),
   modalGrade: document.getElementById('modal-grade'),
   modalScore: document.getElementById('modal-score'),
   modalTvl: document.getElementById('modal-tvl'),
@@ -1467,7 +1468,7 @@ function renderVaultExplorer() {
       </button>
       <span class="vault-item-name-cell">
         <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
-        <span class="vault-item-sub"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span>${flaggedBadgeHtml}</span>
+        <span class="vault-item-sub"><span class="vault-item-ident"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span></span>${flaggedBadgeHtml}</span>
       </span>
       <span class="vault-item-meta">
         <span class="vault-chain-badge ${chainClass}">${escapeHtml(chainName)}</span>
@@ -1612,6 +1613,7 @@ function populateBasicVaultInfo(v) {
 
   if (DOM.modalVaultName) DOM.modalVaultName.textContent = v.name || 'Morpho Vault';
   if (DOM.modalCuratorName) DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName);
+  if (DOM.modalDescription) DOM.modalDescription.hidden = true; // the description arrives with the full audit
 
   // Financials
   if (DOM.modalTvl) DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
@@ -2009,8 +2011,6 @@ function tokenFactsPlaceholder(chainId, address) {
 
 const joinList = items => (items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}` : items[0] ?? '');
 const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-const formatWait = sec => (sec >= 86400 && sec % 86400 === 0 ? plural(sec / 86400, 'day') : sec >= 3600 ? plural(Math.round(sec / 3600), 'hour') : plural(Math.max(1, Math.round(sec / 60)), 'minute'));
-const roleLabel = r => (r === 'proxy_admin' ? 'proxy admin (it can change the code)' : String(r).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/,/g, ' and ').toLowerCase());
 /** Pools holding less than this are not a place to sell in size. */
 const THIN_POOLS_USD = 10000;
 /** Where the pool list is cut off by the data source: the count and the sum are then a lower bound. */
@@ -2024,6 +2024,14 @@ const NO_POOLS_NOTE = {
   vault: "No DEX pools were found. This is a vault share: it is normally redeemed from the vault itself, and how fast depends on the vault's own liquidity.",
   none: 'No DEX pools were found, so it may not be easy to sell on exchanges.'
 };
+// What a missing DEX pool means for the depositor, by the same kinds
+const NO_POOLS_MEANING = {
+  pt: 'Until maturity the vault relies on Pendle for buyers.',
+  rwa: 'Selling goes through the issuer: days, limits, fees.',
+  vault: "Exit depends on that vault's own cash.",
+  none: 'Buyers may be hard to find after a bad loan.'
+};
+const NO_POOLS_CAVEAT = ' Our source may miss pools: check a DEX site.';
 const THIN_POOLS_NOTE = {
   pt: 'Principal tokens usually trade on Pendle instead.',
   rwa: 'Tokens like this one are usually redeemed with the issuer.',
@@ -2044,31 +2052,33 @@ function describeTokenFacts(t) {
   const hasContract = d.contract != null;
   const verified = !!(d.contract?.sourcify_match || d.contract?.blockscout_verified);
   const proxy = d.contract?.is_proxy;
+  // Each fact is [sentence, what it means for a depositor]; the meaning follows the actual values, and null means none is added
+  const canMeans = { mint: 'new tokens can dilute it', burn: 'tokens can be removed from wallets', blacklist: 'a wallet can be cut off', freeze: 'balances can be locked', pause: 'all transfers, and any sale by the vault, can be stopped', upgrade: 'its rules can be rewritten' };
+  const canKeys = Object.keys(canMeans).filter(k => fn[k] === true);
   const contract = [
-    verified ? 'The contract code is public and has been checked against its source.' : hasContract ? 'The source code is not verified, so what the contract can do has not been confirmed.' : null,
-    proxy === true ? 'Its code can be swapped out later.' : proxy === false && verified ? 'Its code cannot be swapped out.' : null,
-    can.length ? `Whoever holds the right keys can ${joinList(can)}.` : null
+    verified ? ['The contract code is public and has been checked against its source.', 'Anyone can read what it does: fewer hidden surprises.']
+      : hasContract ? ['Our collector did not find verified source code.', 'A gap in our data, not a risk finding. Check the contract on a block explorer.'] : null,
+    proxy === true ? ['Its code can be swapped out later.', 'The issuer can change how it works without asking holders.']
+      : proxy === false && verified && !can.includes('change the code') ? ['Its code cannot be swapped out.', 'Its rules are fixed.'] : null,
+    can.length ? [`Whoever holds the right keys can ${joinList(can)}.`, `Only if misused: ${joinList(canKeys.map(k => canMeans[k]))}.`] : null
   ].filter(Boolean);
-  const ctrls = d.control?.controllers || [];
-  const controllers = ctrls.slice(0, 3).map(c => {
-    const named = c.name && !c.safe ? (/proxy/i.test(c.name) ? c.implementation_names?.[0] : c.name) : null;
-    const kind = c.safe ? `a shared wallet where ${c.safe.threshold} of ${c.safe.owner_count} people must approve`
-      : c.is_multisig ? 'a multisig wallet'
-        : c.is_contract ? `a smart contract${c.timelock_delay_sec ? ` that makes every change wait ${formatWait(c.timelock_delay_sec)} first` : ''}`
-          : 'a single address (not a contract or a multisig), and who holds this key is not known';
-    return `The ${roleLabel(c.role)} is ${named ? `${named}, ` : ''}${kind}.`;
-  });
-  if (!ctrls.length && (can.length || proxy === true)) controllers.push('Who holds these rights was not found.');
   const h = d.holders || {};
-  const fewHolders = h.count != null && h.count < 10;
+  // A count under 10 next to a top-10 share well under 100% contradicts itself (the count came from a partial source): the count is then left out
+  const countClash = h.count != null && h.count < 10 && h.top10_pct != null && h.top10_pct < 99;
+  const fewHolders = h.count != null && h.count < 10 && !countClash;
   const allInProtocols = h.top10_pct >= 99.95 && h.top10_nonprotocol_pct != null && h.top10_nonprotocol_pct < 0.05;
+  const np = h.top10_nonprotocol_pct;
   const holders = [
-    h.count != null ? (fewHolders ? `Only ${plural(h.count, 'wallet')} hold it.` : `${Number(h.count).toLocaleString('en-US')} wallets hold it.`) : null,
+    h.count != null && !countClash ? (fewHolders ? [`When collected, only ${plural(h.count, 'wallet')} held it.`, 'A few holders decide what reaches the market: the price can jump.']
+      : [`When collected, ${Number(h.count).toLocaleString('en-US')} wallets held it.`, h.count >= 1000 ? 'Many holders: none can easily disrupt the market.' : 'A small circle: one seller can move the price.']) : null,
     fewHolders || h.top10_pct == null ? null
-      : allInProtocols ? 'Almost the whole supply sits in protocol contracts, such as lending pools.'
-        : `The 10 biggest holders own ${h.top10_pct.toFixed(1)}% of the supply${h.top10_contracts ? `, but ${h.top10_contracts} of them ${h.top10_contracts === 1 ? 'is a protocol contract' : 'are protocol contracts'}` : ''}.`,
-    fewHolders || allInProtocols || h.top10_nonprotocol_pct == null ? null : `Leaving out protocol contracts, the 10 biggest remaining holders own ${h.top10_nonprotocol_pct.toFixed(1)}%.`,
-    h.morpho_blue_pct != null ? `${h.morpho_blue_pct.toFixed(1)}% of the supply is deposited in Morpho Blue.` : null
+      : allInProtocols ? ['Almost the whole supply sits in protocol contracts, such as lending pools.', 'Normal for a DeFi token: the real owners sit behind those contracts.']
+        : [`The 10 biggest holders own ${h.top10_pct.toFixed(1)}% of the supply${h.top10_contracts ? `, but ${h.top10_contracts} of them ${h.top10_contracts === 1 ? 'is a protocol contract' : 'are protocol contracts'}` : ''}.`,
+          h.top10_contracts ? 'Contracts hold tokens for many users, so this overstates concentration.' : h.top10_pct >= 50 ? 'Most is in a few hands: one big sale can drop the price.' : 'Fairly spread out.'],
+    fewHolders || allInProtocols || np == null ? null : [`Leaving out protocol contracts, the 10 biggest remaining holders own ${np.toFixed(1)}%.`,
+      np >= 50 ? 'A few people own most of the free supply.' : np >= 20 ? 'Noticeable, but no single holder dominates.' : 'Well spread: no single seller moves the price.'],
+    h.morpho_blue_pct != null ? [`${h.morpho_blue_pct.toFixed(1)}% of the supply is deposited in Morpho Blue.`,
+      h.morpho_blue_pct >= 30 ? 'A large share is collateral here: trouble hits Morpho users directly.' : 'A small part is used here; the price is set mostly elsewhere.'] : null
   ].filter(Boolean);
   const swapM = d.liquidity?.kyber?.['1000000'];
   // Kyber refuses some $1M quotes outright (4009 "amountIn is greater than max allowed"); the $100K quote then still tells the depth
@@ -2080,33 +2090,31 @@ function describeTokenFacts(t) {
   // "No pools" is only said when GeckoTerminal answered (200, or 404 for a token it does not know); a failed request is "not found"
   const poolsChecked = d.meta?.sources ? d.meta.sources.some(x => x.key === 'gecko_pools' && [200, 404].includes(x.status)) : d.liquidity != null;
   const exitClass = d.pendle ? 'pt' : d.rwa?.issuer ? 'rwa' : fn.erc4626 === true || d.price?.share_price_assets != null ? 'vault' : null;
+  const poolsLine = !pools ? (poolsChecked ? [NO_POOLS_NOTE[exitClass ?? 'none'], NO_POOLS_MEANING[exitClass ?? 'none'] + NO_POOLS_CAVEAT] : null)
+    : poolsUsd < THIN_POOLS_USD ? [`Almost no trading liquidity when collected: its ${plural(pools, 'pool')} held only ${formatCurrency(poolsUsd)}.${exitClass ? ` ${THIN_POOLS_NOTE[exitClass]}` : ''}`, 'Even a small sale moves the price.']
+      : pools >= POOLS_LISTED_MAX ? [`When collected, its ${POOLS_LISTED_MAX} biggest pools held ${formatCurrency(poolsUsd)}; there may be more.`, poolsUsd >= 1e6 ? 'Can be sold without crashing the price.' : 'Fine for small sales; large ones move the price.']
+        : [`When collected, it traded in ${plural(pools, 'pool')} holding ${formatCurrency(poolsUsd)}.`, poolsUsd >= 1e6 ? 'Can be sold without crashing the price.' : 'Fine for small sales; large ones move the price.'];
   const market = [
-    d.price?.usd != null ? `It trades at $${price.toLocaleString('en-US', { maximumFractionDigits: price >= 100 ? 2 : 4 })}.` : null,
-    !pools ? (poolsChecked ? NO_POOLS_NOTE[exitClass ?? 'none'] : null)
-      : poolsUsd < THIN_POOLS_USD ? `Almost no trading liquidity: its ${plural(pools, 'pool')} ${pools === 1 ? 'holds' : 'hold'} only ${formatCurrency(poolsUsd)}.${exitClass ? ` ${THIN_POOLS_NOTE[exitClass]}` : ''}`
-        : pools >= POOLS_LISTED_MAX ? `Its ${POOLS_LISTED_MAX} biggest pools hold ${formatCurrency(poolsUsd)}; there may be more.`
-          : `It trades in ${plural(pools, 'pool')} holding ${formatCurrency(poolsUsd)}.`,
-    impact != null ? `Selling ${size} worth would move the price by about ${impact}%${impact >= 5 ? ', so it is hard to sell in size' : ''}.` : null,
-    swap?.status === 'no_route' && pools ? 'KyberSwap found no way to swap it, so it may not be easy to sell on exchanges.' : null,
-    d.rwa?.issuer ? `It is issued by ${d.rwa.issuer}.` : null,
-    d.pendle?.days_to_expiry != null ? `It expires in ${d.pendle.days_to_expiry} days.` : null
+    d.price?.usd != null ? [`When collected, it traded at $${price.toLocaleString('en-US', { maximumFractionDigits: price >= 100 ? 2 : 4 })}.`, 'Context only: markets use their own oracle price.'] : null,
+    poolsLine,
+    impact != null ? [`When collected, selling ${size} worth would have moved the price ${impact < 0.1 ? 'by under 0.1%' : `by about ${impact < 10 ? Math.round(impact * 10) / 10 : Math.round(impact)}%`}${impact >= 5 ? ', so it is hard to sell in size' : ''}.`,
+      impact < 1 ? 'A forced sale was cheap, but pool depth changes daily.' : impact < 5 ? 'A forced sale cost a noticeable slice; this changes with pool depth.' : 'A forced sale would crash the price and might not cover the loan; this changes with pool depth.'] : null,
+    swap?.status === 'no_route' && pools ? ['KyberSwap found no way to swap it, so it may not be easy to sell on exchanges.', 'A hurried sale may find no buyer; Kyber can also just miss a token.'] : null,
+    d.rwa?.issuer ? [`It is issued by ${d.rwa.issuer}.`, 'Its value depends on that company keeping its promises.'] : null,
+    d.pendle?.days_to_expiry != null ? [`It expires in ${d.pendle.days_to_expiry} days.`, 'Redeemable for the underlying then; the price drifts toward it.'] : null
   ].filter(Boolean);
-  const missing = [h.count == null && h.top10_pct == null ? 'holders' : null, d.price?.usd == null ? 'price' : null, !pools && !poolsChecked ? 'trading liquidity' : null,
-    !ctrls.length && !can.length && proxy == null ? 'who controls it' : null].filter(Boolean);
-  const section = (title, sentences) => (sentences.length ? `<h4>${title}</h4><p>${escapeHtml(sentences.join(' '))}</p>` : '');
+  const missing = [h.count == null && h.top10_pct == null ? 'holders' : null, d.price?.usd == null ? 'price' : null, !pools && !poolsChecked ? 'trading liquidity' : null].filter(Boolean);
+  const section = (title, facts) => (facts.length ? `<div class="cf-sec"><h4>${title}</h4><div>${facts.map(([fact, means]) => `<p>${escapeHtml(fact)} <span class="cf-mean">${escapeHtml(means)}</span></p>`).join('')}</div></div>` : '');
   const date = new Date((t.collectedAt || 0) * 1000).toISOString().slice(0, 10);
   const pct = Math.round((t.coverage ?? 0) * 100);
   const stamp = `${pct < 90 ? `Partial data: ${pct}% of the checks returned results. ` : ''}Collected ${date}${t.stale ? ' (out of date)' : ''}`;
-  const ctrl = ctrls[0];
   const brief = [
-    verified ? 'Public code' : hasContract ? 'Source code not verified' : null,
-    ctrl ? (ctrl.safe ? `${ctrl.safe.threshold} of ${ctrl.safe.owner_count} must approve changes` : ctrl.is_multisig ? 'multisig control' : ctrl.is_contract ? (ctrl.timelock_delay_sec ? 'changes are delayed' : 'run by a contract') : 'a single address controls it')
-      : can.length || proxy === true ? 'who controls it is unknown' : null,
+    verified ? 'Public code' : hasContract ? 'Source code not found by us' : null,
     can.length ? `can ${can[0]}` : null,
     fewHolders ? `only ${plural(h.count, 'holder')}` : h.top10_nonprotocol_pct != null && !allInProtocols ? `top holders outside protocols own ${h.top10_nonprotocol_pct.toFixed(0)}%` : h.top10_pct != null && h.top10_nonprotocol_pct == null ? `10 holders own ${h.top10_pct.toFixed(0)}%` : null
   ].filter(Boolean).slice(0, 3);
-  const body = [section('Contract', contract), section('Who can change it', controllers), section('Holders', holders), section('Market', market), section('Not found', missing.length ? [`${joinList(missing).replace(/^./, c => c.toUpperCase())} could not be found.`] : [])].join('');
-  if (!contract.length && !controllers.length && !holders.length && !market.length) return { summary: t.stale ? 'Old data, almost nothing found' : 'Almost nothing found yet', html: `<p>Too little was found to describe this token.</p><div class="stamp">${escapeHtml(stamp)}</div>`, hasData: false };
+  const body = [section('Contract', contract), section('Holders', holders), section('Market', market), section('Not found by our collector', missing.length ? [[`Our collector did not find: ${joinList(missing)}.`, 'A gap in our data: not a risk, not proof of safety. Check an explorer or DEX site.']] : [])].join('');
+  if (!contract.length && !holders.length && !market.length) return { summary: t.stale ? 'Old data, almost nothing found' : 'Almost nothing found yet', html: `<p>Our collector found too little to describe this token: a limit of our data, not a risk.</p><div class="stamp">${escapeHtml(stamp)}</div>`, hasData: false };
   return { summary: brief.join(', ') || 'See details', html: `${body}<div class="stamp">${escapeHtml(stamp)}</div>`, hasData: true };
 }
 
@@ -2178,6 +2186,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   DOM.modalVaultName.textContent = v.name;
   DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName);
+  if (DOM.modalDescription) { DOM.modalDescription.textContent = v.description || ''; DOM.modalDescription.hidden = !v.description; }
 
   // Header pill: how many flags the audit raised and the worst one; the one-line summary says what was measured
   const mqiUnknown = verdict.mqi?.mqiPercent === null;

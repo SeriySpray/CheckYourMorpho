@@ -768,9 +768,14 @@ body.audit-open .tiny-switch { display: none; }
   color: var(--fg-3);
   white-space: nowrap;
   overflow: hidden;
+  flex-wrap: wrap;
+  row-gap: 3px;
 }
 
+/* Network and asset stay together on one line; in a narrow ledger the flag badge drops to the next line instead of being cut off */
+.vault-item-ident { display: flex; min-width: 0; max-width: 100%; overflow: hidden; }
 .vault-item-sub > * + *::before { content: "·"; margin-right: 7px; color: var(--fg-3); }
+.vault-item-ident > * + *::before { content: "·"; margin-inline: 7px; color: var(--fg-3); }
 .vault-item-sub .vault-item-chain-inline { display: none; }
 /* with the network hidden the asset opens the line, so it takes no separator */
 .vault-item-sub .vault-item-chain-inline + .vault-item-asset::before { content: none; }
@@ -812,7 +817,7 @@ body.audit-open .tiny-switch { display: none; }
 }
 
 .vault-item-sub > .vault-mini-badge::before { content: none; }
-.vault-item-sub > .vault-mini-badge { flex: none; }
+.vault-item-sub > .vault-mini-badge { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .vault-item-sub .vault-item-asset { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .vault-mini-badge.warn { background: var(--warn-soft); color: var(--warn); }
 .vault-mini-badge.bad { background: var(--bad-soft); color: var(--bad); }
@@ -845,6 +850,9 @@ body.audit-open .tiny-switch { display: none; }
   body.audit-open .vault-item-curator { display: none; }
   body.audit-open .vault-item-sub .vault-item-chain-inline { display: inline; }
   body.audit-open .vault-item-sub .vault-item-chain-inline + .vault-item-asset::before { content: "·"; }
+  /* the narrow column has about 100px for "ROBINHOOD · USDG" */
+  body.audit-open .vault-item-ident { font-size: 11px; }
+  body.audit-open .vault-item-ident > * + *::before { margin-inline: 4px; }
   body.audit-open .vault-item-tvl { font-size: 12px; }
   body.audit-open .vault-item-apy { font-size: 11px; }
 }
@@ -1334,6 +1342,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 
 .vault-curator { margin-top: 3px; font-size: 13px; color: var(--fg-2); }
 .vault-curator span { color: var(--fg); }
+.vault-description { margin-top: 8px; max-width: 62ch; font-size: 13px; line-height: 1.5; color: var(--fg-3); }
 
 .audit-identity-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-top: 10px; }
 .audit-identity-meta { min-width: 0; }
@@ -1475,6 +1484,12 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .cf-body { padding: 2px 12px 14px 32px; }
 .cf-body h4 { margin: 10px 0 2px; font: 400 11px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); }
 .cf-body p { font-size: 13px; line-height: 1.55; color: var(--fg-2); }
+.cf-sec { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; padding-top: 8px; }
+.cf-sec + .cf-sec { border-top: 1px solid var(--line); margin-top: 8px; }
+.cf-body .cf-sec h4 { margin: 2px 0 0; }
+.cf-body p + p { margin-top: 4px; }
+.cf-mean { color: var(--fg-3); }
+.cf-mean::before { content: "\2192\00a0"; }
 .cf-body .stamp { margin-top: 10px; font: 400 11px var(--font-mono); color: var(--fg-3); }
 
 .explorer-countline { display: contents; }
@@ -1909,8 +1924,7 @@ body.audit-open .activity-tg-lead { gap: 10px; }
   padding: 0 14px 0 6px;
   border: 1px solid var(--line-2);
   border-radius: 999px;
-  background: oklch(0.15 0.004 260 / 0.72);
-  backdrop-filter: blur(10px);
+  background: oklch(0.15 0.004 260 / 0.94);
   box-shadow: 0 6px 20px oklch(0 0 0 / 0.35);
   color: var(--fg);
   font: 500 13px var(--font-sans);

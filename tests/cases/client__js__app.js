@@ -1748,31 +1748,29 @@ const base = {
         control: { controllers: [{ role: 'owner', name: 'Timelock', is_contract: true, timelock_delay_sec: 86400 }, { role: 'admin', is_contract: true, safe: { threshold: 6, owner_count: 10 } }] },
         price: { usd: 80392.589, market_cap_usd: 4540557194 }, rwa: { issuer: 'Midas' }, pendle: { days_to_expiry: 433 } } });
       assert.equal(r.hasData, true);
-      for (const x of ['The contract code is public', 'Its code cannot be swapped out', 'can create new tokens, destroy tokens and change the code', 'The owner is Timelock, a smart contract that makes every change wait 1 day first',
-        'The admin is a shared wallet where 6 of 10 people must approve', '47,161 wallets hold it', 'The 10 biggest holders own 94.5% of the supply, but 4 of them are protocol contracts',
-        'Leaving out protocol contracts, the 10 biggest remaining holders own 17.5%', '1.1% of the supply is deposited in Morpho Blue', 'It trades at $80,392.59', 'It trades in 8 pools holding',
-        'Selling $1M worth would move the price by about 0.031%.', 'It is issued by Midas', 'It expires in 433 days', 'Collected 2026-10-22']) assert.ok(r.html.includes(x), x);
+      for (const x of ['The contract code is public', 'can create new tokens, destroy tokens and change the code', 'When collected, 47,161 wallets held it', 'The 10 biggest holders own 94.5% of the supply, but 4 of them are protocol contracts',
+        'Leaving out protocol contracts, the 10 biggest remaining holders own 17.5%', '1.1% of the supply is deposited in Morpho Blue', 'When collected, it traded at $80,392.59', 'When collected, it traded in 8 pools holding',
+        'When collected, selling $1M worth would have moved the price by under 0.1%.', 'It is issued by Midas', 'It expires in 433 days', 'Collected 2026-10-22']) assert.ok(r.html.includes(x), x);
       assert.doesNotMatch(r.html, /out of date|Partial|Not found|market cap/);
-      assert.equal(r.summary, 'Public code, changes are delayed, can create new tokens');
+      assert.equal(r.summary, 'Public code, can create new tokens, top holders outside protocols own 18%'); assert.doesNotMatch(r.html, /Who can change it|Timelock|shared wallet/);
     }),
     T('чого нема, про те сказано прямо: не перевірено, невідомий власник адреси, немає даних, 20 пулів як нижня межа, тонка ліквідність', ({ describeTokenFacts: f }) => {
-      const r = f({ coverage: 0.5, collectedAt: 0, stale: true, data: { contract: { is_proxy: true, fn: { upgrade: true } }, holders: { count: 7, top10_pct: 97.5 },
+      const r = f({ coverage: 0.5, collectedAt: 0, stale: true, data: { contract: { is_proxy: true, fn: { upgrade: true } }, holders: { count: 7, top10_pct: 99.5 },
         liquidity: { pools_count: 20, total_reserve_usd: 5e6, kyber: { 1000000: { status: 'ok', price_impact_pct: 41.3 } } },
         control: { controllers: [{ role: 'proxy_admin', is_contract: false, safe: null }] } } });
-      for (const x of ['The source code is not verified', 'Its code can be swapped out later', 'The proxy admin (it can change the code) is a single address (not a contract or a multisig), and who holds this key is not known',
-        'Only 7 wallets hold it', 'Its 20 biggest pools hold $5.00M; there may be more', 'so it is hard to sell in size']) assert.ok(r.html.includes(x), x);
-      assert.doesNotMatch(r.html, /97\.5|The 10 biggest/); assert.ok(r.html.includes('Price could not be found') || r.html.includes('Price and'));
+      for (const x of ['Our collector did not find verified source code', 'Its code can be swapped out later', 'When collected, only 7 wallets held it', 'its 20 biggest pools held $5.00M; there may be more', 'so it is hard to sell in size']) assert.ok(r.html.includes(x), x);
+      assert.doesNotMatch(r.html, /99\.5|The 10 biggest/); assert.ok(r.html.includes('Our collector did not find: price'));
       assert.ok(r.html.includes('Partial data: 50% of the checks returned results. Collected 1970-01-01 (out of date)'));
-      assert.equal(r.summary, 'Source code not verified, a single address controls it, can change the code');
+      assert.equal(r.summary, 'Source code not found by us, can change the code, only 7 holders'); assert.doesNotMatch(r.html, /single address|proxy admin/);
       const none = f({ coverage: 1, collectedAt: 0, data: { contract: { sourcify_match: 'match', fn: { mint: true } }, control: { controllers: [] } } });
-      assert.ok(none.html.includes('Who holds these rights was not found')); assert.match(none.summary, /who controls it is unknown/);
+      assert.doesNotMatch(none.html, /who holds these rights/); assert.doesNotMatch(none.summary, /controls/);
       const thin = f({ data: { liquidity: { pools_count: 1, total_reserve_usd: 0.4 } } });
-      assert.ok(thin.html.includes('Almost no trading liquidity: its 1 pool holds only $0.40'));
+      assert.ok(thin.html.includes('Almost no trading liquidity when collected: its 1 pool held only $0.40'));
     }),
     T('невідомі значення пропускаються, no_route, чужий HTML екранується, увесь запас у протоколах', ({ describeTokenFacts: f }) => {
       const r = f({ coverage: 0.9, collectedAt: 0, data: { contract: { fn: {} }, holders: { count: 50, top10_pct: 100, top10_nonprotocol_pct: 0 }, liquidity: { pools_count: 3, total_reserve_usd: 1e6, kyber: { 1000000: { status: 'no_route' } } },
         control: { controllers: [{ role: '<b>', is_contract: true, name: 'Vault<i>', safe: null }] } } });
-      assert.ok(r.html.includes('KyberSwap found no way to swap it')); assert.ok(r.html.includes('The &lt;b&gt; is Vault&lt;i&gt;, a smart contract.'));
+      assert.ok(r.html.includes('KyberSwap found no way to swap it')); assert.ok(f({ data: { rwa: { issuer: '<b>X</b>' } } }).html.includes('issued by &lt;b&gt;X&lt;/b&gt;'));
       assert.ok(r.html.includes('Almost the whole supply sits in protocol contracts')); assert.doesNotMatch(r.html, /100\.0|code is public/);
       assert.equal(f({ coverage: 1, collectedAt: 0, data: {} }).hasData, false);
       assert.equal(f({ coverage: 0, collectedAt: 0, stale: true, data: {} }).summary, 'Old data, almost nothing found');
@@ -1790,17 +1788,29 @@ const base = {
       const unknownToken = f({ coverage: 1, collectedAt: 0, data: { price: { usd: 1 }, liquidity: { pools_count: null }, meta: { sources: [{ key: 'gecko_pools', status: 404 }] } } }).html;
       assert.ok(unknownToken.includes('No DEX pools were found'));
       const thin = f({ coverage: 1, collectedAt: 0, data: { liquidity: { pools_count: 2, total_reserve_usd: 500 }, pendle: { days_to_expiry: 9 } } }).html;
-      assert.ok(thin.includes('Almost no trading liquidity: its 2 pools hold only $500.00. Principal tokens usually trade on Pendle instead.'));
+      assert.ok(thin.includes('Almost no trading liquidity when collected: its 2 pools held only $500.00. Principal tokens usually trade on Pendle instead.'));
     }),
-    T('назва проксі замінюється реалізацією, а мультисиг не Safe читається як multisig', ({ describeTokenFacts: f }) => {
-      const r = f({ data: { control: { controllers: [{ role: 'blacklister', name: 'UUPSProxy', implementation_names: ['Blacklister'], is_contract: true }, { role: 'accessControl', is_contract: true, is_multisig: true }] } } });
-      assert.ok(r.html.includes('The blacklister is Blacklister, a smart contract.')); assert.ok(r.html.includes('The access control is a multisig wallet.'));
+    T('кожен факт має пояснення простими словами, що залежить від значень токена', ({ describeTokenFacts: f }) => {
+      const mean = html => [...html.matchAll(/<span class="cf-mean">(.*?)<\/span>/g)].map(m => m[1]);
+      const risky = mean(f({ data: { contract: { is_proxy: true, fn: { mint: true, pause: true } }, holders: { count: 7 }, liquidity: { pools_count: 1, total_reserve_usd: 50 },
+        control: { controllers: [{ role: 'owner', is_contract: false }] } } }).html).join('|');
+      for (const x of ['change how it works', 'new tokens can dilute it', 'any sale by the vault', 'A few holders decide', 'Even a small sale']) assert.ok(risky.includes(x) || risky.includes(x.toLowerCase()), x);
+      const calm = mean(f({ data: { contract: { sourcify_match: 'x', is_proxy: false, fn: {} }, holders: { count: 9000, top10_pct: 30, top10_nonprotocol_pct: 10 }, liquidity: { pools_count: 5, total_reserve_usd: 5e7, kyber: { 1000000: { status: 'ok', price_impact_pct: 0.1 } } },
+        control: { controllers: [{ role: 'owner', is_contract: true, timelock_delay_sec: 86400 }] } } }).html).join('|');
+      for (const x of ['fewer hidden surprises', 'Its rules are fixed', 'Many holders', 'Well spread', 'without crashing the price', 'A forced sale was cheap']) assert.ok(calm.includes(x), x);
+      assert.doesNotMatch(calm, /One key|few holders decide|would crash/);
+    }),
+    T('суперечливі дані не стають твердженням: не-проксі з upgrade і лічильник менше 10 при топ-10 нижче 99%', ({ describeTokenFacts: f }) => {
+      const r = f({ data: { contract: { sourcify_match: 'x', is_proxy: false, fn: { upgrade: true } } } }).html;
+      assert.ok(r.includes('change the code')); assert.doesNotMatch(r, /cannot be swapped out/);
+      const h = f({ data: { holders: { count: 4, top10_pct: 60, top10_nonprotocol_pct: 50 } } }).html;
+      assert.doesNotMatch(h, /only 4 wallets|wallets held it/); assert.ok(h.includes('10 biggest holders own 60.0%'));
     }),
     T('$1M відхилено Kyber: показується $100K, а без жодного котирування речення немає', ({ describeTokenFacts: f }) => {
       const kyber = big => ({ data: { liquidity: { kyber: { 1000000: big, 100000: { status: 'ok', price_impact_pct: 77.5 } } } } });
-      assert.ok(f(kyber({ status: 'error', reason: '4009 amountIn is greater than max allowed' })).html.includes('Selling $100K worth would move the price by about 77.5%, so it is hard to sell in size'));
+      assert.ok(f(kyber({ status: 'error', reason: '4009 amountIn is greater than max allowed' })).html.includes('selling $100K worth would have moved the price by about 78%, so it is hard to sell in size'));
       assert.doesNotMatch(f(kyber({ status: 'ok', price_impact_pct: 0.2 })).html, /\$100K/);
-      assert.doesNotMatch(f({ data: { liquidity: { kyber: { 1000000: { status: 'error' }, 100000: { status: 'error' } } } } }).html, /Selling/);
+      assert.doesNotMatch(f({ data: { liquidity: { kyber: { 1000000: { status: 'error' }, 100000: { status: 'error' } } } } }).html, /selling/);
     }),
   ],
   loadTokenFacts: [
