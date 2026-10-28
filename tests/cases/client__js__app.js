@@ -1108,7 +1108,7 @@ const base = {
       f();
       assert.deepEqual(rows.map(r => r.getAttribute('data-address')), ['0xl', '0xm']); // $1 vault is hidden by default
       assert.equal(s.DOM.explorerCount.textContent, '2 Vaults');
-      assert.equal(s.DOM.explorerTinyCount.textContent, '1');
+      assert.equal(s.DOM.explorerTinyCount.textContent, '(1 vault)');
       assert.equal(s.DOM.explorerTinyToggle.getAttribute('aria-checked'), 'false');
       assert.equal(s.DOM.explorerTinyToggle.classList.contains('hidden'), false);
       assert.equal(s.DOM.explorerFavCount.textContent, 1);

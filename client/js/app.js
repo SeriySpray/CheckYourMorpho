@@ -1409,7 +1409,7 @@ function renderVaultExplorer() {
   }
   if (DOM.explorerTinyToggle) {
     DOM.explorerTinyToggle.classList.toggle('hidden', tinyTotal === 0);
-    if (DOM.explorerTinyCount) DOM.explorerTinyCount.textContent = String(tinyTotal);
+    if (DOM.explorerTinyCount) DOM.explorerTinyCount.textContent = `(${tinyTotal} ${tinyTotal === 1 ? 'vault' : 'vaults'})`;
     DOM.explorerTinyToggle.setAttribute('aria-checked', String(explorerFilters.showTiny));
   }
 
