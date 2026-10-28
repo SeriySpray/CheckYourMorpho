@@ -60,6 +60,9 @@
   color-scheme: dark;
 }
 
+/* Page to page navigation cross-fades where the browser supports it */
+@view-transition { navigation: auto; }
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;

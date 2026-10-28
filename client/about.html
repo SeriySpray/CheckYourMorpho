@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>About CheckYourMorpho</title>
+  <meta name="description" content="Where the data on CheckYourMorpho comes from, how each number is calculated and what the audit does not check.">
+  <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk10">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk10">
+</head>
+<body class="about-body">
+  <div class="about-shell">
+    <aside class="about-side">
+      <a class="about-back" href="/">Back to vaults</a>
+      <p class="about-side-title">About</p>
+      <nav class="about-nav" aria-label="Topics">
+        <a href="#overview" data-topic="overview">Overview</a>
+        <a href="#data" data-topic="data">Data sources</a>
+        <a href="#list" data-topic="list">Vault list</a>
+        <a href="#audit" data-topic="audit">Audit panel</a>
+        <a href="#flags" data-topic="flags">Red flags</a>
+        <a href="#unchecked" data-topic="unchecked">Not checked</a>
+        <a href="#alerts" data-topic="alerts">Alerts</a>
+        <a href="#limits" data-topic="limits">Limits</a>
+      </nav>
+    </aside>
+
+  <main class="about" id="about-main">
+    <section id="overview">
+      <h1>How CheckYourMorpho works</h1>
+      <p class="about-lead">CheckYourMorpho reads public Morpho data and shows a vault from the depositor's side: where the money is lent, how much of it can be withdrawn now, and what changed recently. It is a reading aid, not a safety rating.</p>
+      <p>The numbers refresh every 3 minutes. Pick a topic on the left to see where each one comes from and how it is calculated.</p>
+    </section>
+
+    <section id="data">
+      <h2>Where the data comes from</h2>
+      <p>Vaults, markets and allocations come from the public Morpho GraphQL API at api.morpho.org. The server calls it 5 seconds after start and then every 3 minutes. It reads every vault that Morpho marks as listed, on every chain the API returns, for both MetaMorpho (V1) and Morpho Vaults V2.</p>
+      <p>A V2 vault that holds a V1 vault through a MetaMorpho adapter is expanded into that V1 vault's markets, pro rata, so the audit sees the real markets behind it. Adapters of other kinds are not expanded and are reported as unresolved.</p>
+      <p>Every number on a vault page is calculated from the stored rows when you open it. Nothing is rated by hand. The vault list refreshes every 60 seconds, and the line under the vault count shows how old the last sync is.</p>
+      <h3>Collateral token facts</h3>
+      <p>A separate background job collects public facts about each collateral token and keeps one record per token. It never judges them: a value it could not find stays empty and is not read as "fine". The sources are:</p>
+      <ul class="about-list">
+        <li>Sourcify and Blockscout for contract verification, proxy type, deployer and functions in the ABI.</li>
+        <li>Etherscan, Basescan and Arbiscan "Read contract" pages for owner and admin addresses, plus Safe Transaction Service to see whether an admin is a multisig.</li>
+        <li>Public JSON-RPC nodes for the EIP-1967 proxy admin slot and timelock delays.</li>
+        <li>DefiLlama and GeckoTerminal for prices, holders and DEX pools; KyberSwap for swap quotes of $100K and $1M.</li>
+        <li>Pendle for principal tokens, app.rwa.xyz for tokenised real-world assets and the Chainlink reference directory for price feeds.</li>
+      </ul>
+      <p>These pages can be wrong, a day old or temporarily unavailable. The token facts are shown next to each collateral for context. They do not change any flag or score.</p>
+    </section>
+
+    <section id="list">
+      <h2>The vault list</h2>
+      <p>Each row shows the vault, its network, curator, total deposits (TVL) and net APY. A badge appears when the audit raised a flag: it names the worst one, with "+N" if there are more. A row without a badge has no flags.</p>
+      <ul class="about-list">
+        <li>Sort by total deposits, APY, free liquidity or flagged first.</li>
+        <li>Network, asset and curator menus are built from the data, with a count per option. Curator names come from Morpho. A vault without one shows as Independent.</li>
+        <li>Vaults with under $1K in deposits are hidden. The "Under $1K" switch brings them back. A vault you starred, or one you search for by name, is always shown.</li>
+        <li>The star pins a vault. Pins live in your browser (localStorage) and are used by the Telegram alerts if you connect the bot.</li>
+        <li>The particle sphere is the same vault list drawn as dots. It is not shown on phones.</li>
+      </ul>
+    </section>
+
+    <section id="audit">
+      <h2>The audit panel</h2>
+      <h3>MQI, Market Quality Index</h3>
+      <p>MQI is the share of verified vault capital that sits in markets with no defect found, from 0 to 100%. A market has a defect when any of these is true:</p>
+      <ul class="about-list">
+        <li>Morpho does not list it.</li>
+        <li>Its bad debt, including realized bad debt, is above dust ($10 or 0.01% of the market's supply, whichever is larger).</li>
+        <li>It has no oracle address.</li>
+        <li>Morpho marked it as not whitelisted or gave it a red warning other than a liquidity warning.</li>
+      </ul>
+      <p>Each failing market lowers MQI by its exact share. Any known defect keeps MQI at 99.9% or lower, so 100% means none was found. Capital with missing data is left out of the score and shown separately as unverified. MQI says nothing about oracle quality, collateral quality or governance.</p>
+      <h3>Instant exit capacity</h3>
+      <p>The share of verified capital a depositor could withdraw right now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result never exceeds the liquidity Morpho reports for the vault.</p>
+      <h3>Crowded exit</h3>
+      <p>The same figure if every other listed vault lending into the same markets withdrew at the same time and the free liquidity were shared pro rata. A market only counts as crowded when its utilization is 95% or higher, since Morpho's interest rate model aims for 90%. It affects flags and the detail view, and it is not shown in the list.</p>
+      <h3>Collateral and markets</h3>
+      <p>The collateral section groups what backs the loans by token class and lists each token with its USD amount and share. Shares under 0.1% show as &lt;0.1%. The markets table has one row per market with LLTV, the vault's weight, supplied amount, free liquidity, status and supply APY. Status is Flagged when the market has a defect, Unverified when its data is missing and No issues otherwise. "No issues" means no defect was found by the checks above.</p>
+    </section>
+
+    <section id="flags">
+      <h2>Red flags</h2>
+      <p>The header of an audit shows how many flags were raised and the worst level. A flag about capital needs a material amount behind it: 1% of the vault's TVL, capped at $250K.</p>
+      <div class="about-table" role="table" aria-label="Flags">
+        <div class="about-row about-row-head" role="row"><span role="columnheader">Flag</span><span role="columnheader">Level</span><span role="columnheader">When it is raised</span></div>
+        <div class="about-row" role="row"><span role="cell">Compromised Market Exposure</span><span role="cell" class="lvl bad">Critical</span><span role="cell">Markets with a defect hold a material amount.</span></div>
+        <div class="about-row" role="row"><span role="cell">Critical Crowded Exit Deficit</span><span role="cell" class="lvl bad">Critical</span><span role="cell">Crowded exit under 5%, at least 10 points below instant exit, and at least 15% of TVL in crowded markets.</span></div>
+        <div class="about-row" role="row"><span role="cell">Elevated Crowded Exit Contagion</span><span role="cell" class="lvl bad">High</span><span role="cell">Crowded exit under 20%, at least 10 points below instant exit, and at least 15% of TVL in crowded markets.</span></div>
+        <div class="about-row" role="row"><span role="cell">Restricted Exit Liquidity</span><span role="cell" class="lvl bad">High</span><span role="cell">Instant exit under 20% and under $10M. A low share of a very large vault does not count.</span></div>
+        <div class="about-row" role="row"><span role="cell">Unresolved Exposure</span><span role="cell" class="lvl bad">High</span><span role="cell">A material amount sits behind an adapter or position whose markets could not be resolved.</span></div>
+        <div class="about-row" role="row"><span role="cell">Unpriced Vault</span><span role="cell" class="lvl bad">High</span><span role="cell">The vault's asset has no USD price, so no amounts can be valued.</span></div>
+        <div class="about-row" role="row"><span role="cell">Negative Net APY</span><span role="cell" class="lvl bad">High / Critical</span><span role="cell">Net APY below zero. Critical below -5%.</span></div>
+        <div class="about-row" role="row"><span role="cell">Unverified Markets</span><span role="cell" class="lvl warn">Medium</span><span role="cell">A material amount sits in markets whose bad debt or warning data is missing.</span></div>
+        <div class="about-row" role="row"><span role="cell">Unknown Exit Liquidity</span><span role="cell" class="lvl warn">Medium</span><span role="cell">Morpho reported no liquidity figure for the vault.</span></div>
+      </div>
+    </section>
+
+    <section id="unchecked">
+      <h2>What the audit does not check</h2>
+      <p>A vault with no flags is not guaranteed safe. The audit does not rate:</p>
+      <ul class="about-list">
+        <li>oracles: how a market's price is produced, who can change it and how it can fail;</li>
+        <li>collateral quality: whether a token can lose its peg, be frozen or be minted without limit;</li>
+        <li>who controls the vault: curator, owner and guardian keys, and how they are protected;</li>
+        <li>smart contract bugs in Morpho, the vault or the adapters;</li>
+        <li>borrowers or your own position. There are no health factors on this site.</li>
+      </ul>
+      <p>The site is for information only. It is not financial advice.</p>
+    </section>
+
+    <section id="alerts">
+      <h2>Telegram alerts</h2>
+      <p>The bell opens the activity panel with events for your starred vaults and the Telegram connection. The bot binds to your browser's favorites and follows later stars and unstars. Commands: /status, /list, /upcoming, /help, /pause, /resume and /stop.</p>
+      <p>Sent immediately:</p>
+      <ul class="about-list">
+        <li>a cap increase of 5% of the vault's assets or more, or a new cap;</li>
+        <li>a market added or removed;</li>
+        <li>a guardian change or a shorter timelock;</li>
+        <li>bad debt appearing in a market, or growing at least twofold and by $1K or more;</li>
+        <li>a TVL outflow of 15% or more in 24 hours and at least $500K;</li>
+        <li>a notice when no sync has succeeded for 24 hours, since alerts are blind during that time.</li>
+      </ul>
+      <p>The daily digest at 09:00 Kyiv time covers verdict and MQI changes, a Net APY drop against the 7-day average, fee changes, delistings and reallocations. A changed verdict level is only reported after it has held for 3 hours.</p>
+      <p>Events are kept for 180 days. Pending timelock changes stay until they take effect.</p>
+    </section>
+
+    <section id="limits">
+      <h2>Limits of the data</h2>
+      <ul class="about-list">
+        <li>The analysis is per vault and from the lender's side.</li>
+        <li>Crowded exit only knows about listed vaults in this database. Direct lenders and unlisted vaults in the same market are not counted as competitors.</li>
+        <li>Only the current state is stored, plus the event log and a few days of hourly samples. There are no charts over time.</li>
+        <li>If the Morpho API is down or slow, the numbers stop updating and the site says the data is stale.</li>
+        <li>The code and its tests are public at github.com/SeriySpray/CheckYourMorpho.</li>
+      </ul>
+    </section>
+  </main>
+  </div>
+  <script src="js/about.js?v=20261028_risk10"></script>
+</body>
+</html>

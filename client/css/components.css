@@ -225,12 +225,9 @@ body.audit-open .status-indicator {
   flex: none;
   margin-top: 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  column-gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
 }
-
-.explorer-header .stale-indicator { grid-column: 1 / -1; }
 
 .explorer-heading {
   position: absolute;
@@ -500,6 +497,7 @@ body.audit-open .tiny-switch { display: none; }
   align-items: center;
   gap: 8px;
   height: 28px;
+  margin-top: 10px;
   padding: 0;
   border: 0;
   background: none;
@@ -1586,13 +1584,6 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .model-limits ul { margin: 12px 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
 .model-limits p { margin-top: 12px; color: var(--fg-3); }
 
-.ledger-disclaimer {
-  padding: 0 var(--pad-x) 28px;
-  max-width: 62ch;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--fg-3);
-}
 
 /* ---------- Tablet: the ledger and the audit panel share the width ---------- */
 @media (min-width: 769px) and (max-width: 1179px) {
@@ -1715,7 +1706,6 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .vault-table { margin-top: 0; }
   .vault-table-head { display: none; }
   .explorer-vaults-list { padding-bottom: 12px; }
-  .ledger-disclaimer { padding: 0 16px calc(24px + env(safe-area-inset-bottom, 0px)); }
 
   .explorer-vault-item,
   .explorer-vault-item:hover {
@@ -1881,4 +1871,51 @@ body.audit-open .activity-tg-lead { gap: 10px; }
 
 @media (prefers-reduced-motion: reduce) {
   .sk::after, .tg-ring, .activity-tg[data-sync="syncing"] .activity-tg-bar::after, .activity-tg[data-sync="done"] .activity-tg-bar, .activity-tg[data-sync="done"] .activity-tg-ico { animation: none; }
+}
+
+/* Info pill: top right of the screen, opens the about page */
+.about-pill {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: oklch(0.15 0.004 260 / 0.72);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 20px oklch(0 0 0 / 0.35);
+  color: var(--fg);
+  font: 500 13px var(--font-sans);
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: transform 160ms var(--ease-out), background-color 160ms var(--ease-out), border-color 160ms var(--ease-out);
+}
+
+.about-pill-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: oklch(1 0 0 / 0.1);
+  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.about-pill:hover { transform: translateY(-1px); border-color: var(--line-3); background: oklch(0.2 0.005 260 / 0.85); }
+.about-pill:hover .about-pill-icon { background: var(--fg); color: var(--ink-0); }
+.about-pill:active { transform: scale(0.97); }
+.about-pill:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+@media (max-width: 768px) {
+  .about-pill { top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-pill, .about-pill-icon { transition: none; }
+  .about-pill:hover, .about-pill:active { transform: none; }
 }
