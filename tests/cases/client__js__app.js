@@ -1216,7 +1216,7 @@ const base = {
         li.handlers.click();
         await tick();
       } finally { console.error = origError; }
-      assert.ok(env.fetched.includes('/api/vaults/0xA'));
+      assert.ok(env.fetched.includes('/api/vaults/0xA?chainId=1'));
       assert.equal(s.DOM.headerStatusText.textContent, 'Audit unavailable, try again'); // запит упав, стан скинуто
     }),
   ],
@@ -1365,7 +1365,7 @@ const base = {
       s.REDUCED_MOTION.matches = true;
       let focused = 0;
       s.DOM.closeBtn.focus = () => { focused++; };
-      env.fetch(url => (url === '/api/vaults/0xAAA1' ? jsonResponse(audit({ name: 'Audited' })) : jsonResponse({}, 404)));
+      env.fetch(url => (url === '/api/vaults/0xAAA1?chainId=1' ? jsonResponse(audit({ name: 'Audited' })) : jsonResponse({}, 404)));
       await f(cv());
       assert.equal(s.DOM.auditModal.classList.contains('hidden'), false);
       assert.equal(s.selectedVaultAddress, '0xAAA1');
@@ -1431,7 +1431,7 @@ const base = {
       await f(cv(), null, s.auditOpenToken);
       assert.equal(s.activeAuditData, cached);
       assert.equal(s.DOM.auditModal.classList.contains('hidden'), false);
-      assert.deepEqual(env.fetched, ['/api/vaults/0xAAA1']);
+      assert.deepEqual(env.fetched, ['/api/vaults/0xAAA1?chainId=1']);
       resolve(jsonResponse(audit({ name: 'Revalidated' })));
       await tick();
       assert.equal(s.clientAuditCache.get('0xaaa1').vault.name, 'Revalidated');
@@ -1961,6 +1961,12 @@ const base = {
     }],
     ['числа і числові рядки, включно з 0 і відʼємними', ({ exitMetric: f }) => {
       assert.equal(f(42.5), 42.5); assert.equal(f('42'), 42); assert.equal(f(0), 0); assert.equal(f(-5), -5);
+    }],
+  ],
+  vaultChainQuery: [
+    ['мережа vault потрапляє в запит, без відомої мережі запит чистий', ({ vaultChainQuery: f }) => {
+      assert.equal(f({ chainId: 8453 }), '?chainId=8453');
+      for (const v of [{}, { chainId: '1' }, { chainId: null }, null, undefined]) assert.equal(f(v), '');
     }],
   ],
   summarizeFlags: [

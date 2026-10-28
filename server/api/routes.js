@@ -584,11 +584,14 @@ export function handleGetToken(req, res, chainId, address) {
   }
 }
 
-export function handleGetVaultByAddress(req, res, address) {
+export function handleGetVaultByAddress(req, res, address, chainId = null) {
   try {
     const cleanAddress = address.toLowerCase();
+    // The vaults table is keyed by address alone, so a chain the caller names must match the stored one (a twin on another chain is not this vault)
+    const notFound = () => sendJson(res, 404, { error: `Vault with address '${address}'${chainId != null ? ` on chain ${chainId}` : ''} not found` });
     const cached = vaultAuditCache.get(cleanAddress);
     if (cached && (Date.now() - cached.timestamp < AUDIT_CACHE_TTL_MS)) {
+      if (chainId != null && cached.data?.vault?.chainId !== chainId) { notFound(); return; }
       sendJson(res, 200, cached.data, req);
       return;
     }
@@ -597,8 +600,8 @@ export function handleGetVaultByAddress(req, res, address) {
 
     // Direct index seek on primary key
     const vault = db.prepare('SELECT * FROM vaults WHERE address = ?').get(cleanAddress);
-    if (!vault) {
-      sendJson(res, 404, { error: `Vault with address '${address}' not found` });
+    if (!vault || (chainId != null && vault.chain_id !== chainId)) {
+      notFound();
       return;
     }
 
@@ -1093,7 +1096,12 @@ export function handleRequest(req, res) {
       sendJson(res, 400, { error: 'Invalid Ethereum address format (must be 0x followed by 40 hex characters)' });
       return;
     }
-    handleGetVaultByAddress(req, res, address.toLowerCase());
+    const chainParam = parsedUrl.searchParams.get('chainId');
+    if (chainParam !== null && !/^\d{1,9}$/.test(chainParam)) {
+      sendJson(res, 400, { error: 'chainId must be a positive integer' });
+      return;
+    }
+    handleGetVaultByAddress(req, res, address.toLowerCase(), chainParam === null ? null : Number(chainParam));
     return;
   }
 

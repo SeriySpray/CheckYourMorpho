@@ -367,6 +367,11 @@ function startLivePolling() {
   }
 }
 
+/** "?chainId=N" for a vault the list knows the chain of, so a twin address on another chain is never shown instead. */
+function vaultChainQuery(vault) {
+  return Number.isInteger(vault?.chainId) ? `?chainId=${vault.chainId}` : '';
+}
+
 function formatChainName(chainId) {
   switch (chainId) {
     case 1: return 'ETH';
@@ -1744,7 +1749,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
   const freshCached = getFreshAudit(cacheKey);
   if (freshCached) {
     auditDataPromise = Promise.resolve(freshCached);
-    apiFetch(`/api/vaults/${vault.address}`)
+    apiFetch(`/api/vaults/${vault.address}${vaultChainQuery(vault)}`)
       .then(res => res.ok ? res.json() : null)
       .then(freshData => {
         if (freshData) applyVaultAuditData(vault.address, freshData);
@@ -1752,7 +1757,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
       .catch(() => {});
   } else {
     auditAbort = new AbortController();
-    auditDataPromise = apiFetch(`/api/vaults/${vault.address}`, 8000, auditAbort.signal)
+    auditDataPromise = apiFetch(`/api/vaults/${vault.address}${vaultChainQuery(vault)}`, 8000, auditAbort.signal)
       .then(res => {
         if (!res.ok) throw new Error('Vault audit data not found');
         return res.json();

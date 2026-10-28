@@ -895,6 +895,14 @@ export default {
       const a = '0x' + '0'.repeat(40), res = mockRes(); f(mockReq('GET', '/'), res, a);
       assert.equal(res.statusCode, 404); assert.ok(JSON.parse(res.body).error.includes(a));
     }],
+    ['?chainId: збіг віддає vault, інша мережа -> 404 з мережею в повідомленні (також з кешу), нечислове -> 400', async mod => sandbox(async db => {
+      seedQuality(db);
+      const chain = getJson(mod, '/api/vaults/' + addr(0x20)).body.vault.chainId;
+      assert.equal(getJson(mod, `/api/vaults/${addr(0x20)}?chainId=${chain}`).status, 200);
+      const other = getJson(mod, `/api/vaults/${addr(0x20)}?chainId=${chain + 1}`);
+      assert.equal(other.status, 404); assert.match(other.body.error, new RegExp(`on chain ${chain + 1}`));
+      assert.equal(getJson(mod, `/api/vaults/${addr(0x20)}?chainId=abc`).status, 400);
+    })],
     ['структура відповіді: vault, verdict, allocations з полями з БД', async mod => sandbox(async db => {
       seedQuality(db);
       const { status, body } = getJson(mod, '/api/vaults/' + addr(0x20));
