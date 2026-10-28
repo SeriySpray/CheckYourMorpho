@@ -252,3 +252,6 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+/* no blue tap flash on touch screens */
+* { -webkit-tap-highlight-color: transparent; }

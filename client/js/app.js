@@ -489,6 +489,32 @@ function closeAllDropdowns() {
 }
 
 /**
+ * Phone sheets close by dragging down from the top of the list.
+ */
+function enableSheetSwipe(menu) {
+  let startY = null;
+  let dy = 0;
+  menu.addEventListener('touchstart', (e) => {
+    startY = menu.scrollTop <= 0 ? e.touches[0].clientY : null;
+    dy = 0;
+  }, { passive: true });
+  menu.addEventListener('touchmove', (e) => {
+    if (startY === null) return;
+    dy = e.touches[0].clientY - startY;
+    if (dy <= 0 || menu.scrollTop > 0) { dy = 0; menu.style.transform = ''; return; }
+    menu.style.transition = 'none';
+    menu.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+  menu.addEventListener('touchend', () => {
+    if (startY === null) return;
+    menu.style.transition = '';
+    menu.style.transform = '';
+    if (dy > 80) closeAllDropdowns();
+    startY = null;
+  });
+}
+
+/**
  * Updates a custom dropdown's trigger label and selected item state.
  */
 function updateDropdownUI(filterKey, value) {
@@ -689,6 +715,7 @@ function setupVaultExplorerEvents() {
     const trigger = dropdown.querySelector('.dropdown-trigger');
     const menu = dropdown.querySelector('.dropdown-menu');
     const filterKey = dropdown.getAttribute('data-filter');
+    if (menu) enableSheetSwipe(menu);
 
     if (trigger) {
       trigger.addEventListener('click', (e) => {
