@@ -86,10 +86,6 @@ const DOM = {
   riskMqiBar: document.getElementById('risk-mqi-bar'),
   riskMqiDesc: document.getElementById('risk-mqi-desc'),
   riskExitMeterBox: document.getElementById('risk-exit-meter-box'),
-  riskExitLabel: document.getElementById('risk-exit-label'),
-  riskExitInfoBtn: document.getElementById('risk-exit-info-btn'),
-  riskExitPopover: document.getElementById('risk-exit-popover'),
-  riskExitPopoverBody: document.getElementById('risk-exit-popover-body'),
   riskExitPct: document.getElementById('risk-exit-pct'),
   riskExitBar: document.getElementById('risk-exit-bar'),
   riskExitDesc: document.getElementById('risk-exit-desc'),
@@ -409,8 +405,6 @@ const FLAG_LEVEL_LABELS = { critical: 'Critical', high: 'High', medium: 'Medium'
 // Short names for the list: the full title and message are in the audit
 const FLAG_SHORT_LABELS = {
   'Restricted Exit Liquidity': 'Low exit',
-  'Critical Crowded Exit Deficit': 'Bank-run risk',
-  'Elevated Crowded Exit Contagion': 'Bank-run risk',
   'Compromised Market Exposure': 'Bad market',
   'Unpriced Vault': 'No price',
   'Unresolved Exposure': 'Unresolved',
@@ -1979,55 +1973,19 @@ function closeVaultAudit() {
   restoreFocusAfterAudit();
 }
 
-/**
- * Current audit modal exit capacity state for interactive stressed inspection
- */
-let currentModalExitState = {
-  normalExitPct: 0,
-  normalExitUsd: 0,
-  stressedExitPct: 0,
-  stressedExitUsd: 0,
-  dropPct: 0,
-  topPeer: ''
-};
-
-/** Opens or closes the worst-case exit popover, keeping aria-expanded in sync. */
-function setExitInfoActive(active) {
-  if (!DOM.riskExitInfoBtn) return;
-  DOM.riskExitInfoBtn.classList.toggle('active', active);
-  DOM.riskExitInfoBtn.setAttribute('aria-expanded', String(active));
-  updateStressedExitDisplay(active);
-}
-
-function updateStressedExitDisplay(isStressed) {
+/** Instant exit meter: the share withdrawable now; unknown liquidity gives an empty bar, never a full (safe-looking) one. */
+function updateExitDisplay(exitPct, exitUsd) {
   if (!DOM.riskExitBar || !DOM.riskExitPct) return;
-  const { normalExitPct, normalExitUsd, stressedExitPct, stressedExitUsd, dropPct } = currentModalExitState;
-
-  // Unknown liquidity: an empty neutral bar, never a full (safe-looking) one
-  if (normalExitPct === null) {
+  if (exitPct === null) {
     DOM.riskExitBar.style.width = '0%';
-    DOM.riskExitBar.dataset.tone = '';
     DOM.riskExitPct.textContent = 'N/A';
     if (DOM.riskExitDesc) DOM.riskExitDesc.textContent = 'Exit liquidity unknown: no liquidity data for this vault';
     return;
   }
-
-  if (isStressed && stressedExitPct !== null) {
-    DOM.riskExitBar.style.width = `${Math.min(100, stressedExitPct)}%`;
-    DOM.riskExitBar.dataset.tone = stressedExitPct < 15 ? 'bad' : (dropPct > 0 ? 'warn' : '');
-    if (dropPct > 0) {
-      DOM.riskExitPct.innerHTML = `<span class="exit-stressed-tag">STRESSED:</span>${stressedExitPct}%`;
-      if (DOM.riskExitDesc) {
-        DOM.riskExitDesc.innerHTML = `<span class="exit-stressed-usd">${formatCurrency(stressedExitUsd)}</span> available during a mass withdrawal (bank run)`;
-      }
-    }
-  } else {
-    DOM.riskExitBar.style.width = `${Math.min(100, normalExitPct)}%`;
-    DOM.riskExitBar.dataset.tone = '';
-    DOM.riskExitPct.textContent = `${normalExitPct}%`;
-    if (DOM.riskExitDesc) {
-      DOM.riskExitDesc.textContent = `${formatCurrency(normalExitUsd)} available for immediate withdrawal without locking markets`;
-    }
+  DOM.riskExitBar.style.width = `${Math.min(100, exitPct)}%`;
+  DOM.riskExitPct.textContent = `${exitPct}%`;
+  if (DOM.riskExitDesc) {
+    DOM.riskExitDesc.textContent = `${formatCurrency(exitUsd)} available for immediate withdrawal without locking markets`;
   }
 }
 
@@ -2149,43 +2107,12 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const mixTokens = mix.tokens || [];
   const isUnallocated = mix.tier === 'UNALLOCATED' || mix.tier === 'UNKNOWN';
 
-  // 3. Exit Liquidity & Stressed Interaction
+  // 3. Exit liquidity
   // null = backend has no liquidity data for this vault; an absent field keeps the old 0 default
-  const normalExitPct = pickExitMetric(verdict.liquidity?.instantExitCapacityPercent, 0);
-  const normalExitUsd = verdict.liquidity?.instantExitCapacityUsd || 0;
-  const stressedExitPct = pickExitMetric(verdict.liquidity?.stressedExitCapacityPercent, normalExitPct);
-  const stressedExitUsd = verdict.liquidity?.stressedExitCapacityUsd ?? normalExitUsd;
-  const exitUnknown = normalExitPct === null || stressedExitPct === null;
-  const dropPct = exitUnknown ? 0 : Math.max(0, Math.round((normalExitPct - stressedExitPct) * 10) / 10);
-  const topPeer = verdict.liquidity?.crowdedMarkets?.[0]?.topPeers?.[0] || 'competing vaults';
-
-  currentModalExitState = {
-    normalExitPct,
-    normalExitUsd,
-    stressedExitPct,
-    stressedExitUsd,
-    dropPct,
-    topPeer
-  };
-
-  if (DOM.riskExitInfoBtn) {
-    DOM.riskExitInfoBtn.classList.remove('active');
-    DOM.riskExitInfoBtn.setAttribute('aria-expanded', 'false');
-  }
-
-  // Update Popover content
-  if (DOM.riskExitPopoverBody) {
-    if (exitUnknown) {
-      DOM.riskExitPopoverBody.textContent = 'Worst-case exit cannot be estimated: liquidity data for this vault is unavailable.';
-    } else if (dropPct > 0) {
-      DOM.riskExitPopoverBody.innerHTML = `During a mass withdrawal (bank run), competing vaults (${escapeHtml(topPeer)}) claim shared cash, reducing available exit from <strong>${normalExitPct}%</strong> to <strong>${stressedExitPct}%</strong> (${formatCurrency(stressedExitUsd)}).`;
-    } else {
-      DOM.riskExitPopoverBody.innerHTML = `During a mass withdrawal, available exit remains fully preserved at <strong>${normalExitPct}%</strong> (${formatCurrency(normalExitUsd)}) with no competing vault crowding.`;
-    }
-  }
-
-  // Initial standard exit display
-  updateStressedExitDisplay(false);
+  updateExitDisplay(
+    pickExitMetric(verdict.liquidity?.instantExitCapacityPercent, 0),
+    verdict.liquidity?.instantExitCapacityUsd || 0
+  );
 
   // 4. Collateral Allocation Breakdown
   if (DOM.riskEffectiveAssets) {
@@ -2309,7 +2236,7 @@ function setupModalEvents() {
     });
   }
 
-  // Interactive Stressed Exit Capacity hover & click handlers
+  // Idle reserve info popover
   if (DOM.idleReserveInfoBtn) {
     DOM.idleReserveInfoBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2324,53 +2251,11 @@ function setupModalEvents() {
     });
   }
 
-  if (DOM.riskExitInfoBtn) {
-    DOM.riskExitInfoBtn.addEventListener('mouseenter', () => updateStressedExitDisplay(true));
-    DOM.riskExitInfoBtn.addEventListener('mouseleave', () => {
-      if (!DOM.riskExitInfoBtn.classList.contains('active')) {
-        updateStressedExitDisplay(false);
-      }
-    });
-    DOM.riskExitInfoBtn.addEventListener('focus', () => updateStressedExitDisplay(true));
-    DOM.riskExitInfoBtn.addEventListener('blur', () => {
-      if (!DOM.riskExitInfoBtn.classList.contains('active')) {
-        updateStressedExitDisplay(false);
-      }
-    });
-    DOM.riskExitInfoBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setExitInfoActive(!DOM.riskExitInfoBtn.classList.contains('active'));
-    });
-  }
-
-  if (DOM.riskExitLabel) {
-    DOM.riskExitLabel.addEventListener('mouseenter', () => updateStressedExitDisplay(true));
-    DOM.riskExitLabel.addEventListener('mouseleave', () => {
-      if (!DOM.riskExitInfoBtn || !DOM.riskExitInfoBtn.classList.contains('active')) {
-        updateStressedExitDisplay(false);
-      }
-    });
-  }
-
-  document.addEventListener('click', (e) => {
-    if (DOM.riskExitInfoBtn && !e.target.closest('.info-circle-wrap')) {
-      if (DOM.riskExitInfoBtn.classList.contains('active')) {
-        setExitInfoActive(false);
-      }
-    }
-  });
-
   window.addEventListener('keydown', (e) => {
     // The audit panel is a non-modal dialog (the explorer next to it stays usable), so Tab is not trapped
     if (e.key !== 'Escape') return;
 
-    // 1. Dismiss worst-case exit popover if open
-    if (DOM.riskExitInfoBtn && DOM.riskExitInfoBtn.classList.contains('active')) {
-      setExitInfoActive(false);
-      return;
-    }
-
-    // 2. Dismiss any open filter dropdowns and give focus back to their trigger
+    // 1. Dismiss any open filter dropdowns and give focus back to their trigger
     const openDropdown = document.querySelector('.custom-dropdown.open');
     if (openDropdown) {
       const openTrigger = openDropdown.querySelector('.dropdown-trigger');
@@ -2379,7 +2264,7 @@ function setupModalEvents() {
       return;
     }
 
-    // 3. Clear search query if input is focused and contains text
+    // 2. Clear search query if input is focused and contains text
     if (document.activeElement === DOM.searchInput && DOM.searchInput.value) {
       DOM.searchInput.value = '';
       if (DOM.searchClearBtn) DOM.searchClearBtn.classList.add('hidden');
@@ -2390,7 +2275,7 @@ function setupModalEvents() {
       return;
     }
 
-    // 4. Cancel a pending open, or close the audit modal if it is open
+    // 3. Cancel a pending open, or close the audit modal if it is open
     if (isTransitioningVault && !isClosingAudit && DOM.auditModal.classList.contains('hidden')) {
       cancelPendingAuditOpen();
       return;

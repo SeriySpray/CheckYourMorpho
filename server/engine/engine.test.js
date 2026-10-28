@@ -57,20 +57,6 @@ test('V2 withdrawable liquidity counts force-deallocatable liquidity net of the 
   assert.equal(normalizeVaultV2({ ...raw, adapters: { items: [] } }).liquidity_usd, 8e6);
 });
 
-test('stressed exit only shares free liquidity with peer vaults, not with direct lenders', () => {
-  const vault = { version: 'v1', total_assets_usd: 1e6, liquidity_usd: 1e12 };
-  // 90% utilized market: 1M of ours, 99M of other lenders (direct), 10M free liquidity, no peer vaults
-  const noPeers = market({ supply_assets_usd: 1e6, total_supply_assets_usd: 100e6, total_borrow_assets_usd: 90e6, peer_supply_usd: 0 });
-  const liq = calculateLiquidityMetrics(vault, [noPeers]);
-  assert.equal(liq.stressedExitCapacityPercent, liq.instantExitCapacityPercent);
-  assert.equal(liq.isCrowded, false);
-  // with an equally large peer vault the free liquidity is shared 50/50
-  const withPeer = { ...noPeers, supply_assets_usd: 5e6, total_borrow_assets_usd: 98e6, peer_supply_usd: 5e6 };
-  const crowded = calculateLiquidityMetrics({ ...vault, total_assets_usd: 5e6 }, [withPeer]);
-  assert.equal(crowded.instantExitCapacityUsd, 2e6); // 2M free liquidity
-  assert.equal(crowded.stressedExitCapacityUsd, 1e6); // shared 50/50 with the peer vault
-});
-
 test('a small but material compromised position still raises the CRITICAL flag', () => {
   const vault = { version: 'v1', address: '0x1', name: 'Big', total_assets_usd: 10e9, liquidity_usd: 0 };
   const bad = market({ supply_assets_usd: 300000, bad_debt_usd: 100000 });

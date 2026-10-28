@@ -1472,8 +1472,6 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .meter-track { height: 6px; border-radius: 2px; background: var(--ink-3); overflow: hidden; }
 .meter-fill { height: 100%; border-radius: 2px; background: var(--fg); transition: width 300ms var(--ease-out); }
 .meter-desc { margin-top: 7px; font-size: 12.5px; color: var(--fg-3); }
-.exit-stressed-tag { margin-right: 5px; font: 500 10.5px var(--font-mono); letter-spacing: 0.06em; color: var(--warn); }
-.exit-stressed-usd { color: var(--warn); font-weight: 500; }
 
 .info-circle-wrap { position: relative; display: inline-flex; }
 
@@ -1561,29 +1559,36 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .flag-item.critical strong { color: var(--bad); }
 .flag-item.high strong,
 .flag-item.medium strong { color: var(--warn); }
-.flag-item.clear { color: var(--fg-2); }
+.flag-item.clear { padding: 2px 0 0; border-top: 0; color: var(--fg-2); }
 
-.model-limits {
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--fg-2);
+.model-limits { margin-top: 4px; }
+
+.model-limits-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+  border: 1px solid var(--line);
 }
 
-.model-limits summary {
-  cursor: pointer;
+.model-limits-grid > div { padding: 10px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.model-limits-grid > div:nth-child(2n) { border-right: 0; }
+.model-limits-grid > div:nth-last-child(-n+2) { border-bottom: 0; }
+
+.model-limits-grid dt {
   font: 400 11px var(--font-mono);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
 }
 
-.model-limits summary:hover { color: var(--fg); }
-.model-limits ul { margin: 12px 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
-.model-limits p { margin-top: 12px; color: var(--fg-3); }
+.model-limits-grid dd { margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: var(--fg-2); }
+.model-limits-note { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--fg-3); }
 
+@media (max-width: 480px) {
+  .model-limits-grid { grid-template-columns: 1fr; }
+  .model-limits-grid > div { border-right: 0; }
+  .model-limits-grid > div:nth-last-child(2) { border-bottom: 1px solid var(--line); }
+}
 
 /* ---------- Tablet: the ledger and the audit panel share the width ---------- */
 @media (min-width: 769px) and (max-width: 1179px) {

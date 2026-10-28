@@ -8,8 +8,6 @@ const pct = (fraction, digits = 2) => `${(Math.round(fraction * 100 * 10 ** digi
 
 // Plain-language names for the verdict flags: a short label for the state and the sentence that explains it
 const RISK_FLAGS = {
-  'Critical Crowded Exit Deficit': ['exit risk under stress', 'If competing vaults withdraw from the same markets at once, only a small part of the deposits could be withdrawn'],
-  'Elevated Crowded Exit Contagion': ['exit risk under stress', 'If competing vaults withdraw from the same markets at once, withdrawals would slow down noticeably'],
   'Restricted Exit Liquidity': ['low exit liquidity', 'Less than 20% of the deposits can be withdrawn immediately'],
   'Negative Net APY (Capital Decay)': ['negative yield', 'The vault is losing depositor principal'],
   'Compromised Market Exposure': ['market risk', 'Capital sits in markets with bad debt or failed checks'],

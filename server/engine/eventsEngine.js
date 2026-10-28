@@ -733,12 +733,8 @@ export function diffPendingConfigs(vaultContext, rawPendingConfigs = [], existin
   return { events, statusUpdates };
 }
 
-// Mass-withdrawal stress scenarios: about half of the catalogue trips them (shared markets), so they only make a vault yellow
-const STRESS_FLAGS = new Set(['Critical Crowded Exit Deficit', 'Elevated Crowded Exit Contagion']);
-
-/** The verdict level a single audit flag sets: 'red' for CRITICAL/HIGH, 'yellow' for MEDIUM and the stress flags, null otherwise. */
+/** The verdict level a single audit flag sets: 'red' for CRITICAL/HIGH, 'yellow' for MEDIUM, null otherwise. */
 export function flagTier(flag) {
-  if (STRESS_FLAGS.has(flag?.title)) return 'yellow';
   if (flag?.level === 'CRITICAL' || flag?.level === 'HIGH') return 'red';
   return flag?.level === 'MEDIUM' ? 'yellow' : null;
 }

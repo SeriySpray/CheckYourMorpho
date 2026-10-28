@@ -15,19 +15,6 @@ import { formatUnits } from './normalizers.js';
 const DEFAULT_RETENTION_DAYS = 180;
 const SAMPLE_RETENTION_SECONDS = 8 * 86400;
 
-const computePeerSupplyUsd = (marketRows, vaultAddress, alloc) => {
-  let total = 0;
-  for (const r of marketRows || []) {
-    if (r.vault_address === vaultAddress || r.via_vault) continue;
-    let supply = Number(r.supply_assets_usd) || 0;
-    if (alloc.via_vault && r.vault_address === alloc.via_vault) {
-      supply -= Number(alloc.supply_assets_usd) || 0;
-    }
-    if (supply > 1000) total += supply;
-  }
-  return total;
-};
-
 const withEffectiveTotal = (vault, allocations) => {
   if ((Number(vault.total_assets_usd) || 0) > 0) return vault;
   const sum = allocations.reduce((acc, a) => acc + (Number(a.supply_assets_usd) || 0), 0);
@@ -161,15 +148,8 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     JOIN markets m ON va.market_unique_key = m.unique_key
   `).all();
 
-  const peerRowsByMarket = new Map();
-  for (const a of allocRows) {
-    if (!peerRowsByMarket.has(a.market_unique_key)) peerRowsByMarket.set(a.market_unique_key, []);
-    peerRowsByMarket.get(a.market_unique_key).push(a);
-  }
-
   const allocsByVault = new Map();
   for (const a of allocRows) {
-    a.peer_supply_usd = computePeerSupplyUsd(peerRowsByMarket.get(a.market_unique_key), a.vault_address, a);
     const k = String(a.vault_address || '').toLowerCase();
     if (!allocsByVault.has(k)) allocsByVault.set(k, []);
     allocsByVault.get(k).push(a);

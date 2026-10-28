@@ -7,8 +7,8 @@
   <meta name="description" content="Where the data on CheckYourMorpho comes from, how each number is calculated and what the audit does not check.">
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk10">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk10">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk11">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk11">
 </head>
 <body class="about-body">
   <div class="about-shell">
@@ -76,8 +76,6 @@
       <p>Each failing market lowers MQI by its exact share. Any known defect keeps MQI at 99.9% or lower, so 100% means none was found. Capital with missing data is left out of the score and shown separately as unverified. MQI says nothing about oracle quality, collateral quality or governance.</p>
       <h3>Instant exit capacity</h3>
       <p>The share of verified capital a depositor could withdraw right now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result never exceeds the liquidity Morpho reports for the vault.</p>
-      <h3>Crowded exit</h3>
-      <p>The same figure if every other listed vault lending into the same markets withdrew at the same time and the free liquidity were shared pro rata. A market only counts as crowded when its utilization is 95% or higher, since Morpho's interest rate model aims for 90%. It affects flags and the detail view, and it is not shown in the list.</p>
       <h3>Collateral and markets</h3>
       <p>The collateral section groups what backs the loans by token class and lists each token with its USD amount and share. Shares under 0.1% show as &lt;0.1%. The markets table has one row per market with LLTV, the vault's weight, supplied amount, free liquidity, status and supply APY. Status is Flagged when the market has a defect, Unverified when its data is missing and No issues otherwise. "No issues" means no defect was found by the checks above.</p>
     </section>
@@ -88,8 +86,6 @@
       <div class="about-table" role="table" aria-label="Flags">
         <div class="about-row about-row-head" role="row"><span role="columnheader">Flag</span><span role="columnheader">Level</span><span role="columnheader">When it is raised</span></div>
         <div class="about-row" role="row"><span role="cell">Compromised Market Exposure</span><span role="cell" class="lvl bad">Critical</span><span role="cell">Markets with a defect hold a material amount.</span></div>
-        <div class="about-row" role="row"><span role="cell">Critical Crowded Exit Deficit</span><span role="cell" class="lvl bad">Critical</span><span role="cell">Crowded exit under 5%, at least 10 points below instant exit, and at least 15% of TVL in crowded markets.</span></div>
-        <div class="about-row" role="row"><span role="cell">Elevated Crowded Exit Contagion</span><span role="cell" class="lvl bad">High</span><span role="cell">Crowded exit under 20%, at least 10 points below instant exit, and at least 15% of TVL in crowded markets.</span></div>
         <div class="about-row" role="row"><span role="cell">Restricted Exit Liquidity</span><span role="cell" class="lvl bad">High</span><span role="cell">Instant exit under 20% and under $10M. A low share of a very large vault does not count.</span></div>
         <div class="about-row" role="row"><span role="cell">Unresolved Exposure</span><span role="cell" class="lvl bad">High</span><span role="cell">A material amount sits behind an adapter or position whose markets could not be resolved.</span></div>
         <div class="about-row" role="row"><span role="cell">Unpriced Vault</span><span role="cell" class="lvl bad">High</span><span role="cell">The vault's asset has no USD price, so no amounts can be valued.</span></div>
@@ -132,7 +128,6 @@
       <h2>Limits of the data</h2>
       <ul class="about-list">
         <li>The analysis is per vault and from the lender's side.</li>
-        <li>Crowded exit only knows about listed vaults in this database. Direct lenders and unlisted vaults in the same market are not counted as competitors.</li>
         <li>Only the current state is stored, plus the event log and a few days of hourly samples. There are no charts over time.</li>
         <li>If the Morpho API is down or slow, the numbers stop updating and the site says the data is stale.</li>
         <li>The code and its tests are public at github.com/SeriySpray/CheckYourMorpho.</li>
@@ -140,6 +135,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk10"></script>
+  <script src="js/about.js?v=20261028_risk11"></script>
 </body>
 </html>

@@ -90,37 +90,6 @@ export function generateVaultVerdict(vault, allocations = []) {
     });
   }
 
-  // Flag 4: Crowded Exit Contagion / Shared Market Overhang
-  if (!liquidity.exitUnknown && liquidity.crowdedMarkets && liquidity.crowdedMarkets.length > 0) {
-    const totalCrowdedSupplyUsd = liquidity.crowdedMarkets.reduce((sum, m) => sum + m.vaultSupplyUsd, 0);
-    const totalAssetsUsd = Number(vault.total_assets_usd) || 0;
-    // Частка від TVL (vault capital), а не від розподіленого капіталу: на цю базу відкалібровані пороги 15/25/35
-    const crowdedSharePercent = totalAssetsUsd > 0 ? Math.round((totalCrowdedSupplyUsd / totalAssetsUsd) * 1000) / 10 : 0;
-    const dropPct = Math.round((liquidity.instantExitCapacityPercent - liquidity.stressedExitCapacityPercent) * 10) / 10;
-
-    // Only markets past the IRM target utilization reach this point (liquidityEngine), so the thresholds are about
-    // real shortage: CRITICAL when almost nothing could be withdrawn in a run, HIGH when it falls below the 20% line
-    const isCritical = liquidity.stressedExitCapacityPercent < 5 && dropPct >= 10 && crowdedSharePercent >= 15;
-    const isHigh = !isCritical && crowdedSharePercent >= 15 && liquidity.stressedExitCapacityPercent < 20 && dropPct >= 10;
-
-    const topMarket = liquidity.crowdedMarkets[0];
-    const topPeersStr = topMarket.topPeers && topMarket.topPeers.length > 0 ? topMarket.topPeers.join(', ') : 'peer vaults';
-
-    if (isCritical) {
-      redFlags.push({
-        level: 'CRITICAL',
-        title: 'Critical Crowded Exit Deficit',
-        message: `In a mass withdrawal by competing peer vaults (${topPeersStr}), available exit drops from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% (${crowdedSharePercent}% of vault capital in heavily contested markets).`
-      });
-    } else if (isHigh) {
-      redFlags.push({
-        level: 'HIGH',
-        title: 'Elevated Crowded Exit Contagion',
-        message: `Competing peer vaults (${topPeersStr}) reduce available exit from ${liquidity.instantExitCapacityPercent}% to ${liquidity.stressedExitCapacityPercent}% across ${crowdedSharePercent}% of vault capital during a mass withdrawal.`
-      });
-    }
-  }
-
   // 5. Negative Net APY (Capital Decay / Yield Deficit)
   const netApy = Number(vault.net_apy) || 0;
   if (netApy < 0) {
@@ -133,10 +102,7 @@ export function generateVaultVerdict(vault, allocations = []) {
   }
 
   // 6. Plaintext Objective Summary
-  let exitSummary = liquidity.exitUnknown ? 'Exit Liquidity: unknown' : `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%${liquidity.unverifiedPercent > 0 ? ' of verified capital' : ''}`;
-  if (liquidity.isCrowded) {
-    exitSummary += ` (worst-case: ${liquidity.stressedExitCapacityPercent}%)`;
-  }
+  const exitSummary = liquidity.exitUnknown ? 'Exit Liquidity: unknown' : `Exit Liquidity: ${liquidity.instantExitCapacityPercent}%${liquidity.unverifiedPercent > 0 ? ' of verified capital' : ''}`;
   let mqiText = mqi.mqiPercent == null
     ? (mqi.unpriced ? 'unknown (no USD price)' : 'not available (no capital could be verified)')
     : mqi.unverifiedAssetsUsd > 0

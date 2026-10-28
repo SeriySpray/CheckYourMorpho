@@ -9,8 +9,7 @@ export const vault = (over = {}) => ({
 export const alloc = (over = {}) => ({
   market_unique_key: '1:0xabc', is_listed: 1, oracle_address: '0x1', lltv_percent: 86,
   chain_id: 1, collateral_asset_address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', collateral_asset_symbol: 'WETH', loan_asset_symbol: 'USDC',
-  warnings_json: '[]', supply_assets_usd: 10e6, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0,
-  peer_supply_usd: 0, ...over
+  warnings_json: '[]', supply_assets_usd: 10e6, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0, ...over
 });
 
 // Десять різних застав по 10% TVL: здоровий vault без прапорців. Адреси синтетичні.

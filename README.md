@@ -10,7 +10,7 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 
 - Lists every vault that Morpho marks as listed, on all chains the Morpho API returns, with search by name, symbol, curator or address and filters by network, asset and curator.
 - Sorts vaults by TVL, APY, liquidity, MQI or low-risk share of collateral.
-- Opens an audit panel for a vault: its allocations by market, MQI, collateral facts collected about each token, instant and crowded exit capacity, and a list of red flags.
+- Opens an audit panel for a vault: its allocations by market, MQI, collateral facts collected about each token, instant exit capacity, and a list of red flags.
 - Lets you pin vaults in the browser (stored in `localStorage`).
 - Shows the vaults as a WebGL 2 particle sphere next to the list. Phones get the list only.
 - Sends alerts about starred vaults to a Telegram bot, and shows the same events in an activity panel (see Alerts below).
@@ -65,15 +65,12 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 
 **Instant exit** is the share of the verified capital (TVL minus capital behind unexpanded adapters, reported as `unverifiedPercent`) a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, the vault has no USD price, or none of its capital could be verified, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 20% the vault is marked illiquid.
 
-**Crowded exit** is the same figure when every other vault in the database that lends to the same markets withdraws at once and free liquidity is shared pro rata. Only peer positions above $1K count, and V2 look-through positions are skipped so the same capital is not counted twice. A market is crowded when the peers' supply is at least its free liquidity, the vault's own exit there drops by more than 30% (or the market has no free liquidity), and the vault's position is over 1% of TVL.
-
 **Verdict** combines the above into a one-line summary and red flags. MQI counts every dollar, but a flag needs the capital behind it to be material: 1% of TVL, at most $250K. That threshold applies to Compromised Market Exposure, Unresolved Exposure, Unverified Markets and to alerts. It does not change MQI, so a vault with $145 in a failing market shows MQI 99.9 and no red flag.
 
 | Flag | Level |
 |---|---|
 | Compromised Market Exposure (failing markets hold a material amount) | CRITICAL |
-| Restricted Exit Liquidity (instant exit under 20%) | HIGH |
-| Critical Crowded Exit Deficit / Elevated Crowded Exit Contagion | CRITICAL / HIGH, depending on how far crowded exit falls below instant exit and how much TVL sits in crowded markets |
+| Restricted Exit Liquidity (instant exit under 20% and under $10M) | HIGH |
 | Unresolved Exposure (a material amount whose underlying markets could not be resolved) | HIGH |
 | Unverified Markets (a material amount with bad debt or warnings data missing; left out of MQI) | MEDIUM |
 | Unpriced Vault (assets without a USD price) | HIGH |
@@ -164,7 +161,6 @@ The public instance runs on an Oracle Cloud VM as a systemd service behind nginx
 ## Limitations
 
 - The analysis is per vault and from the lender's side. There are no user positions, health factors or borrower views.
-- Crowded exit only knows about listed vaults in the database. Direct lenders and unlisted vaults in the same market are not counted as competitors.
 - V2 adapters other than MetaMorpho, and MetaMorpho adapters whose underlying vault is not in the sync, are not expanded. The same holds for V1 positions the API returns without a market, a V1 vault whose allocation is missing or empty, and MorphoMarketV1 assets that the market caps cover by less than 99.5% (a smaller gap is taken as accrued interest and counted as cash; the live API shows no gap at all). Such capital is not counted as cash: it is flagged as Unresolved Exposure, left out of the MQI score (shown as unverified), left out of the collateral shares and of the exit figure (both are measured on the verified capital).
 - The collector reads public sources, which can be wrong, outdated (a day between collections), incomplete or unavailable; a field it could not fill is `null`, never evidence either way. Pages rendered by JavaScript may come back empty. Only the chains listed above get more than Sourcify data.
 - Only the current state is kept, plus the event log and a few days of vault samples that the alerts use. There are no charts over time.

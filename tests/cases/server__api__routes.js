@@ -27,7 +27,6 @@ const withEnv = async (name, value, fn) => {
   if (value === undefined) delete process.env[name]; else process.env[name] = value;
   try { return await fn(); } finally { saved === undefined ? delete process.env[name] : process.env[name] = saved; }
 };
-const peerRow = (over = {}) => ({ vault_address: '0xp1', vault_name: 'P1', supply_assets_usd: 5000, via_vault: null, ...over });
 
 // Моки без сокета мають один ключ ліміту на весь набір: знімаємо ліміт, його кейси вмикають свій через withLimit.
 CONFIG.server.rateLimit.maxRequests = Number.MAX_SAFE_INTEGER;
@@ -104,19 +103,6 @@ function seedCatalog(db) {
 }
 const ids = body => body.vaults.map(v => parseInt(v.address, 16));
 const list = (mod, qs = '') => getJson(mod, '/api/vaults' + qs).body;
-
-// Ринок mk1: утилізація 95% (поріг crowded), вільна ліквідність 10M - 9.5M = 500K. P і Q мають по 1M, R - дрібна позиція, S - look-through V2 через Q.
-function seedCrowded(db) {
-  ins(db, 'markets', M('mk1', { total_supply_assets_usd: 1e7, total_borrow_assets_usd: 9.5e6 }));
-  ins(db, 'vaults', V(0x10, { name: 'Vault P', total_assets_usd: 1e6, liquidity_usd: 1e6 }));
-  ins(db, 'vaults', V(0x11, { name: 'Peer Q', total_assets_usd: 1e6 }));
-  ins(db, 'vaults', V(0x12, { name: 'Peer R', total_assets_usd: 900 }));
-  ins(db, 'vaults', V(0x13, { name: 'Look S', total_assets_usd: 4e5, liquidity_usd: 4e5, version: 'v2' }));
-  ins(db, 'vault_allocations', A(0x10, 'mk1', 1e6));
-  ins(db, 'vault_allocations', A(0x11, 'mk1', 1e6));
-  ins(db, 'vault_allocations', A(0x12, 'mk1', 900));
-  ins(db, 'vault_allocations', A(0x13, 'mk1', 4e5, { via_vault: addr(0x11) }));
-}
 
 // F: 60% у чистому ринку, 39.5% + 0.5% у нелістингованих (сукупно матеріально). G: лише 0.5% пилу в нелістингованому.
 function seedQuality(db) {
@@ -375,31 +361,6 @@ export default {
       for (let i = 0; i < 10001; i++) f(`rl-flood-${i}`, W0);
       assert.equal(f('rl-old', W0), 0, 'найстаріший запис мав бути витіснений');
     })],
-  ],
-  summarizePeers: [
-    ['порожні рядки -> total 0', ({ summarizePeers: f }) => assert.deepEqual(f(null, '0xv', {}), { total: 0, peers: [] })],
-    ['власні позиції пропускаються', ({ summarizePeers: f }) =>
-      assert.deepEqual(f([peerRow({ vault_address: '0xv' }), peerRow()], '0xv', {}), { total: 5000, peers: [{ vaultAddress: '0xp1', vaultName: 'P1', supplyUsd: 5000 }] })],
-    ['межа $1K: рівно 1000 ігнорується, 1000.01 враховується', ({ summarizePeers: f }) => {
-      assert.equal(f([peerRow({ supply_assets_usd: 1000 })], '0xv', {}).total, 0);
-      assert.equal(f([peerRow({ supply_assets_usd: 1000.01 })], '0xv', {}).total, 1000.01);
-    }],
-    ['look-through позиції (via_vault) пропускаються', ({ summarizePeers: f }) =>
-      assert.equal(f([peerRow({ via_vault: '0xu' })], '0xv', {}).peers.length, 0)],
-    ['пірів відсортовано за спаданням і обрізано до 5, total рахує всіх', ({ summarizePeers: f }) => {
-      const rows = Array.from({ length: 7 }, (_, i) => peerRow({ vault_address: `0x${i}`, supply_assets_usd: 2000 + i * 100 }));
-      const r = f(rows, '0xv', {});
-      assert.deepEqual(r.peers.map(p => p.supplyUsd), [2600, 2500, 2400, 2300, 2200]);
-      assert.equal(r.total, 7 * 2000 + 100 * (0 + 1 + 2 + 3 + 4 + 5 + 6));
-    }],
-    ['частка V2-vault віднімається від базового V1', ({ summarizePeers: f }) => {
-      const r = f([peerRow({ vault_address: '0xunder', supply_assets_usd: 10000 })], '0xv2', { via_vault: '0xunder', supply_assets_usd: 4000 });
-      assert.equal(r.total, 6000); assert.equal(r.peers[0].supplyUsd, 6000);
-    }],
-    ['після віднімання частки V2 залишок <= $1K не вважається піром', ({ summarizePeers: f }) =>
-      assert.equal(f([peerRow({ vault_address: '0xu', supply_assets_usd: 4500 })], '0xv2', { via_vault: '0xu', supply_assets_usd: 4000 }).total, 0)],
-    ['віднімання стосується лише базового vault, не інших пірів', ({ summarizePeers: f }) =>
-      assert.equal(f([peerRow({ vault_address: '0xother', supply_assets_usd: 10000 })], '0xv2', { via_vault: '0xu', supply_assets_usd: 4000 }).total, 10000)],
   ],
   withEffectiveTotal: [
     ['додатний TVL повертає той самий vault', ({ withEffectiveTotal: f }) => {
@@ -852,14 +813,6 @@ export default {
         assert.ok([200, 400].includes(r.statusCode), `offset=${o} -> ${r.statusCode}`);
       }
     })],
-    ['метрики ризику враховують пірів: exit 50%, stressed 25%, ринок переповнений', async mod => sandbox(async db => {
-      seedCrowded(db);
-      const p = list(mod, '?search=Vault%20P').vaults[0];
-      assert.equal(p.exitCapPercent, 50); assert.equal(p.exitCapUsd, 5e5);
-      assert.equal(p.stressedExitCapPercent, 25); assert.equal(p.stressedExitCapUsd, 2.5e5);
-      assert.equal(p.isCrowded, true); assert.equal(p.crowdedMarketsCount, 1);
-      assert.equal(p.mqiPercent, 100); assert.equal(p.isAllClean, true); assert.equal(p.compromisedCount, 0);
-    })],
     ['метрики якості: 40% у нелістингованих ринках -> MQI 60, два скомпрометовані ринки', async mod => sandbox(async db => {
       seedQuality(db);
       const [f, g] = [list(mod, '?search=' + addr(0x20).slice(-4)).vaults[0], list(mod, '?search=' + addr(0x21).slice(-4)).vaults[0]];
@@ -871,7 +824,7 @@ export default {
       ins(db, 'vaults', V(0x30, { total_assets_usd: 0 }));
       ins(db, 'vault_allocations', A(0x30, 'full', 1000));
       const z = list(mod).vaults[0];
-      assert.equal(z.exitCapPercent, 0); assert.equal(z.stressedExitCapPercent, 0);
+      assert.equal(z.exitCapPercent, 0);
     })],
     ['каталог без синхронізації живе 60 с (запасний TTL для CLI-синхронізації в іншому процесі)', async mod => sandbox(async db => withClock(async clock => {
       seedCatalog(db);
@@ -971,20 +924,6 @@ export default {
       assert.equal(dust.isFlagged, true); assert.equal(dust.isClean, false); assert.ok(dust.warnings.length > 0);
       assert.equal(body.verdict.mqi.mqiPercent, 99.5);
     })],
-    ['піри з інших vaults формують stressed exit і переповнений ринок', async mod => sandbox(async db => {
-      seedCrowded(db);
-      const liq = getJson(mod, '/api/vaults/' + addr(0x10)).body.verdict.liquidity;
-      assert.equal(liq.instantExitCapacityPercent, 50); assert.equal(liq.stressedExitCapacityPercent, 25);
-      assert.equal(liq.crowdedMarkets.length, 1); assert.equal(liq.crowdedMarkets[0].peerSupplyUsd, 1e6);
-      assert.deepEqual(liq.crowdedMarkets[0].topPeers, ['Peer Q ($1.0M)']);
-    })],
-    ['V2 через базовий V1: власна частка віднімається від базового, піри P і Q(600K)', async mod => sandbox(async db => {
-      seedCrowded(db);
-      const liq = getJson(mod, '/api/vaults/' + addr(0x13)).body.verdict.liquidity;
-      assert.equal(liq.instantExitCapacityPercent, 100); assert.equal(liq.stressedExitCapacityPercent, 25);
-      assert.equal(liq.crowdedMarkets[0].peerSupplyUsd, 1.6e6);
-      assert.deepEqual(liq.crowdedMarkets[0].topPeers, ['Vault P ($1.0M)', 'Peer Q ($600K)']);
-    })],
     ['кеш аудиту: у межах 30 с віддає збережене, після 30 с - свіже', async mod => sandbox(async db => withClock(async clock => {
       ins(db, 'vaults', V(0x40, { name: 'Before' }));
       const get = () => getJson(mod, '/api/vaults/' + addr(0x40)).body.vault.name;
@@ -1004,7 +943,7 @@ export default {
       ins(db, 'vaults', V(0x43, { total_assets_usd: 0 }));
       ins(db, 'vault_allocations', A(0x43, 'full', 1000));
       const liq = getJson(mod, '/api/vaults/' + addr(0x43)).body.verdict.liquidity;
-      assert.equal(liq.instantExitCapacityPercent, 0); assert.equal(liq.stressedExitCapacityPercent, 0);
+      assert.equal(liq.instantExitCapacityPercent, 0);
     })],
     ['успішна синхронізація інвалідує кеш аудиту', async mod => sandbox(async db => {
       ins(db, 'vaults', V(0x42, { name: 'Before' }));

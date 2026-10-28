@@ -196,11 +196,11 @@ export default {
     ['/list додає вердикт, MQI і кількість очікуваних змін; /status рахує зміни, які вже можна застосувати', async ({ handleBotUpdate }) => {
       const db = makeDb(); const tg = makeTg();
       bound(db, { chat: 55, vaults: [A, B] });
-      db.prepare('INSERT INTO vault_samples (vault_address, hour_bucket, sampled_at, mqi_percent, verdict_level, verdict_reasons) VALUES (?, ?, ?, 98, ?, ?)').run(A, Math.floor(NOW / 3600), NOW, 'red', 'Critical Crowded Exit Deficit');
+      db.prepare('INSERT INTO vault_samples (vault_address, hour_bucket, sampled_at, mqi_percent, verdict_level, verdict_reasons) VALUES (?, ?, ?, 98, ?, ?)').run(A, Math.floor(NOW / 3600), NOW, 'red', 'Restricted Exit Liquidity');
       urgent(db, { kind: 'pending_guardian_change', status: 'pending', validAt: NOW - 60, key: 'pg-ready', details: {} });
       urgent(db, { kind: 'pending_market_removal', status: 'pending', validAt: NOW + 600, key: 'pm-wait', details: {} });
       await handleBotUpdate(db, tg, update(1, 55, '/list'), NOW);
-      assert.match(tg.sent()[0].text, /<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\nRisk: exit risk under stress  \|  Market quality 98%  \|  2 pending changes/);
+      assert.match(tg.sent()[0].text, /<b>Alpha USDC<\/b>  \|  Ethereum\n<code>0x1111\.\.\.1111<\/code>\nRisk: low exit liquidity  \|  Market quality 98%  \|  2 pending changes/);
       assert.match(tg.sent()[0].text, /<code>0x2222\.\.\.2222<\/code>\n\n?$|<code>0x2222\.\.\.2222<\/code>$/);
       await handleBotUpdate(db, tg, update(2, 55, '/status'), NOW);
       assert.match(tg.sent()[1].text, /Pending changes: 2 \(1 can be applied now\)\. \/upcoming shows them\./);

@@ -177,8 +177,7 @@ export function expandMetaMorphoAdapters(rawV2, v1ByAddress) {
     }
   }
 
-  // Tag a position with the underlying vault it sits inside when that look-through is the majority of it,
-  // so peer-supply aggregation does not count the same capital twice.
+  // Tag a position with the underlying vault it sits inside when that look-through is the majority of it.
   // shortcut: mixed direct + look-through positions are tagged by majority only.
   return [...merged.values()].map(({ viaShares, ...cap }) => {
     const total = toBigInt(cap.allocation);

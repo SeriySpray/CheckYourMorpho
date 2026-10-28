@@ -6,8 +6,8 @@
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk10">
-  <link rel="stylesheet" href="css/components.css?v=20261028_risk10">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk11">
+  <link rel="stylesheet" href="css/components.css?v=20261028_risk11">
 </head>
 <body>
   <a class="about-pill" href="about.html" aria-label="About this site: data sources and how each number is calculated"><span class="about-pill-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 7.2v4.3M8 4.6v.1"></path></svg></span><span>About</span></a>
@@ -454,21 +454,6 @@
             <span class="meter-label" id="risk-exit-label">Instant Exit Capacity</span>
             <div class="meter-val-wrap">
               <span class="meter-value" id="risk-exit-pct">0%</span>
-              <span class="info-circle-wrap">
-                <button type="button" class="info-circle-btn" id="risk-exit-info-btn" aria-label="Worst-Case Exit Capacity" aria-expanded="false" aria-describedby="risk-exit-popover">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                  </svg>
-                </button>
-                <div class="info-popover" id="risk-exit-popover" role="tooltip">
-                  <div class="info-popover-title">Worst-Case Exit (Bank Run)</div>
-                  <div class="info-popover-body" id="risk-exit-popover-body">
-                    In a mass withdrawal across shared markets, competing vaults take their share of cash, reducing available exit to <strong>0%</strong>.
-                  </div>
-                </div>
-              </span>
             </div>
           </div>
           <div class="meter-track">
@@ -494,22 +479,22 @@
           </div>
         </div>
 
-        <details class="model-limits">
-          <summary>What this audit does not check</summary>
-          <ul>
-            <li>Oracles. Only the presence of an oracle address is checked, not how the price is built, whether it can be manipulated or whether it follows a depeg.</li>
-            <li>Collateral quality and liquidation buffer. Collateral is grouped by category and size, but LLTV headroom, redemption limits and token contract risk are not scored.</li>
-            <li>Who controls the vault. Owner, curator, guardian and timelock length are not rated. Pending changes show up in Activity and in Telegram.</li>
-            <li>The future. Exit capacity is a snapshot: borrowers can take free cash at any block, and a bank run can be faster than the estimate.</li>
-          </ul>
-          <p>For information only, not financial advice. Data comes from the Morpho API and can be late or incomplete.</p>
-        </details>
+        <section class="model-limits" aria-labelledby="model-limits-title">
+          <div class="red-flags-header" id="model-limits-title">Not checked</div>
+          <dl class="model-limits-grid">
+            <div><dt>Oracles</dt><dd>Only the oracle address is checked, not how the price is built or whether it can be manipulated.</dd></div>
+            <div><dt>Collateral</dt><dd>Grouped by category and size. LLTV headroom, redemption limits and token contract risk are not scored.</dd></div>
+            <div><dt>Control</dt><dd>Owner, curator, guardian and timelock are not rated. Pending changes show in Activity and Telegram.</dd></div>
+            <div><dt>The future</dt><dd>Exit capacity is a snapshot: borrowers can take free cash at any block.</dd></div>
+          </dl>
+          <p class="model-limits-note">For information only, not financial advice. Data comes from the Morpho API and can be late or incomplete.</p>
+        </section>
       </div>
 
     </div>
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261028_risk10"></script>
+  <script type="module" src="js/app.js?v=20261028_risk11"></script>
 </body>
 </html>

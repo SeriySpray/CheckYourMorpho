@@ -88,29 +88,6 @@ export function checkRateLimit(ip, now = Date.now()) {
   return 0;
 }
 
-/**
- * Peer supply for one allocation: other vaults' positions in the same market (> $1K).
- * Look-through positions of V2 vaults (via_vault set) are skipped because they are already part of the
- * underlying V1 vault's own position; when the audited vault is such a V2 vault, its slice is removed
- * from that underlying vault's position so it does not appear as its own competitor.
- */
-export function summarizePeers(marketRows, vaultAddress, alloc) {
-  let total = 0;
-  const peers = [];
-  for (const r of marketRows || []) {
-    if (r.vault_address === vaultAddress || r.via_vault) continue;
-    let supply = Number(r.supply_assets_usd) || 0;
-    if (alloc.via_vault && r.vault_address === alloc.via_vault) {
-      supply -= Number(alloc.supply_assets_usd) || 0;
-    }
-    if (supply <= 1000) continue;
-    total += supply;
-    peers.push({ vaultAddress: r.vault_address, vaultName: r.vault_name, supplyUsd: supply });
-  }
-  peers.sort((a, b) => b.supplyUsd - a.supplyUsd);
-  return { total, peers: peers.slice(0, 5) };
-}
-
 const FLAG_RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 
 /**
@@ -529,15 +506,8 @@ export function getVaultCatalog() {
     JOIN markets m ON va.market_unique_key = m.unique_key
   `).all();
 
-  // Peer supplies per market come from the same rows: every allocation of every vault is loaded anyway
-  const peerRowsByMarket = new Map();
-  for (const a of allocRows) {
-    if (!peerRowsByMarket.has(a.market_unique_key)) peerRowsByMarket.set(a.market_unique_key, []);
-    peerRowsByMarket.get(a.market_unique_key).push(a);
-  }
   const allocMap = new Map();
   for (const a of allocRows) {
-    a.peer_supply_usd = summarizePeers(peerRowsByMarket.get(a.market_unique_key), a.vault_address, a).total;
     const k = a.vault_address.toLowerCase();
     if (!allocMap.has(k)) allocMap.set(k, []);
     allocMap.get(k).push(a);
@@ -570,10 +540,6 @@ export function getVaultCatalog() {
       liquidityUsd: row.liquidity_usd,
       exitCapPercent: liq.instantExitCapacityPercent,
       exitCapUsd: liq.instantExitCapacityUsd,
-      stressedExitCapPercent: liq.stressedExitCapacityPercent,
-      stressedExitCapUsd: liq.stressedExitCapacityUsd,
-      isCrowded: liq.isCrowded,
-      crowdedMarketsCount: liq.crowdedMarkets?.length || 0,
       apy: row.apy,
       netApy: row.net_apy,
       fee: row.fee,
@@ -683,28 +649,6 @@ export function handleGetVaultByAddress(req, res, address) {
       WHERE va.vault_address = ?
       ORDER BY va.supply_assets_usd DESC
     `).all(cleanAddress);
-
-    // Aggregate competing peer vaults across shared markets for Crowded Exit analysis
-    const marketKeys = allocations.map(a => a.market_unique_key);
-    const peerRowsByMarket = new Map();
-    if (marketKeys.length > 0) {
-      const peerRows = db.prepare(`
-        SELECT va.market_unique_key, va.vault_address, v.name AS vault_name, va.supply_assets_usd, va.via_vault
-        FROM vault_allocations va
-        JOIN vaults v ON va.vault_address = v.address
-        WHERE va.market_unique_key IN (SELECT value FROM json_each(?))
-      `).all(JSON.stringify(marketKeys));
-      for (const r of peerRows) {
-        if (!peerRowsByMarket.has(r.market_unique_key)) peerRowsByMarket.set(r.market_unique_key, []);
-        peerRowsByMarket.get(r.market_unique_key).push(r);
-      }
-    }
-
-    for (const alloc of allocations) {
-      const peerData = summarizePeers(peerRowsByMarket.get(alloc.market_unique_key), cleanAddress, alloc);
-      alloc.peer_supply_usd = peerData.total;
-      alloc.peer_vaults = peerData.peers;
-    }
 
     // Compute comprehensive institutional audit verdict (MQI + collateral breakdown + Exit Liquidity)
     const verdict = generateVaultVerdict(withEffectiveTotal(vault, allocations), allocations);

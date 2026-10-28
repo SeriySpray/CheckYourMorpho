@@ -8,7 +8,6 @@ const sleep = ms => new Promise(r => realSetTimeout(r, ms));
 const tick = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise(r => setImmediate(r)); };
 
 const DEFAULT_FILTERS = { query: '', network: 'all', asset: 'all', curator: 'all', sort: 'tvl_desc', pinnedOnly: false, showTiny: false };
-const EXIT_STATE = { normalExitPct: 0, normalExitUsd: 0, stressedExitPct: 0, stressedExitUsd: 0, dropPct: 0, topPeer: '' };
 const OVERRIDES = ['addEventListener', 'appendChild', 'querySelector', 'querySelectorAll', 'focus', 'blur', 'click', 'getContext', 'parentElement', 'scrollWidth'];
 
 /** Заглушка сфери: записує виклики, щоб перевіряти підсвічування і вибір. */
@@ -47,7 +46,7 @@ function reset(m) {
   Object.assign(s.explorerFilters, DEFAULT_FILTERS);
   s.allVaults = []; s.selectedVaultAddress = null; s.activeAuditData = null; s.focusBeforeAudit = null;
   s.auditAbort = null; s.pinnedMemoryFallback = null; s.isTransitioningVault = false; s.isClosingAudit = false;
-  s.isPollingActive = false; s.currentModalExitState = { ...EXIT_STATE }; s.sphere = sphereStub(); s.pinnedSource = [];
+  s.isPollingActive = false; s.sphere = sphereStub(); s.pinnedSource = [];
   s.REDUCED_MOTION.matches = false;
   for (const el of globalThis.__cymClientEnv.elements.values()) {
     for (const k of OVERRIDES) delete el[k];
@@ -120,7 +119,7 @@ const cv = (over = {}) => ({
 });
 const verdictOf = (over = {}) => ({
   mqi: { mqiPercent: 100, isAllClean: true, compromisedMarkets: [], compromisedPercent: 0, unverifiedPercent: 0, unpriced: false, ...over.mqi },
-  liquidity: { instantExitCapacityPercent: 40, instantExitCapacityUsd: 4e6, stressedExitCapacityPercent: 40, stressedExitCapacityUsd: 4e6, ...over.liquidity },
+  liquidity: { instantExitCapacityPercent: 40, instantExitCapacityUsd: 4e6, ...over.liquidity },
   collateral: {
     tier: 'ALLOCATED', unverifiedPercent: 0,
     tokens: [{ symbol: 'WETH', usd: 5e6, percent: 50 }, { symbol: 'NEW', usd: 2.5e6, percent: 25 }], ...over.collateral
@@ -1164,10 +1163,10 @@ const base = {
     }),
     T('сортування за APY, ліквідністю і ризиком', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
-        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, exitCapPercent: 50, stressedExitCapPercent: 50 }),
+        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, exitCapPercent: 50 }),
         cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, exitCapPercent: null, flagCount: 1, worstFlagLevel: 'medium', worstFlagTitle: 'Unknown Exit Liquidity' }),
-        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, exitCapPercent: 15, stressedExitCapPercent: 5, flagCount: 2, worstFlagLevel: 'high', worstFlagTitle: 'Restricted Exit Liquidity' }),
-        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, exitCapPercent: 30, stressedExitCapPercent: 10, flagCount: 1, worstFlagLevel: 'critical', worstFlagTitle: 'Compromised Market Exposure' })
+        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, exitCapPercent: 15, flagCount: 2, worstFlagLevel: 'high', worstFlagTitle: 'Restricted Exit Liquidity' }),
+        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, exitCapPercent: 30, flagCount: 1, worstFlagLevel: 'critical', worstFlagTitle: 'Compromised Market Exposure' })
       ];
       const order = sort => { s.explorerFilters.sort = sort; const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')).join(''); };
       assert.equal(order('apy_desc'), 'bcad');
@@ -1571,65 +1570,21 @@ const base = {
   ],
 
   // ---------- Вихідна ліквідність ----------
-  setExitInfoActive: [
-    T('вмикає і вимикає поповер, синхронізує aria-expanded і показ стресу', ({ setExitInfoActive: f, __state: s }) => {
-      s.currentModalExitState = { normalExitPct: 40, normalExitUsd: 4e6, stressedExitPct: 25, stressedExitUsd: 2.5e6, dropPct: 15, topPeer: 'X' };
-      f(true);
-      assert.equal(s.DOM.riskExitInfoBtn.classList.contains('active'), true);
-      assert.equal(s.DOM.riskExitInfoBtn.getAttribute('aria-expanded'), 'true');
-      assert.match(s.DOM.riskExitPct.innerHTML, /STRESSED:<\/span>25%/);
-      f(false);
-      assert.equal(s.DOM.riskExitInfoBtn.classList.contains('active'), false);
-      assert.equal(s.DOM.riskExitInfoBtn.getAttribute('aria-expanded'), 'false');
-      assert.equal(s.DOM.riskExitPct.textContent, '40%');
+  updateExitDisplay: [
+    T('невідома ліквідність: порожня смуга і N/A', ({ updateExitDisplay: f, __state: s }) => {
+      s.DOM.riskExitBar.style.width = '100%';
+      f(null, 0);
+      assert.equal(s.DOM.riskExitBar.style.width, '0%');
+      assert.equal(s.DOM.riskExitPct.textContent, 'N/A');
+      assert.match(s.DOM.riskExitDesc.textContent, /Exit liquidity unknown/);
     }),
-  ],
-  updateStressedExitDisplay: [
-    T('невідома ліквідність: порожня нейтральна смуга і N/A в обох режимах', ({ updateStressedExitDisplay: f, __state: s }) => {
-      s.currentModalExitState = { ...EXIT_STATE, normalExitPct: null, stressedExitPct: null };
-      for (const stressed of [false, true]) {
-        s.DOM.riskExitBar.style.width = '100%';
-        f(stressed);
-        assert.equal(s.DOM.riskExitBar.style.width, '0%');
-        assert.equal(s.DOM.riskExitBar.dataset.tone, '');
-        assert.equal(s.DOM.riskExitPct.textContent, 'N/A');
-        assert.match(s.DOM.riskExitDesc.textContent, /Exit liquidity unknown/);
-      }
-    }),
-    T('звичайний режим: відсоток, сума і ширина смуги з обмеженням 100%', ({ updateStressedExitDisplay: f, __state: s }) => {
-      s.currentModalExitState = { ...EXIT_STATE, normalExitPct: 40, normalExitUsd: 4e6 };
-      f(false);
+    T('відомий вихід: відсоток, сума і ширина смуги з обмеженням 100%', ({ updateExitDisplay: f, __state: s }) => {
+      f(40, 4e6);
       assert.equal(s.DOM.riskExitBar.style.width, '40%');
       assert.equal(s.DOM.riskExitPct.textContent, '40%');
       assert.equal(s.DOM.riskExitDesc.textContent, '$4.00M available for immediate withdrawal without locking markets');
-      s.currentModalExitState = { ...EXIT_STATE, normalExitPct: 150 };
-      f(false);
+      f(150, 0);
       assert.equal(s.DOM.riskExitBar.style.width, '100%');
-    }),
-    T('стрес із падінням: тег STRESSED, сума і тон warn; нижче 15% - bad', ({ updateStressedExitDisplay: f, __state: s }) => {
-      s.currentModalExitState = { normalExitPct: 40, normalExitUsd: 4e6, stressedExitPct: 25, stressedExitUsd: 2.5e6, dropPct: 15, topPeer: '' };
-      f(true);
-      assert.equal(s.DOM.riskExitBar.style.width, '25%');
-      assert.equal(s.DOM.riskExitBar.dataset.tone, 'warn');
-      assert.equal(s.DOM.riskExitPct.innerHTML, '<span class="exit-stressed-tag">STRESSED:</span>25%');
-      assert.match(s.DOM.riskExitDesc.innerHTML, /\$2\.50M<\/span> available during a mass withdrawal/);
-      s.currentModalExitState = { ...s.currentModalExitState, stressedExitPct: 10, dropPct: 30 };
-      f(true);
-      assert.equal(s.DOM.riskExitBar.dataset.tone, 'bad');
-    }),
-    T('стрес без падіння: смуга без тону, текст відсотка не змінюється', ({ updateStressedExitDisplay: f, __state: s }) => {
-      s.currentModalExitState = { ...EXIT_STATE, normalExitPct: 40, stressedExitPct: 40, dropPct: 0 };
-      s.DOM.riskExitPct.textContent = 'sentinel';
-      f(true);
-      assert.equal(s.DOM.riskExitBar.style.width, '40%');
-      assert.equal(s.DOM.riskExitBar.dataset.tone, '');
-      assert.equal(s.DOM.riskExitPct.textContent, 'sentinel');
-    }),
-    T('невідомий лише стресовий вихід -> показується звичайний', ({ updateStressedExitDisplay: f, __state: s }) => {
-      s.currentModalExitState = { ...EXIT_STATE, normalExitPct: 30, normalExitUsd: 1000, stressedExitPct: null };
-      f(true);
-      assert.equal(s.DOM.riskExitPct.textContent, '30%');
-      assert.equal(s.DOM.riskExitBar.style.width, '30%');
     }),
   ],
 
@@ -1655,7 +1610,6 @@ const base = {
       assert.match(collateral[0].innerHTML, /WETH[\s\S]*\$5\.00M[\s\S]*50%/);
       assert.equal(D.riskFlagsList.innerHTML, '<div class="flag-item clear">No flags were raised. That is not a safety guarantee, see below.</div>');
       assert.match(D.allocationsTbody.innerHTML, /No active market allocations recorded/);
-      assert.match(D.riskExitPopoverBody.innerHTML, /fully preserved at <strong>40%<\/strong> \(\$4\.00M\)/);
       assert.equal(D.riskExitPct.textContent, '40%');
     }),
     T('невідомий MQI: N/A і порожня смуга, прапорець Unpriced Vault в шапці', ({ populateAuditModal: f, __state: s }) => {
@@ -1694,27 +1648,12 @@ const base = {
       f(audit({}, { collateral: { tier: 'UNKNOWN', tokens: [] } }));
       assert.equal(D.riskEffectiveAssets.textContent, '0 tokens'); assert.match(D.riskCollateralList.innerHTML, /No active collateral backing recorded/);
     }),
-    T('невідомий вихід: Exit Cap N/A, поповер без оцінки, стан виходу null', ({ populateAuditModal: f, __state: s }) => {
+    T('невідомий вихід: Exit Cap N/A і порожня смуга', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
-      f(audit({}, { liquidity: { instantExitCapacityPercent: null, stressedExitCapacityPercent: undefined } }));
+      f(audit({}, { liquidity: { instantExitCapacityPercent: null } }));
       assert.equal(D.modalExitCapPct.textContent, 'Exit Cap N/A');
-      assert.equal(D.riskExitPopoverBody.textContent, 'Worst-case exit cannot be estimated: liquidity data for this vault is unavailable.');
       assert.equal(D.riskExitPct.textContent, 'N/A');
-      assert.equal(s.currentModalExitState.normalExitPct, null);
-      assert.equal(s.currentModalExitState.dropPct, 0);
-    }),
-    T('стресовий вихід: падіння, конкурент екранується, кнопка поповера скинута', ({ populateAuditModal: f, __state: s }) => {
-      const D = s.DOM;
-      D.riskExitInfoBtn.classList.add('active');
-      f(audit({}, { liquidity: { instantExitCapacityPercent: 40, stressedExitCapacityPercent: 25.04, stressedExitCapacityUsd: 2.5e6,
-        crowdedMarkets: [{ topPeers: ['<b>Peer</b>'] }] } }));
-      assert.equal(s.currentModalExitState.dropPct, 15);
-      assert.equal(s.currentModalExitState.topPeer, '<b>Peer</b>');
-      const html = D.riskExitPopoverBody.innerHTML;
-      assert.ok(html.includes('(&lt;b&gt;Peer&lt;/b&gt;)'));
-      assert.ok(html.includes('<strong>40%</strong> to <strong>25.04%</strong> ($2.50M)'));
-      assert.equal(D.riskExitInfoBtn.classList.contains('active'), false);
-      assert.equal(D.riskExitInfoBtn.getAttribute('aria-expanded'), 'false');
+      assert.equal(D.riskExitBar.style.width, '0%');
     }),
     T('таблиця ринків: FLAGGED, UNVERIFIED, NO ISSUES, неявний прапорець і n/a для LLTV', ({ populateAuditModal: f, __state: s }) => {
       const rows = collect(s.DOM.allocationsTbody);
@@ -1826,9 +1765,9 @@ const base = {
     }),
   ],
   setupModalEvents: [
-    T('кнопки модалки: закриття, обране, поповер стресового виходу', ({ setupModalEvents: f, closeVaultAudit, __state: s }) => {
+    T('кнопки модалки: закриття, обране', ({ setupModalEvents: f, closeVaultAudit, __state: s }) => {
       const D = s.DOM;
-      for (const e of [D.closeBtn, D.modalFavBtn, D.riskExitInfoBtn, D.riskExitLabel]) { e.handlers = {}; e.addEventListener = (t, fn) => { e.handlers[t] = fn; }; }
+      for (const e of [D.closeBtn, D.modalFavBtn]) { e.handlers = {}; e.addEventListener = (t, fn) => { e.handlers[t] = fn; }; }
       f();
       assert.equal(D.closeBtn.handlers.click, closeVaultAudit);
       D.modalFavBtn.handlers.click();
@@ -1836,42 +1775,13 @@ const base = {
       s.selectedVaultAddress = '0xA';
       D.modalFavBtn.handlers.click();
       assert.deepEqual(pinned(), ['0xa']);
-
-      s.currentModalExitState = { normalExitPct: 40, normalExitUsd: 1, stressedExitPct: 20, stressedExitUsd: 1, dropPct: 20, topPeer: '' };
-      D.riskExitInfoBtn.handlers.mouseenter();
-      assert.match(D.riskExitPct.innerHTML, /STRESSED/);
-      D.riskExitInfoBtn.handlers.mouseleave();
-      assert.equal(D.riskExitPct.textContent, '40%');
-      D.riskExitInfoBtn.handlers.click({ stopPropagation() {} });
-      assert.equal(D.riskExitInfoBtn.classList.contains('active'), true);
-      D.riskExitPct.textContent = 'sticky';
-      D.riskExitInfoBtn.handlers.mouseleave(); // активний поповер тримає стресовий показ
-      assert.equal(D.riskExitPct.textContent, 'sticky');
-      D.riskExitPct.innerHTML = '';
-      D.riskExitLabel.handlers.mouseenter();
-      assert.match(D.riskExitPct.innerHTML, /STRESSED/);
     }),
-    T('клік поза поповером закриває його', ({ setupModalEvents: f, __state: s }) => {
-      const docHandlers = {};
-      document.addEventListener = (t, fn) => { docHandlers[t] = fn; };
-      f();
-      s.DOM.riskExitInfoBtn.classList.add('active');
-      docHandlers.click({ target: { closest: () => ({}) } }); // клік усередині .info-circle-wrap
-      assert.equal(s.DOM.riskExitInfoBtn.classList.contains('active'), true);
-      docHandlers.click({ target: { closest: () => null } });
-      assert.equal(s.DOM.riskExitInfoBtn.classList.contains('active'), false);
-    }),
-    T('Escape закриває по одному шару: поповер, dropdown, пошук, очікуване відкриття, модалку', ({ setupModalEvents: f, __state: s }) => {
+    T('Escape закриває по одному шару: dropdown, пошук, очікуване відкриття, модалку', ({ setupModalEvents: f, __state: s }) => {
       const win = {};
       globalThis.addEventListener = (t, fn) => { win[t] = fn; };
       f();
       const esc = () => win.keydown({ key: 'Escape' });
       const D = s.DOM;
-
-      D.riskExitInfoBtn.classList.add('active');
-      document.querySelector = () => { throw new Error('не мав дійти до dropdown'); };
-      esc();
-      assert.equal(D.riskExitInfoBtn.classList.contains('active'), false);
 
       const x = fakeDropdown('asset', []);
       x.dd.classList.add('open');
@@ -1903,14 +1813,6 @@ const base = {
       esc();
       assert.equal(D.auditModal.classList.contains('hidden'), true);
       assert.equal(s.selectedVaultAddress, null);
-    }),
-    T('інші клавіші ігноруються', ({ setupModalEvents: f, __state: s }) => {
-      const win = {};
-      globalThis.addEventListener = (t, fn) => { win[t] = fn; };
-      f();
-      s.DOM.riskExitInfoBtn.classList.add('active');
-      win.keydown({ key: 'Enter' });
-      assert.equal(s.DOM.riskExitInfoBtn.classList.contains('active'), true);
     }),
   ],
   setupAuditNavTabs: [
