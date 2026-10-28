@@ -2055,9 +2055,10 @@ function describeTokenFacts(t) {
   // Each fact is [sentence, what it means for a depositor]; the meaning follows the actual values, and null means none is added
   const canMeans = { mint: 'new tokens can dilute it', burn: 'tokens can be removed from wallets', blacklist: 'a wallet can be cut off', freeze: 'balances can be locked', pause: 'all transfers, and any sale by the vault, can be stopped', upgrade: 'its rules can be rewritten' };
   const canKeys = Object.keys(canMeans).filter(k => fn[k] === true);
+  const noSourceFact = hasContract && !verified ? ['Our collector did not find verified source code.', 'A gap in our data, not a risk finding. Check the contract on a block explorer.'] : null;
   const contract = [
     verified ? ['The contract code is public and has been checked against its source.', 'Anyone can read what it does: fewer hidden surprises.']
-      : hasContract ? ['Our collector did not find verified source code.', 'A gap in our data, not a risk finding. Check the contract on a block explorer.'] : null,
+      : noSourceFact,
     proxy === true ? ['Its code can be swapped out later.', 'The issuer can change how it works without asking holders.']
       : proxy === false && verified && !can.includes('change the code') ? ['Its code cannot be swapped out.', 'Its rules are fixed.'] : null,
     can.length ? [`Whoever holds the right keys can ${joinList(can)}.`, `Only if misused: ${joinList(canKeys.map(k => canMeans[k]))}.`] : null
@@ -2074,7 +2075,7 @@ function describeTokenFacts(t) {
     fewHolders || h.top10_pct == null ? null
       : allInProtocols ? ['Almost the whole supply sits in protocol contracts, such as lending pools.', 'Normal for a DeFi token: the real owners sit behind those contracts.']
         : [`The 10 biggest holders own ${h.top10_pct.toFixed(1)}% of the supply${h.top10_contracts ? `, but ${h.top10_contracts} of them ${h.top10_contracts === 1 ? 'is a protocol contract' : 'are protocol contracts'}` : ''}.`,
-          h.top10_contracts ? 'Contracts hold tokens for many users, so this overstates concentration.' : h.top10_pct >= 50 ? 'Most is in a few hands: one big sale can drop the price.' : 'Fairly spread out.'],
+          h.top10_contracts ? (np == null ? 'Contracts may hold tokens for many users, so this may overstate concentration.' : h.top10_pct - np >= 20 ? 'Protocol contracts hold much of it for many users, so this overstates concentration.' : h.top10_pct >= 50 ? 'Most is in a few hands, and little of it sits in known protocol contracts.' : 'Little of it sits in known protocol contracts.') : h.top10_pct >= 50 ? 'Most is in a few hands: one big sale can drop the price.' : 'Fairly spread out.'],
     fewHolders || allInProtocols || np == null ? null : [`Leaving out protocol contracts, the 10 biggest remaining holders own ${np.toFixed(1)}%.`,
       np >= 50 ? 'A few people own most of the free supply.' : np >= 20 ? 'Noticeable, but no single holder dominates.' : 'Well spread: no single seller moves the price.'],
     h.morpho_blue_pct != null ? [`${h.morpho_blue_pct.toFixed(1)}% of the supply is deposited in Morpho Blue.`,
@@ -2092,18 +2093,21 @@ function describeTokenFacts(t) {
   const exitClass = d.pendle ? 'pt' : d.rwa?.issuer ? 'rwa' : fn.erc4626 === true || d.price?.share_price_assets != null ? 'vault' : null;
   const poolsLine = !pools ? (poolsChecked ? [NO_POOLS_NOTE[exitClass ?? 'none'], NO_POOLS_MEANING[exitClass ?? 'none'] + NO_POOLS_CAVEAT] : null)
     : poolsUsd < THIN_POOLS_USD ? [`Almost no trading liquidity when collected: its ${plural(pools, 'pool')} held only ${formatCurrency(poolsUsd)}.${exitClass ? ` ${THIN_POOLS_NOTE[exitClass]}` : ''}`, 'Even a small sale moves the price.']
-      : pools >= POOLS_LISTED_MAX ? [`When collected, its ${POOLS_LISTED_MAX} biggest pools held ${formatCurrency(poolsUsd)}; there may be more.`, poolsUsd >= 1e6 ? 'Can be sold without crashing the price.' : 'Fine for small sales; large ones move the price.']
-        : [`When collected, it traded in ${plural(pools, 'pool')} holding ${formatCurrency(poolsUsd)}.`, poolsUsd >= 1e6 ? 'Can be sold without crashing the price.' : 'Fine for small sales; large ones move the price.'];
+      : pools >= POOLS_LISTED_MAX ? [`When collected, its ${POOLS_LISTED_MAX} biggest pools held ${formatCurrency(poolsUsd)}; there may be more.`, poolsUsd >= 1e7 ? 'Deep pools: large sales are possible.' : poolsUsd >= 1e6 ? 'Fine for small and mid-size sales.' : 'Fine for small sales; large ones move the price.']
+        : [`When collected, it traded in ${plural(pools, 'pool')} holding ${formatCurrency(poolsUsd)}.`, poolsUsd >= 1e7 ? 'Deep pools: large sales are possible.' : poolsUsd >= 1e6 ? 'Fine for small and mid-size sales.' : 'Fine for small sales; large ones move the price.'];
   const market = [
     d.price?.usd != null ? [`When collected, it traded at $${price.toLocaleString('en-US', { maximumFractionDigits: price >= 100 ? 2 : 4 })}.`, 'Context only: markets use their own oracle price.'] : null,
     poolsLine,
     impact != null ? [`When collected, selling ${size} worth would have moved the price ${impact < 0.1 ? 'by under 0.1%' : `by about ${impact < 10 ? Math.round(impact * 10) / 10 : Math.round(impact)}%`}${impact >= 5 ? ', so it is hard to sell in size' : ''}.`,
-      impact < 1 ? 'A forced sale was cheap, but pool depth changes daily.' : impact < 5 ? 'A forced sale cost a noticeable slice; this changes with pool depth.' : 'A forced sale would crash the price and might not cover the loan; this changes with pool depth.'] : null,
+      impact < 1 ? `A ${size} forced sale was cheap, but pool depth changes daily.` : impact < 5 ? `A ${size} forced sale cost a noticeable slice; this changes with pool depth.` : `A ${size} sale would hit the price hard; this changes with pool depth.`] : null,
     swap?.status === 'no_route' && pools ? ['KyberSwap found no way to swap it, so it may not be easy to sell on exchanges.', 'A hurried sale may find no buyer; Kyber can also just miss a token.'] : null,
     d.rwa?.issuer ? [`It is issued by ${d.rwa.issuer}.`, 'Its value depends on that company keeping its promises.'] : null,
     d.pendle?.days_to_expiry != null ? [`It expires in ${d.pendle.days_to_expiry} days.`, 'Redeemable for the underlying then; the price drifts toward it.'] : null
   ].filter(Boolean);
   const missing = [h.count == null && h.top10_pct == null ? 'holders' : null, d.price?.usd == null ? 'price' : null, !pools && !poolsChecked ? 'trading liquidity' : null].filter(Boolean);
+  // Three or more gaps are one line under "Not found" instead of a note in every section
+  const gaps = [...(noSourceFact ? ['verified source code'] : []), ...missing];
+  const packGaps = gaps.length >= 3;
   const section = (title, facts) => (facts.length ? `<div class="cf-sec"><h4>${title}</h4><div>${facts.map(([fact, means]) => `<p>${escapeHtml(fact)} <span class="cf-mean">${escapeHtml(means)}</span></p>`).join('')}</div></div>` : '');
   const date = new Date((t.collectedAt || 0) * 1000).toISOString().slice(0, 10);
   const pct = Math.round((t.coverage ?? 0) * 100);
@@ -2113,7 +2117,8 @@ function describeTokenFacts(t) {
     can.length ? `can ${can[0]}` : null,
     fewHolders ? `only ${plural(h.count, 'holder')}` : h.top10_nonprotocol_pct != null && !allInProtocols ? `top holders outside protocols own ${h.top10_nonprotocol_pct.toFixed(0)}%` : h.top10_pct != null && h.top10_nonprotocol_pct == null ? `10 holders own ${h.top10_pct.toFixed(0)}%` : null
   ].filter(Boolean).slice(0, 3);
-  const body = [section('Contract', contract), section('Holders', holders), section('Market', market), section('Not found by our collector', missing.length ? [[`Our collector did not find: ${joinList(missing)}.`, 'A gap in our data: not a risk, not proof of safety. Check an explorer or DEX site.']] : [])].join('');
+  const shownGaps = packGaps ? gaps : missing;
+  const body = [section('Contract', packGaps ? contract.filter(f => f !== noSourceFact) : contract), section('Holders', holders), section('Market', market), section('Not found by our collector', shownGaps.length ? [[`Our collector did not find: ${joinList(shownGaps)}.`, 'A gap in our data: not a risk, not proof of safety. Check an explorer or DEX site.']] : [])].join('');
   if (!contract.length && !holders.length && !market.length) return { summary: t.stale ? 'Old data, almost nothing found' : 'Almost nothing found yet', html: `<p>Our collector found too little to describe this token: a limit of our data, not a risk.</p><div class="stamp">${escapeHtml(stamp)}</div>`, hasData: false };
   return { summary: brief.join(', ') || 'See details', html: `${body}<div class="stamp">${escapeHtml(stamp)}</div>`, hasData: true };
 }

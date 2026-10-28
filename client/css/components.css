@@ -1778,7 +1778,8 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
     width: auto;
     border: 0;
     border-radius: 0;
-    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+    /* room at the bottom so the floating About button never sits on the last rows */
+    padding: env(safe-area-inset-top, 0px) 0 calc(56px + env(safe-area-inset-bottom, 0px));
     transition: opacity 220ms var(--ease-out), transform 300ms var(--ease-out);
   }
 
@@ -1949,7 +1950,21 @@ body.audit-open .activity-tg-lead { gap: 10px; }
 .about-pill:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
 @media (max-width: 768px) {
-  .about-pill { top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: 12px; }
+  /* icon only: the label would cover the table */
+  .about-pill { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 12px; width: 36px; padding: 0; justify-content: center; gap: 0; font-size: 0; }
+}
+
+/* The markets table on a phone: tighter cells, wrapping badge and header, no per-market APY (the vault's net APY is in the header) */
+@media (max-width: 560px) {
+  .data-table { min-width: 0; }
+  .data-table th, .data-table td { padding: 7px 4px; }
+  .data-table th { font-size: 9.5px; letter-spacing: 0.02em; white-space: normal; line-height: 1.25; }
+  .data-table td { font-size: 12px; }
+  .data-table td:first-child { min-width: 0; font-size: 13px; }
+  .data-table .badge-status { display: inline-block; white-space: normal; text-align: center; line-height: 1.2; padding: 1px 4px; }
+}
+@media (max-width: 480px) {
+  .data-table th:nth-child(7), .data-table td:nth-child(7) { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

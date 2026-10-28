@@ -1797,8 +1797,25 @@ const base = {
       for (const x of ['change how it works', 'new tokens can dilute it', 'any sale by the vault', 'A few holders decide', 'Even a small sale']) assert.ok(risky.includes(x) || risky.includes(x.toLowerCase()), x);
       const calm = mean(f({ data: { contract: { sourcify_match: 'x', is_proxy: false, fn: {} }, holders: { count: 9000, top10_pct: 30, top10_nonprotocol_pct: 10 }, liquidity: { pools_count: 5, total_reserve_usd: 5e7, kyber: { 1000000: { status: 'ok', price_impact_pct: 0.1 } } },
         control: { controllers: [{ role: 'owner', is_contract: true, timelock_delay_sec: 86400 }] } } }).html).join('|');
-      for (const x of ['fewer hidden surprises', 'Its rules are fixed', 'Many holders', 'Well spread', 'without crashing the price', 'A forced sale was cheap']) assert.ok(calm.includes(x), x);
-      assert.doesNotMatch(calm, /One key|few holders decide|would crash/);
+      for (const x of ['fewer hidden surprises', 'Its rules are fixed', 'Many holders', 'Well spread', 'Deep pools: large sales are possible', 'A $1M forced sale was cheap']) assert.ok(calm.includes(x), x);
+      assert.doesNotMatch(calm, /One key|few holders decide|hit the price hard/);
+    }),
+    T('калібрування: «контракти завищують концентрацію» лише коли протоколи справді тримають багато; глибина пулів і розмір продажу названі', ({ describeTokenFacts: f }) => {
+      const holders = h => f({ data: { holders: { count: 500, top10_contracts: 3, ...h } } }).html;
+      assert.ok(holders({ top10_pct: 90, top10_nonprotocol_pct: 20 }).includes('Protocol contracts hold much of it'));
+      const little = holders({ top10_pct: 78, top10_nonprotocol_pct: 70 });
+      assert.ok(little.includes('little of it sits in known protocol contracts')); assert.doesNotMatch(little, /overstates/);
+      assert.ok(holders({ top10_pct: 90 }).includes('may overstate'));
+      const pools = usd => f({ data: { liquidity: { pools_count: 3, total_reserve_usd: usd, kyber: { 1000000: { status: 'ok', price_impact_pct: 9 } } } } }).html;
+      assert.ok(pools(2e7).includes('Deep pools')); assert.ok(pools(2e6).includes('small and mid-size sales')); assert.ok(pools(2e5).includes('large ones move the price'));
+      assert.ok(pools(2e6).includes('A $1M sale would hit the price hard'));
+    }),
+    T('три й більше дірок зводяться в один рядок «Not found», без окремої примітки про код у розділі Contract', ({ describeTokenFacts: f }) => {
+      const many = f({ coverage: 0.4, data: { contract: { is_proxy: null, fn: {} }, liquidity: { pools_count: null } } }).html;
+      assert.ok(many.includes('Our collector did not find: verified source code, holders and price.'));
+      assert.doesNotMatch(many.split('Not found by our collector')[0], /verified source code/);
+      const two = f({ coverage: 0.4, data: { contract: { is_proxy: null, fn: {} }, holders: { count: 900, top10_pct: 20 }, price: { usd: 1 }, liquidity: { pools_count: null }, meta: { sources: [{ key: 'gecko_pools', status: 200 }] } } }).html;
+      assert.ok(two.includes('Our collector did not find verified source code.'));
     }),
     T('суперечливі дані не стають твердженням: не-проксі з upgrade і лічильник менше 10 при топ-10 нижче 99%', ({ describeTokenFacts: f }) => {
       const r = f({ data: { contract: { sourcify_match: 'x', is_proxy: false, fn: { upgrade: true } } } }).html;
