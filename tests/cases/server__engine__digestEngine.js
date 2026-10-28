@@ -37,7 +37,7 @@ export default {
     }],
     ['вердикт: причина з verdict_reasons дописується, без неї текст не змінюється', ({ diffVaultSamples }) => {
       const now = { ...base, verdict_level: 'red', verdict_reasons: 'Restricted Exit Liquidity' };
-      assert.equal(diffVaultSamples(base, now)[0].text, 'Risk worsened: no risk flags changed to low exit liquidity. Less than 20% of the deposits can be withdrawn immediately.');
+      assert.equal(diffVaultSamples(base, now)[0].text, 'Risk worsened: no risk flags changed to low exit liquidity. Less than 5% of the deposits can be withdrawn immediately.');
       assert.equal(diffVaultSamples(base, { ...now, verdict_reasons: null })[0].text, 'Risk worsened: no risk flags changed to risk flags');
       assert.equal(diffVaultSamples(now, base)[0].text, 'Risk improved: low exit liquidity changed to no risk flags');
     }],

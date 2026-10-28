@@ -29,7 +29,7 @@ export default {
       assert.equal(f(vault(), [alloc({ supply_assets_usd: 100e6 })]).instantExitCapacityPercent, 100)],
     ['вихід обмежений вільною ліквідністю ринку', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault(), [alloc({ supply_assets_usd: 100e6, total_supply_assets_usd: 200e6, total_borrow_assets_usd: 190e6 })]);
-      assert.equal(r.instantExitCapacityPercent, 10); assert.equal(r.isIlliquid, true);
+      assert.equal(r.instantExitCapacityPercent, 10); assert.equal(r.isIlliquid, false);
     }],
     ['формула: 40M кешу + min(60M, 30M вільних) = 70%', ({ calculateLiquidityMetrics: f }) => {
       const r = f(vault(), [mkt(0, 60e6, 30e6)]);
@@ -64,9 +64,25 @@ export default {
       assert.equal(f(vault({ total_assets_usd: 1e6, liquidity_usd: 200e3 }), [mkt(0, 1e6, 500e6)]).instantExitCapacityPercent, 20);
       assert.equal(f(vault({ total_assets_usd: 1e6, liquidity_usd: 0 }), [mkt(0, 1e6, 500e6)]).instantExitCapacityPercent, 0);
     }],
-    ['isIlliquid: рівно 20% -> false, 19.9% -> true', ({ calculateLiquidityMetrics: f }) => {
-      assert.equal(f(vault(), [mkt(0, 100e6, 20e6)]).isIlliquid, false);
-      assert.equal(f(vault(), [mkt(0, 100e6, 19.9e6)]).isIlliquid, true);
+    ['спільна ліквідність: ринок, де vault має менше 90% пропозиції і вільна ліквідність обмежує вихід, рахується у sharedExitPercent', ({ calculateLiquidityMetrics: f }) => {
+      const m = (supply, total, borrow) => alloc({ market_unique_key: '1:0xs', collateral_asset_address: '0xcs', collateral_asset_symbol: 'CS', supply_assets_usd: supply, total_supply_assets_usd: total, total_borrow_assets_usd: borrow });
+      const shared = f(vault({ total_assets_usd: 100e6 }), [m(100e6, 400e6, 360e6)]);
+      assert.deepEqual([shared.instantExitCapacityPercent, shared.sharedExitPercent, shared.sharedMarkets], [40, 100, 1]);
+      assert.equal(shared.proportionalExitPercent, 10, 'free 40M split by supply 100 of 400');
+      const own = f(vault({ total_assets_usd: 100e6 }), [m(100e6, 105e6, 65e6)]);
+      assert.deepEqual([own.instantExitCapacityPercent, own.sharedExitPercent, own.sharedMarkets], [40, 13, 1], 'the others supplied 5M of the 40M');
+      const sole = f(vault({ total_assets_usd: 100e6 }), [m(100e6, 100e6, 60e6)]);
+      assert.deepEqual([sole.sharedExitPercent, sole.sharedMarkets, sole.proportionalExitPercent], [0, 0, 40], 'nobody else supplies the market');
+      const roomy = f(vault({ total_assets_usd: 100e6 }), [m(100e6, 400e6, 0)]);
+      assert.deepEqual([roomy.instantExitCapacityPercent, roomy.sharedExitPercent], [100, 100], 'free cash 400M: others could still take 300M of the vault 100M');
+      const capped = f(vault({ total_assets_usd: 100e6, version: 'v2', liquidity_usd: 20e6 }), [m(100e6, 400e6, 360e6)]);
+      assert.deepEqual([capped.instantExitCapacityPercent, capped.sharedExitPercent], [20, 100], 'the cap shrinks both the exit and the shared part');
+      const none = f(vault({ total_assets_usd: 100e6, liquidity_usd: null }), [m(100e6, 400e6, 360e6)]);
+      assert.equal(none.sharedExitPercent, null);
+    }],
+    ['isIlliquid: рівно 5% -> false, 4.9% -> true', ({ calculateLiquidityMetrics: f }) => {
+      assert.equal(f(vault(), [mkt(0, 100e6, 5e6)]).isIlliquid, false);
+      assert.equal(f(vault(), [mkt(0, 100e6, 4.9e6)]).isIlliquid, true);
     }],
     // Vault без жодної реальної позиції: капітал лежить на контракті і доступний миттєво,
     // обмеження - лише liquidity_usd (V2 завжди, V1 коли API його повідомив).

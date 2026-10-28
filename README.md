@@ -63,14 +63,14 @@ The Morpho asset tags (`btc`, `eth`, `lst`, `rwa` and so on) are synced into `to
 
 The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audit response for reference, but no longer drives a flag or the summary: it counted each token separately and marked a vault holding only cbBTC as extremely concentrated.
 
-**Instant exit** is the share of the verified capital (TVL minus capital behind unexpanded adapters, reported as `unverifiedPercent`) a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, the vault has no USD price, or none of its capital could be verified, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 20% the vault is marked illiquid.
+**Instant exit** is the share of the verified capital (TVL minus capital behind unexpanded adapters, reported as `unverifiedPercent`) a depositor could withdraw now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result is capped by the vault liquidity that Morpho reports, always applied, for both V1 and V2. If Morpho reports no liquidity figure at all, the vault has no USD price, or none of its capital could be verified, the exit is shown as unknown (`null`, N/A in the client) instead of 100%. Under 5% the vault is marked illiquid.
 
 **Verdict** combines the above into a one-line summary and red flags. MQI counts every dollar, but a flag needs the capital behind it to be material: 1% of TVL, at most $250K. That threshold applies to Compromised Market Exposure, Unresolved Exposure, Unverified Markets and to alerts. It does not change MQI, so a vault with $145 in a failing market shows MQI 99.9 and no red flag.
 
 | Flag | Level |
 |---|---|
 | Compromised Market Exposure (failing markets hold a material amount) | CRITICAL |
-| Restricted Exit Liquidity (instant exit under 20% and under $10M) | HIGH |
+| Restricted Exit Liquidity (instant exit under 5%, vault of at least $10K; also sends a Telegram event when it falls under) | MEDIUM |
 | Unresolved Exposure (a material amount whose underlying markets could not be resolved) | HIGH |
 | Unverified Markets (a material amount with bad debt or warnings data missing; left out of MQI) | MEDIUM |
 | Unpriced Vault (assets without a USD price) | HIGH |

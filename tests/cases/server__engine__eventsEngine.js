@@ -435,6 +435,16 @@ export default {
       const next = { verdict_level: 'red', mqi_percent: 60, total_assets_usd: 500_000, instant_exit_percent: 5, flagged_markets: { '0xm2': { label: 'x', supplyUsd: 1 } }, unpriced: false, exit_unknown: false };
       assert.deepEqual(diffDerivedState(prev, next, baseCtx(), NOW), []);
     }],
+    ['exit_liquidity_low: одна подія при переході з 5% і вище під 5%, лише для vault від $10K; без події при 4.9 -> 4.5, при падінні 8 -> 6 і для пилу', ({ diffDerivedState }) => {
+      const st = (exit, tvl = 500_000) => ({ ...M, instant_exit_percent: exit, total_assets_usd: tvl, bad_debt_markets: {}, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 });
+      const evs = diffDerivedState(st(6), st(1.4), baseCtx(), NOW);
+      assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['exit_liquidity_low', 'warning']]);
+      assert.deepEqual(JSON.parse(evs[0].details_json), { previousExitPercent: 6, currentExitPercent: 1.4 });
+      assert.deepEqual(diffDerivedState(st(4.9), st(4.5), baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState(st(8), st(6), baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState(st(6, 5_000), st(1, 5_000), baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState(st(null), st(1), baseCtx(), NOW), []);
+    }],
     ['виявляє bad_debt_appeared і vault_delisted; вдруге ту саму подію не створює (стабільний dedupe_key)', ({ diffDerivedState }) => {
       const prev = { ...M, bad_debt_markets: {}, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 };
       const next = {

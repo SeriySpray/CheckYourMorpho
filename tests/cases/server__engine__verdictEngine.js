@@ -80,18 +80,22 @@ export default {
       assert.equal(r.collateral.tier, 'ALLOCATED'); assert.deepEqual(r.collateral.tokens.map(t => [t.symbol, t.percent]), [['WETH', 100]]);
       assert.deepEqual(Object.keys(r.collateral).sort(), ['idlePercent', 'tier', 'tokens', 'undeployedPercent', 'unverifiedPercent']);
     }],
-    ['низька миттєва ліквідність -> HIGH Restricted Exit Liquidity з сумою', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, total_supply_assets_usd: 200e6, total_borrow_assets_usd: 195e6 })]);
+    ['вихід нижче 5% -> MEDIUM Restricted Exit Liquidity з сумою у $K або $M', ({ generateVaultVerdict: f }) => {
+      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, total_supply_assets_usd: 200e6, total_borrow_assets_usd: 196e6 })]);
       const x = flag(r, 'Restricted Exit Liquidity');
-      assert.equal(x.level, 'HIGH'); assert.match(x.message, /^Only 5% \(\$5\.00M\)/);
+      assert.equal(x.level, 'MEDIUM'); assert.match(x.message, /^Only 4% \(\$4\.00M\)/);
+      const tiny = f(vault({ total_assets_usd: 178e3 }), [mkt(0, 178e3, 2.5e3)]);
+      assert.match(flag(tiny, 'Restricted Exit Liquidity').message, /^Only 1\.4% \(\$2\.5K\)/);
     }],
-    ['миттєвий вихід рівно 20% -> без Restricted, 19.9% -> є', ({ generateVaultVerdict: f }) => {
+    ['межа: рівно 5% -> без прапорця, 4.9% -> є; великий vault з 4.9% теж', ({ generateVaultVerdict: f }) => {
       const small = vault({ total_assets_usd: 50e6 });
-      assert.ok(!titles(f(small, [mkt(0, 50e6, 10e6)])).includes('Restricted Exit Liquidity'));
-      assert.ok(titles(f(small, [mkt(0, 50e6, 9.9e6)])).includes('Restricted Exit Liquidity'));
+      assert.ok(!titles(f(small, [mkt(0, 50e6, 2.5e6)])).includes('Restricted Exit Liquidity'));
+      assert.ok(titles(f(small, [mkt(0, 50e6, 2.45e6)])).includes('Restricted Exit Liquidity'));
+      assert.ok(titles(f(vault(), [mkt(0, 100e6, 4.9e6)])).includes('Restricted Exit Liquidity'));
     }],
-    ['малий відсоток, але велика сума ($19.9M із $100M) -> без Restricted Exit', ({ generateVaultVerdict: f }) => {
-      assert.ok(!titles(f(vault(), [mkt(0, 100e6, 19.9e6)])).includes('Restricted Exit Liquidity'));
+    ['10-20% виходу це норма: без прапорця; пил (TVL до $10K) теж без прапорця', ({ generateVaultVerdict: f }) => {
+      assert.ok(!titles(f(vault(), [mkt(0, 100e6, 15e6)])).includes('Restricted Exit Liquidity'));
+      assert.ok(!titles(f(vault({ total_assets_usd: 5e3 }), [mkt(0, 5e3, 0)])).includes('Restricted Exit Liquidity'));
     }],
     ['net APY нижче -5% -> CRITICAL', ({ generateVaultVerdict: f }) =>
       assert.equal(apyFlag(f(vault({ net_apy: -0.1 }), diversified())).level, 'CRITICAL')],
@@ -113,7 +117,7 @@ export default {
       assert.match(r.summary, /MQI: 100% of the checked capital has no defect found \(50% of capital unchecked\)/);
     }],
     ['частково нерозкрито: summary та Restricted Exit позначають "перевіреного капіталу"', ({ generateVaultVerdict: f }) => {
-      const r = f(vault({ unresolved_exposure_usd: 40e6 }), [alloc({ supply_assets_usd: 60e6, total_supply_assets_usd: 100e6, total_borrow_assets_usd: 95e6, collateral_asset_address: '0xc0' })]);
+      const r = f(vault({ unresolved_exposure_usd: 40e6 }), [alloc({ supply_assets_usd: 60e6, total_supply_assets_usd: 100e6, total_borrow_assets_usd: 99e6, collateral_asset_address: '0xc0' })]);
       assert.match(r.summary, /Exit Liquidity: [\d.]+% of verified capital/);
       assert.match(flag(r, 'Restricted Exit Liquidity').message, /of the verified deposits/);
     }],

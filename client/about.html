@@ -7,8 +7,8 @@
   <meta name="description" content="Where the data on CheckYourMorpho comes from, how each number is calculated and what the audit does not check.">
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk18">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk18">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk21">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk21">
 </head>
 <body class="about-body">
   <div class="about-shell">
@@ -55,7 +55,7 @@
       <h2>The vault list</h2>
       <p>Each row shows the vault, its network, curator, total deposits (TVL) and net APY. A badge appears when the audit raised a flag: it names the worst one, with "+N" if there are more. A row without a badge has no flags.</p>
       <ul class="about-list">
-        <li>Sort by total deposits, APY, free liquidity or flagged first.</li>
+        <li>Sort by total deposits, APY or free liquidity.</li>
         <li>Network, asset and curator menus are built from the data, with a count per option. Curator names come from Morpho. A vault without one shows as Independent.</li>
         <li>Vaults with under $1K in deposits are hidden. The "Show under $1K" switch brings them back. A vault you starred, or one you search for by name, is always shown.</li>
         <li>The star pins a vault. Pins live in your browser (localStorage) and are used by the Telegram alerts if you connect the bot.</li>
@@ -86,7 +86,7 @@
       <div class="about-table" role="table" aria-label="Flags">
         <div class="about-row about-row-head" role="row"><span role="columnheader">Flag</span><span role="columnheader">Level</span><span role="columnheader">When it is raised</span></div>
         <div class="about-row" role="row"><span role="cell">Compromised Market Exposure</span><span role="cell" class="lvl bad">Critical</span><span role="cell">Markets with a defect hold a material amount.</span></div>
-        <div class="about-row" role="row"><span role="cell">Restricted Exit Liquidity</span><span role="cell" class="lvl bad">High</span><span role="cell">Instant exit under 20% and under $10M. A low share of a very large vault does not count.</span></div>
+        <div class="about-row" role="row"><span role="cell">Restricted Exit Liquidity</span><span role="cell" class="lvl warn">Medium</span><span role="cell">Instant exit under 5% of a vault with at least $10K in deposits. Morpho keeps markets near 90% utilization, so 10-20% is normal; under 5% means the markets are past 95%. The figure includes withdrawals through force-deallocate (V2), and two vaults that share a market may both count the same free liquidity.</span></div>
         <div class="about-row" role="row"><span role="cell">Unresolved Exposure</span><span role="cell" class="lvl bad">High</span><span role="cell">A material amount sits behind an adapter or position whose markets could not be resolved.</span></div>
         <div class="about-row" role="row"><span role="cell">Unpriced Vault</span><span role="cell" class="lvl bad">High</span><span role="cell">The vault's asset has no USD price, so no amounts can be valued.</span></div>
         <div class="about-row" role="row"><span role="cell">Negative Net APY</span><span role="cell" class="lvl bad">High / Critical</span><span role="cell">Net APY below zero. Critical below -5%.</span></div>
@@ -135,6 +135,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk18"></script>
+  <script src="js/about.js?v=20261028_risk21"></script>
 </body>
 </html>

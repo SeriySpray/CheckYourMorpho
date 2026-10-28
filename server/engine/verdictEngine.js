@@ -1,10 +1,9 @@
 import { calculateMQI, withMaterialUnresolved, getMaterialityThresholdUsd } from './mqiEngine.js';
 import { calculateHHI } from './hhiEngine.js';
 import { calculateCollateralMix } from './collateralEngine.js';
-import { calculateLiquidityMetrics } from './liquidityEngine.js';
+import { calculateLiquidityMetrics, LOW_EXIT_PERCENT, LOW_EXIT_MIN_TVL_USD } from './liquidityEngine.js';
 
-// A low share is only a warning when the absolute amount is small too: 14% of a $500M vault is still $70M
-export const RESTRICTED_EXIT_MAX_USD = 10e6;
+const exitUsdText = usd => (usd >= 1e6 ? `$${(usd / 1e6).toFixed(2)}M` : usd >= 1e3 ? `$${(usd / 1e3).toFixed(1)}K` : `$${Math.round(usd)}`);
 
 /**
  * Synthesizes the institutional vault audit based strictly on:
@@ -82,11 +81,11 @@ export function generateVaultVerdict(vault, allocations = []) {
         message: 'Withdrawable liquidity was not reported for this vault, so how much of the deposits can be withdrawn immediately is unknown.'
       });
     }
-  } else if (liquidity.instantExitCapacityPercent < 20 && liquidity.instantExitCapacityUsd < RESTRICTED_EXIT_MAX_USD) {
+  } else if (liquidity.instantExitCapacityPercent < LOW_EXIT_PERCENT && Number(vault.total_assets_usd) >= LOW_EXIT_MIN_TVL_USD) {
     redFlags.push({
-      level: 'HIGH',
+      level: 'MEDIUM',
       title: 'Restricted Exit Liquidity',
-      message: `Only ${liquidity.instantExitCapacityPercent}% ($${(liquidity.instantExitCapacityUsd / 1e6).toFixed(2)}M) of ${liquidity.unverifiedPercent > 0 ? 'the verified deposits' : 'deposits'} can be withdrawn immediately without waiting for borrower repayments.`
+      message: `Only ${liquidity.instantExitCapacityPercent}% (${exitUsdText(liquidity.instantExitCapacityUsd)}) of ${liquidity.unverifiedPercent > 0 ? 'the verified deposits' : 'deposits'} can be withdrawn immediately without waiting for borrower repayments.`
     });
   }
 

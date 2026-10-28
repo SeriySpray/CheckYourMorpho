@@ -1,6 +1,11 @@
 import { isIdleReserveMarket } from './hhiEngine.js';
 import { isUnpricedVault } from './mqiEngine.js';
 
+// Morpho keeps markets near 90% utilization, so a vault with 10-20% instant exit is the normal state. Under 5% means the
+// markets are past 95% utilization (borrow rates already well above target). Dust vaults are left out.
+export const LOW_EXIT_PERCENT = 5;
+export const LOW_EXIT_MIN_TVL_USD = 10e3;
+
 /**
  * Liquidity & Exit Capacity Engine
  * Calculates the instant exit capacity of a vault.
@@ -60,6 +65,9 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   let loanMarketsExitUsd = 0;
   let idleAllocationsUsd = 0;
   let totalAllocatedUsd = 0;
+  let sharedExitUsd = 0;
+  let sharedMarkets = 0;
+  let proportionalMarketsUsd = 0;
 
   for (const alloc of allocations) {
     const supplyUsd = Math.max(0, Number(alloc.supply_assets_usd) || 0);
@@ -76,6 +84,15 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
 
       const canExitUsd = Math.min(supplyUsd, marketFreeLiquidityUsd);
       loanMarketsExitUsd += canExitUsd;
+      // If every other lender withdraws first, the vault keeps only supply - borrow; the free cash they can take ahead of it is
+      // min(exit, what the others supplied). With everyone leaving together each gets the free cash in proportion to its supply.
+      const othersSupplyUsd = Math.max(0, marketTotalSupplyUsd - supplyUsd);
+      const contestedUsd = Math.min(canExitUsd, othersSupplyUsd);
+      if (contestedUsd > 0) {
+        sharedExitUsd += contestedUsd;
+        sharedMarkets++;
+      }
+      proportionalMarketsUsd += marketTotalSupplyUsd > 0 ? Math.min(supplyUsd, marketFreeLiquidityUsd * supplyUsd / marketTotalSupplyUsd) : canExitUsd;
     }
   }
 
@@ -90,6 +107,9 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
   // liquidity net of its penalty), which can be lower than the market-based figure.
   const totalEffectiveExitUsd = Math.min(knownAssetsUsd, directLiquidityUsd, trueIdleCashUsd + loanMarketsExitUsd);
   const instantExitCapacityPercent = Math.min(100, Math.max(0, Math.round((totalEffectiveExitUsd / knownAssetsUsd) * 1000) / 10));
+  // The reported-liquidity cap shrinks the exit, so it shrinks the shared part by the same factor
+  const capFactor = trueIdleCashUsd + loanMarketsExitUsd > 0 ? totalEffectiveExitUsd / (trueIdleCashUsd + loanMarketsExitUsd) : 0;
+  const proportionalExitUsd = Math.min(knownAssetsUsd, directLiquidityUsd, trueIdleCashUsd + proportionalMarketsUsd);
 
   // Without reported liquidity the exit figures stay null instead of an optimistic market-only estimate
   const known = value => (exitUnknown ? null : value);
@@ -98,9 +118,14 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
     marketExitCapacityUsd: Math.round(loanMarketsExitUsd * 100) / 100,
     instantExitCapacityUsd: known(Math.round(totalEffectiveExitUsd * 100) / 100),
     instantExitCapacityPercent: known(instantExitCapacityPercent),
-    isIlliquid: known(instantExitCapacityPercent < 20),
+    isIlliquid: known(instantExitCapacityPercent < LOW_EXIT_PERCENT),
     exitUnknown,
     exitUnknownReason: exitUnknown ? 'not_reported' : null,
-    unverifiedPercent
+    unverifiedPercent,
+    // Part of the exit that rests on free cash shared with other lenders (an upper bound for each of them), as a share of the exit
+    sharedExitPercent: known(totalEffectiveExitUsd > 0 ? Math.min(100, Math.round((sharedExitUsd * capFactor / totalEffectiveExitUsd) * 100)) : 0),
+    sharedMarkets,
+    // The exit if every lender of the shared markets left at once: free cash split by supply, so it is never counted twice
+    proportionalExitPercent: known(Math.min(100, Math.max(0, Math.round((proportionalExitUsd / knownAssetsUsd) * 1000) / 10)))
   };
 }

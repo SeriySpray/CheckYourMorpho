@@ -1171,7 +1171,6 @@ const base = {
       const order = sort => { s.explorerFilters.sort = sort; const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')).join(''); };
       assert.equal(order('apy_desc'), 'bcad');
       assert.equal(order('liq_desc'), 'acbd');
-      assert.equal(order('risk_desc'), 'dcba'); // critical, high, medium, none
     }),
     T('бейджі рядка: найгірший прапорець з "+N", підказка з назвою, рядок без прапорців без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
@@ -1582,7 +1581,15 @@ const base = {
       f(40, 4e6);
       assert.equal(s.DOM.riskExitBar.style.width, '40%');
       assert.equal(s.DOM.riskExitPct.textContent, '40%');
-      assert.equal(s.DOM.riskExitDesc.textContent, '$4.00M available for immediate withdrawal without locking markets');
+      assert.equal(s.DOM.riskExitDesc.textContent, '$4.00M available for immediate withdrawal without locking markets.');
+      f(40, 4e6, 24, 1);
+      assert.ok(!s.DOM.riskExitDesc.textContent.includes('other lenders'), 'under the threshold: no note');
+      f(40, 4e6, 60, 2);
+      assert.match(s.DOM.riskExitDesc.textContent, /About 60% of this is free cash in 2 markets that other lenders can withdraw first\.$/);
+      f(40, 4e6, 100, 1, 8);
+      assert.match(s.DOM.riskExitDesc.textContent, /1 market that other lenders can withdraw first; if all of them leave together, the vault can count on about 8%\.$/);
+      f(100, 4e6, 100, 1, 100);
+      assert.ok(!s.DOM.riskExitDesc.textContent.includes('other lenders'), 'a fair share equal to the exit: nothing to warn about');
       f(150, 0);
       assert.equal(s.DOM.riskExitBar.style.width, '100%');
     }),
@@ -1956,15 +1963,6 @@ const base = {
       assert.equal(f(42.5), 42.5); assert.equal(f('42'), 42); assert.equal(f(0), 0); assert.equal(f(-5), -5);
     }],
   ],
-  riskSortKey: [
-    ['найгірший прапорець важить найбільше, далі кількість прапорців, без прапорців - 0', ({ riskSortKey: f }) => {
-      assert.equal(f({}), 0);
-      assert.equal(f({ worstFlagLevel: 'medium', flagCount: 1 }), 101);
-      assert.equal(f({ worstFlagLevel: 'high', flagCount: 2 }), 202);
-      assert.equal(f({ worstFlagLevel: 'critical', flagCount: 1 }), 301);
-      assert.ok(f({ worstFlagLevel: 'critical', flagCount: 1 }) > f({ worstFlagLevel: 'high', flagCount: 50 }));
-    }],
-  ],
   summarizeFlags: [
     ['найгірший рівень, його назва і кількість; порожній список -> level null', ({ summarizeFlags: f }) => {
       assert.deepEqual(f([]), { level: null, title: null, count: 0 });
@@ -2071,11 +2069,6 @@ const base = {
 // Кейси для виправлених дефектів, злиті з основними за назвою функції
 const fixed = {
   updateActiveFilterChips: [
-        T('чіп сортування risk_desc має підпис з dropdown', ({ updateActiveFilterChips: f, __state: s }) => {
-      s.explorerFilters.sort = 'risk_desc';
-      f();
-      assert.ok(s.DOM.chipsContainer.innerHTML.includes('>Risk: Flagged First<'));
-    }),
         T('лише фільтр обраних показує чіп Favorites', ({ updateActiveFilterChips: f, __state: s }) => {
       s.explorerFilters.pinnedOnly = true;
       f();

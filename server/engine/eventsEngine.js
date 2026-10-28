@@ -1,5 +1,6 @@
 import { isIdleReserveMarket } from './hhiEngine.js';
 import { getMaterialityThresholdUsd, isMarketClean, isUnpricedVault } from './mqiEngine.js';
+import { LOW_EXIT_PERCENT, LOW_EXIT_MIN_TVL_USD } from './liquidityEngine.js';
 
 export const EVENT_KINDS = Object.freeze([
   // Admin events (V1)
@@ -907,6 +908,19 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
       `Bad debt detected in ${info.label || mKey} ($${info.badDebtUsd})${afterDataGap ? ', first seen after a gap in data' : ''}`,
       { marketKey: mKey, marketLabel: info.label || mKey, badDebtUsd: info.badDebtUsd, supplyUsd: info.supplyUsd, ...(afterDataGap ? { afterDataGap: true } : {}) },
       mKey
+    );
+  }
+
+  // Instant exit fell under the warning line (the flag's own threshold); reported once per crossing, repeats within a day are dropped
+  const prevExit = prevState.instant_exit_percent, nextExit = nextState.instant_exit_percent;
+  if (Number.isFinite(prevExit) && Number.isFinite(nextExit) && prevExit >= LOW_EXIT_PERCENT && nextExit < LOW_EXIT_PERCENT
+    && Number(nextState.total_assets_usd) >= LOW_EXIT_MIN_TVL_USD) {
+    pushDerived(
+      'exit_liquidity_low',
+      'warning',
+      `Only ${nextExit}% of the vault can be withdrawn right now`,
+      { previousExitPercent: prevExit, currentExitPercent: nextExit },
+      'low'
     );
   }
 

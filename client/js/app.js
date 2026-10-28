@@ -579,7 +579,6 @@ function updateActiveFilterChips() {
     const sortLabels = {
       apy_desc: 'APY: High to Low',
       liq_desc: 'Free Liquidity: High to Low',
-      risk_desc: 'Risk: Flagged First',
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -1395,9 +1394,6 @@ function renderVaultExplorer() {
     if (explorerFilters.sort === 'liq_desc') {
       return (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
     }
-    if (explorerFilters.sort === 'risk_desc') {
-      return riskSortKey(b) - riskSortKey(a) || (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
-    }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
   });
@@ -1979,7 +1975,7 @@ function closeVaultAudit() {
 }
 
 /** Instant exit meter: the share withdrawable now; unknown liquidity gives an empty bar, never a full (safe-looking) one. */
-function updateExitDisplay(exitPct, exitUsd) {
+function updateExitDisplay(exitPct, exitUsd, sharedPct = 0, sharedMarkets = 0, fairPct = null) {
   if (!DOM.riskExitBar || !DOM.riskExitPct) return;
   if (exitPct === null) {
     DOM.riskExitBar.style.width = '0%';
@@ -1990,7 +1986,10 @@ function updateExitDisplay(exitPct, exitUsd) {
   DOM.riskExitBar.style.width = `${Math.min(100, exitPct)}%`;
   DOM.riskExitPct.textContent = `${exitPct}%`;
   if (DOM.riskExitDesc) {
-    DOM.riskExitDesc.textContent = `${formatCurrency(exitUsd)} available for immediate withdrawal without locking markets`;
+    const shared = sharedPct >= SHARED_EXIT_NOTE_MIN_PCT && (fairPct == null || fairPct < exitPct)
+      ? ` About ${sharedPct}% of this is free cash in ${plural(sharedMarkets, 'market')} that other lenders can withdraw first${fairPct != null ? `; if all of them leave together, the vault can count on about ${fairPct}%` : ''}.`
+      : '';
+    DOM.riskExitDesc.textContent = `${formatCurrency(exitUsd)} available for immediate withdrawal without locking markets.${shared}`;
   }
 }
 
@@ -2011,6 +2010,8 @@ const roleLabel = r => (r === 'proxy_admin' ? 'proxy admin (it can change the co
 const THIN_POOLS_USD = 10000;
 /** Where the pool list is cut off by the data source: the count and the sum are then a lower bound. */
 const POOLS_LISTED_MAX = 20;
+// The exit note about free cash other lenders can take first shows when this share of the exit rests on it
+const SHARED_EXIT_NOTE_MIN_PCT = 25;
 // How a token without DEX pools is usually exited, by the kind of token the collector recognised. Worded as "usually": it is not a promise.
 const NO_POOLS_NOTE = {
   pt: 'It has no DEX pools of its own: Pendle principal tokens trade on Pendle and can be redeemed for the underlying asset at maturity.',
@@ -2226,7 +2227,10 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // null = backend has no liquidity data for this vault; an absent field keeps the old 0 default
   updateExitDisplay(
     pickExitMetric(verdict.liquidity?.instantExitCapacityPercent, 0),
-    verdict.liquidity?.instantExitCapacityUsd || 0
+    verdict.liquidity?.instantExitCapacityUsd || 0,
+    verdict.liquidity?.sharedExitPercent || 0,
+    verdict.liquidity?.sharedMarkets || 0,
+    verdict.liquidity?.proportionalExitPercent ?? null
   );
 
   // 4. Collateral Allocation Breakdown
@@ -2486,12 +2490,6 @@ function exitMetric(val) {
   if (val === undefined) return undefined;
   const num = Number(val);
   return val === null || val === '' || !Number.isFinite(num) ? null : num;
-}
-
-/** Risk sort key: the worst flag first, then more flags. */
-function riskSortKey(v) {
-  const risk = vaultRisk(v);
-  return (FLAG_RANK[risk.level] || 0) * 100 + Math.min(risk.count, 99);
 }
 
 /** First value that is not undefined (null is a real answer: "unknown"). */
