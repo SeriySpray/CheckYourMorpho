@@ -7,7 +7,7 @@ import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
 import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
-import { calculateHHI } from '../engine/hhiEngine.js';
+import { calculateHHI, isIdleReserveMarket } from '../engine/hhiEngine.js';
 import { parseTagsJson, withTokenClasses } from '../engine/collateralEngine.js';
 import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { TOKEN_CLASSES } from '../data/tokenClasses.js';
@@ -735,7 +735,8 @@ export function handleGetVaultByAddress(req, res, address) {
         updatedAt: vault.metadata_updated_at
       },
       verdict,
-      allocations: allocations.map(a => {
+      // A market the vault cannot allocate to (cap 0) and holds nothing in is not part of its picture; it returns once the cap is raised
+      allocations: allocations.filter(a => a.supply_cap_human > 0 || a.supply_assets_human > 0 || a.supply_assets_usd > 0).map(a => {
         const test = isMarketClean(a);
         // Same decision as the MQI engine (materiality incl. cumulative rule), so table and score agree
         const isFlagged = test.reasons.length > 0 && compromisedKeys.has(a.market_unique_key);
@@ -759,6 +760,7 @@ export function handleGetVaultByAddress(req, res, address) {
           supplyApy: a.supply_apy,
           borrowApy: a.borrow_apy,
           isListed: a.is_listed !== 0,
+          isIdle: isIdleReserveMarket(a),
           isClean: !isFlagged && !isUnverified,
           isFlagged,
           isUnverified,

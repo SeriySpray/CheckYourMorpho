@@ -691,6 +691,25 @@ export default {
     }],
   ],
   handleGetVaults: [
+    ['резервний ринок без застави позначений isIdle, ринок із заставою ні', async mod => sandbox(async db => {
+      ins(db, 'markets', M('idle', { collateral_asset_address: null, collateral_asset_symbol: 'NONE', lltv: '0', lltv_percent: 0 }));
+      ins(db, 'markets', M('col'));
+      ins(db, 'vaults', V(0x35, { total_assets_usd: 1e6 }));
+      ins(db, 'vault_allocations', A(0x35, 'idle', 1e4, { supply_cap_human: 1e9 }));
+      ins(db, 'vault_allocations', A(0x35, 'col', 9e5, { supply_cap_human: 1e9 }));
+      const rows = getJson(mod, '/api/vaults/' + addr(0x35)).body.allocations;
+      assert.deepEqual(rows.map(a => [a.marketUniqueKey, a.isIdle]).sort(), [['col', false], ['idle', true]]);
+    })],
+    ['ринок із cap 0 і нульовим вкладом не показується, із cap > 0 або з вкладом лишається', async mod => sandbox(async db => {
+      for (const k of ['closed', 'open', 'held', 'noc']) ins(db, 'markets', M(k));
+      ins(db, 'vaults', V(0x34, { total_assets_usd: 1e6 }));
+      ins(db, 'vault_allocations', A(0x34, 'closed', 0, { supply_cap_human: 0 }));
+      ins(db, 'vault_allocations', A(0x34, 'open', 0, { supply_cap_human: 1e6 }));
+      ins(db, 'vault_allocations', A(0x34, 'held', 5e5, { supply_cap_human: 0 }));
+      ins(db, 'vault_allocations', A(0x34, 'noc', 5e5));
+      const keys = getJson(mod, '/api/vaults/' + addr(0x34)).body.allocations.map(a => a.marketUniqueKey).sort();
+      assert.deepEqual(keys, ['held', 'noc', 'open']);
+    })],
     ['нерозкрита експозиція: список і детальний ендпоінт дають однаковий MQI (null: нічого перевірити)', async mod => sandbox(async db => {
       ins(db, 'vaults', V(0x30, { version: 'v2', total_assets_usd: 1e6, liquidity_usd: 1e6, unresolved_exposure_usd: 1e6 }));
       const inList = list(mod).vaults.find(v => v.address === addr(0x30));

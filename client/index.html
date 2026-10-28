@@ -6,8 +6,8 @@
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_swap">
-  <link rel="stylesheet" href="css/components.css?v=20261028_swap">
+  <link rel="stylesheet" href="css/main.css?v=20261028_reserve2">
+  <link rel="stylesheet" href="css/components.css?v=20261028_reserve2">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -397,6 +397,25 @@
               <tbody id="allocations-tbody"></tbody>
             </table>
           </div>
+          <div class="idle-reserve" id="idle-reserve" hidden>
+            <span class="idle-reserve-label">Idle reserve</span>
+            <span class="info-circle-wrap">
+              <button type="button" class="info-circle-btn" id="idle-reserve-info-btn" aria-label="What is the idle reserve" aria-expanded="false" aria-describedby="idle-reserve-popover">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+              </button>
+              <div class="info-popover idle-reserve-popover" id="idle-reserve-popover" role="tooltip">
+                <div class="info-popover-title">Idle reserve</div>
+                <div class="info-popover-body">
+                  A market with no collateral: nobody can borrow from it, so cash placed here is not lent out and carries no credit risk. It is the vault's buffer for withdrawals.
+                </div>
+              </div>
+            </span>
+            <span class="idle-reserve-value" id="idle-reserve-value"></span>
+          </div>
         </div>
       </div>
 
@@ -463,6 +482,6 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261028_swap"></script>
+  <script type="module" src="js/app.js?v=20261028_reserve2"></script>
 </body>
 </html>

@@ -95,7 +95,10 @@ const DOM = {
   riskFlagsList: document.getElementById('risk-flags-list'),
 
   // Panel 3: Markets
-  allocationsTbody: document.getElementById('allocations-tbody')
+  allocationsTbody: document.getElementById('allocations-tbody'),
+  idleReserve: document.getElementById('idle-reserve'),
+  idleReserveValue: document.getElementById('idle-reserve-value'),
+  idleReserveInfoBtn: document.getElementById('idle-reserve-info-btn')
 };
 
 /**
@@ -2033,7 +2036,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   // Underlying Markets Count Pill
   if (DOM.overviewMarketsCount) {
-    const count = allocations.length;
+    const count = allocations.filter(a => !a.isIdle).length;
     DOM.overviewMarketsCount.textContent = `${count} MARKET${count === 1 ? '' : 'S'}`;
   }
 
@@ -2166,10 +2169,22 @@ function populateAuditModal(data, isQuietRefresh = false) {
 
   // Populate Allocations Table
   DOM.allocationsTbody.innerHTML = '';
-  if (allocations.length === 0) {
-    DOM.allocationsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No active market allocations recorded.</td></tr>';
+  // The idle reserve (no collateral, nobody can borrow) is cash, not exposure: it sits under the table, not in it
+  // An empty reserve says nothing, it appears once cash is placed in it
+  const idleRows = allocations.filter(a => a.isIdle && ((a.supplyAssetsUsd || 0) > 0 || (a.supplyAssetsHuman || 0) > 0));
+  const marketRows = allocations.filter(a => !a.isIdle);
+  if (DOM.idleReserve) {
+    DOM.idleReserve.hidden = idleRows.length === 0;
+    if (idleRows.length) {
+      const usd = idleRows.reduce((sum, a) => sum + (a.supplyAssetsUsd || 0), 0);
+      const weight = idleRows.reduce((sum, a) => sum + (a.weight || 0), 0);
+      DOM.idleReserveValue.textContent = `${formatCurrency(usd)} · ${(weight * 100).toFixed(1)}%`;
+    }
+  }
+  if (marketRows.length === 0) {
+    DOM.allocationsTbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">${idleRows.length ? 'No collateral markets: the capital is held in the idle reserve.' : 'No active market allocations recorded.'}</td></tr>`;
   } else {
-    allocations.forEach(a => {
+    marketRows.forEach(a => {
       const isMarketFlagged = a.isFlagged === true || (a.isFlagged === undefined && !a.isClean && ((a.supplyAssetsUsd || 0) > ((v.totalAssetsUsd || 0) * 0.01)));
       const statusBadge = isMarketFlagged
         ? '<span class="badge badge-status badge-flagged">FLAGGED</span>'
@@ -2208,6 +2223,20 @@ function setupModalEvents() {
   }
 
   // Interactive Stressed Exit Capacity hover & click handlers
+  if (DOM.idleReserveInfoBtn) {
+    DOM.idleReserveInfoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const active = !DOM.idleReserveInfoBtn.classList.contains('active');
+      DOM.idleReserveInfoBtn.classList.toggle('active', active);
+      DOM.idleReserveInfoBtn.setAttribute('aria-expanded', String(active));
+    });
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#idle-reserve .info-circle-wrap')) return;
+      DOM.idleReserveInfoBtn.classList.remove('active');
+      DOM.idleReserveInfoBtn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
   if (DOM.riskExitInfoBtn) {
     DOM.riskExitInfoBtn.addEventListener('mouseenter', () => updateStressedExitDisplay(true));
     DOM.riskExitInfoBtn.addEventListener('mouseleave', () => {

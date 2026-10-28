@@ -1334,32 +1334,49 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .red-flags-header,
 .discipline-badge { font: 400 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
 
-.table-wrapper { overflow-x: auto; }
-.data-table { width: 100%; min-width: 420px; border-collapse: collapse; }
+/* Formal grid: ruled cells, numbers right-aligned so a value never reads as part of its neighbour */
+.table-wrapper { overflow-x: auto; border: 1px solid var(--line); }
+.data-table { width: 100%; min-width: 440px; border-collapse: collapse; }
+
+.data-table th,
+.data-table td { padding: 10px 7px; border-right: 1px solid var(--line); }
+.data-table th:last-child,
+.data-table td:last-child { border-right: 0; }
 
 .data-table th {
-  padding: 0 8px 8px 0;
   border-bottom: 1px solid var(--line-2);
+  background: transparent;
   text-align: left;
   font: 400 10.5px var(--font-mono);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--fg-3);
   white-space: nowrap;
 }
 
 .data-table td {
-  padding: 11px 8px 11px 0;
   border-bottom: 1px solid var(--line);
   font: 400 12px var(--font-mono);
   font-variant-numeric: tabular-nums;
   vertical-align: top;
   white-space: nowrap;
 }
+.data-table tbody tr:last-child td { border-bottom: 0; }
 
-.data-table td:first-child { white-space: normal; min-width: 120px; font-family: var(--font-sans); font-size: 14px; }
+/* LLTV, Weight, Supplied, Free Liq and APY are numbers; Status is a label */
+.data-table th:nth-child(n+2):nth-child(-n+5), .data-table td:nth-child(n+2):nth-child(-n+5),
+.data-table th:nth-child(7), .data-table td:nth-child(7) { text-align: right; }
+.data-table th:nth-child(6), .data-table td:nth-child(6) { text-align: center; }
+
+.data-table td:first-child { white-space: normal; min-width: 96px; font-family: var(--font-sans); font-size: 14px; }
 .data-table td strong { font-weight: 500; }
 .data-table td.green { color: var(--ok); }
+
+.idle-reserve { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.idle-reserve[hidden] { display: none; }
+.idle-reserve-label { font: 400 10.5px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--fg-3); }
+.idle-reserve-value { margin-left: auto; font: 400 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.idle-reserve-popover { right: auto; left: -4px; }
 .badge-status { font: 400 11px var(--font-mono); letter-spacing: 0.04em; }
 .badge-flagged { color: var(--bad); }
 .badge-unverified { color: var(--warn); }
@@ -1647,7 +1664,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .fin-card + .fin-card { padding-left: 10px; }
   .fin-value { font-size: 13px; }
 }
-.data-table th:last-child, .data-table td:last-child { padding-right: 2px; }
+
 
 /* Empty list message */
 .explorer-empty {
