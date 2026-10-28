@@ -6,8 +6,8 @@
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk1">
-  <link rel="stylesheet" href="css/components.css?v=20261028_risk1">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk5">
+  <link rel="stylesheet" href="css/components.css?v=20261028_risk5">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -50,7 +50,11 @@
     <div class="explorer-header">
       <h1 class="explorer-heading">Vaults Explorer</h1>
       <span id="explorer-count" class="explorer-count"><span class="sk sk-count" aria-hidden="true"></span> Vaults</span>
-      <button type="button" id="explorer-tiny-toggle" class="explorer-tiny-toggle hidden"></button>
+      <button type="button" id="explorer-tiny-toggle" class="tiny-switch hidden" role="switch" aria-checked="false" title="Include vaults with less than $1K in deposits">
+        <span class="tiny-switch-track" aria-hidden="true"></span>
+        <span class="tiny-switch-label">Under $1K</span>
+        <span class="tiny-switch-count" id="explorer-tiny-count"></span>
+      </button>
       <span class="stale-indicator hidden" role="status"><span class="stale-dot" aria-hidden="true"></span><span class="stale-text"></span></span>
     </div>
 
@@ -165,10 +169,6 @@
             <span class="item-text">Risk: Flagged First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="exit_asc" role="option" aria-selected="false">
-            <span class="item-text">Exit Capacity: Low to High</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
         </div>
       </div>
     </div>
@@ -182,7 +182,7 @@
     <!-- Vault table -->
     <div class="vault-table">
       <div class="vault-table-head" aria-hidden="true">
-        <span></span><span>Vault</span><span class="col-network">Network</span><span class="col-curator">Curator</span><span class="num">TVL</span><span class="num col-apy">APY</span><span class="num col-exit" title="Share of deposits that can be withdrawn right now, and in a bank run">Exit</span>
+        <span></span><span>Vault</span><span class="col-network">Network</span><span class="col-curator">Curator</span><span class="num">TVL</span><span class="num col-apy">APY</span>
       </div>
       <ul id="explorer-vaults-list" class="explorer-vaults-list" aria-busy="true">
         <li class="explorer-vault-item is-skeleton" aria-hidden="true" style="opacity:1">
@@ -510,6 +510,6 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261028_risk1"></script>
+  <script type="module" src="js/app.js?v=20261028_risk5"></script>
 </body>
 </html>

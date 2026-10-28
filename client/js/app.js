@@ -50,6 +50,7 @@ const DOM = {
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
   explorerTinyToggle: document.getElementById('explorer-tiny-toggle'),
+  explorerTinyCount: document.getElementById('explorer-tiny-count'),
   modalVerdictSummary: document.getElementById('modal-verdict-summary'),
   explorerActivityBtn: document.getElementById('explorer-activity-btn'),
   explorerActivityBadge: document.getElementById('explorer-activity-badge'),
@@ -580,7 +581,6 @@ function updateActiveFilterChips() {
       apy_desc: 'APY: High to Low',
       liq_desc: 'Free Liquidity: High to Low',
       risk_desc: 'Risk: Flagged First',
-      exit_asc: 'Exit Capacity: Low to High',
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -971,9 +971,6 @@ function applyVaultAuditData(vaultAddress, auditData) {
       }
       if (verdict.liquidity?.instantExitCapacityUsd !== undefined) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
-      }
-      if (verdict.liquidity?.stressedExitCapacityPercent !== undefined) {
-        matchingVault.stressedExitCapPercent = verdict.liquidity.stressedExitCapacityPercent;
       }
       if (Array.isArray(verdict.redFlags)) {
         const risk = summarizeFlags(verdict.redFlags);
@@ -1402,9 +1399,6 @@ function renderVaultExplorer() {
     if (explorerFilters.sort === 'risk_desc') {
       return riskSortKey(b) - riskSortKey(a) || (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
     }
-    if (explorerFilters.sort === 'exit_asc') {
-      return exitSortKey(a) - exitSortKey(b) || (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
-    }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
   });
@@ -1416,8 +1410,8 @@ function renderVaultExplorer() {
   }
   if (DOM.explorerTinyToggle) {
     DOM.explorerTinyToggle.classList.toggle('hidden', tinyTotal === 0);
-    DOM.explorerTinyToggle.textContent = explorerFilters.showTiny ? 'Hide under $1K' : `Show ${tinyTotal} under $1K`;
-    DOM.explorerTinyToggle.setAttribute('aria-pressed', String(explorerFilters.showTiny));
+    if (DOM.explorerTinyCount) DOM.explorerTinyCount.textContent = String(tinyTotal);
+    DOM.explorerTinyToggle.setAttribute('aria-checked', String(explorerFilters.showTiny));
   }
 
   // 3D sphere highlighting
@@ -1464,7 +1458,6 @@ function renderVaultExplorer() {
     const flaggedBadgeHtml = risk.level
       ? `<span class="vault-mini-badge ${riskBadge.tone}" title="${escapeHtml(`${risk.title}${risk.count > 1 ? ` and ${risk.count - 1} more` : ''}`)}">${escapeHtml(riskBadge.text)}</span>`
       : '';
-    const exit = exitCellInfo(v);
 
     li.innerHTML = `
       <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${escapeHtml(v.address)}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(v.name)}" aria-pressed="${isPinned}">
@@ -1474,7 +1467,7 @@ function renderVaultExplorer() {
       </button>
       <span class="vault-item-name-cell">
         <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
-        <span class="vault-item-sub"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span><span class="vault-item-exit-inline">exit ${escapeHtml(exit.main)}</span>${flaggedBadgeHtml}</span>
+        <span class="vault-item-sub"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span>${flaggedBadgeHtml}</span>
       </span>
       <span class="vault-item-meta">
         <span class="vault-chain-badge ${chainClass}">${escapeHtml(chainName)}</span>
@@ -1482,7 +1475,6 @@ function renderVaultExplorer() {
       </span>
       <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
       <span class="vault-item-apy ${apyClass}">${formatPercent(apy)} APY</span>
-      <span class="vault-item-exit" title="${escapeHtml(exit.title)}"><span class="vault-item-exit-main">${escapeHtml(exit.main)}</span>${exit.stress ? `<span class="vault-item-exit-stress">${escapeHtml(exit.stress)}</span>` : ''}</span>
     `;
 
     const starBtn = li.querySelector('.vault-item-star-btn');
@@ -2499,29 +2491,6 @@ function exitMetric(val) {
 function riskSortKey(v) {
   const risk = vaultRisk(v);
   return (FLAG_RANK[risk.level] || 0) * 100 + Math.min(risk.count, 99);
-}
-
-/** Exit sort key: the lowest stressed exit first, unknown exit last. */
-function exitSortKey(v) {
-  const stressed = exitMetric(v.stressedExitCapPercent);
-  const normal = exitMetric(v.exitCapPercent);
-  const worst = stressed ?? normal;
-  return worst === null || worst === undefined ? Infinity : worst;
-}
-
-/** Cells of the Exit column: the share withdrawable now and, when a bank run would cut it, the stressed share. */
-function exitCellInfo(v) {
-  const normal = exitMetric(v.exitCapPercent);
-  if (normal === null || normal === undefined) return { main: 'n/a', stress: '', title: 'Withdrawable liquidity is not reported for this vault' };
-  const stressed = exitMetric(v.stressedExitCapPercent);
-  const cut = stressed !== null && stressed !== undefined && normal - stressed >= 5;
-  return {
-    main: `${normal}%`,
-    stress: cut ? `run ${stressed}%` : '',
-    title: cut
-      ? `${normal}% of deposits can be withdrawn now; if competing vaults withdraw at once, about ${stressed}%`
-      : `${normal}% of deposits can be withdrawn now`
-  };
 }
 
 /** First value that is not undefined (null is a real answer: "unknown"). */

@@ -47,7 +47,7 @@
   --ledger-w: clamp(540px, 58vw, 760px);
   --ledger-w-compact: 340px;
   --panel-gap: 12px;
-  --panel-w: 516px;
+  --panel-w: 580px;
 
   /* Legacy aliases kept for the sphere tooltip and utility classes */
   --text-primary: var(--fg);

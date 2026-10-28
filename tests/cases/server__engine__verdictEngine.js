@@ -85,13 +85,17 @@ export default {
       assert.deepEqual(Object.keys(r.collateral).sort(), ['idlePercent', 'tier', 'tokens', 'undeployedPercent', 'unverifiedPercent']);
     }],
     ['низька миттєва ліквідність -> HIGH Restricted Exit Liquidity з сумою', ({ generateVaultVerdict: f }) => {
-      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, total_supply_assets_usd: 200e6, total_borrow_assets_usd: 190e6 })]);
+      const r = f(vault(), [alloc({ supply_assets_usd: 100e6, total_supply_assets_usd: 200e6, total_borrow_assets_usd: 195e6 })]);
       const x = flag(r, 'Restricted Exit Liquidity');
-      assert.equal(x.level, 'HIGH'); assert.match(x.message, /^Only 10% \(\$10\.00M\)/);
+      assert.equal(x.level, 'HIGH'); assert.match(x.message, /^Only 5% \(\$5\.00M\)/);
     }],
     ['миттєвий вихід рівно 20% -> без Restricted, 19.9% -> є', ({ generateVaultVerdict: f }) => {
-      assert.ok(!titles(f(vault(), [mkt(0, 100e6, 20e6)])).includes('Restricted Exit Liquidity'));
-      assert.ok(titles(f(vault(), [mkt(0, 100e6, 19.9e6)])).includes('Restricted Exit Liquidity'));
+      const small = vault({ total_assets_usd: 50e6 });
+      assert.ok(!titles(f(small, [mkt(0, 50e6, 10e6)])).includes('Restricted Exit Liquidity'));
+      assert.ok(titles(f(small, [mkt(0, 50e6, 9.9e6)])).includes('Restricted Exit Liquidity'));
+    }],
+    ['малий відсоток, але велика сума ($19.9M із $100M) -> без Restricted Exit', ({ generateVaultVerdict: f }) => {
+      assert.ok(!titles(f(vault(), [mkt(0, 100e6, 19.9e6)])).includes('Restricted Exit Liquidity'));
     }],
     ['crowded: 30% капіталу, 30% -> 7.5% -> HIGH (стрес < 20, падіння >= 10, але не < 5)', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(30e6, 30e6, 90e6));

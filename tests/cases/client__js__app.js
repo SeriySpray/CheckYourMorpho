@@ -696,7 +696,7 @@ const base = {
       s.DOM.explorerResetBtn.handlers.click();
       assert.equal(s.explorerFilters.network, 'all'); assert.equal(s.explorerFilters.query, '');
     }),
-    T('перемикач малих vault: клік вмикає і вимикає показ, список перемальовується', ({ setupVaultExplorerEvents: f, __state: s }) => {
+    T('перемикач малих vault (switch): клік вмикає і вимикає показ, список перемальовується', ({ setupVaultExplorerEvents: f, __state: s }) => {
       const t = s.DOM.explorerTinyToggle;
       t.handlers = {}; t.addEventListener = (e, fn) => { t.handlers[e] = fn; };
       s.allVaults = [cv({ address: '0x1', totalAssetsUsd: 5 }), cv({ address: '0x2', totalAssetsUsd: 5e6 })];
@@ -1109,7 +1109,8 @@ const base = {
       f();
       assert.deepEqual(rows.map(r => r.getAttribute('data-address')), ['0xl', '0xm']); // $1 vault is hidden by default
       assert.equal(s.DOM.explorerCount.textContent, '2 Vaults');
-      assert.equal(s.DOM.explorerTinyToggle.textContent, 'Show 1 under $1K');
+      assert.equal(s.DOM.explorerTinyCount.textContent, '1');
+      assert.equal(s.DOM.explorerTinyToggle.getAttribute('aria-checked'), 'false');
       assert.equal(s.DOM.explorerTinyToggle.classList.contains('hidden'), false);
       assert.equal(s.DOM.explorerFavCount.textContent, 1);
       assert.equal(s.DOM.explorerFavFilterBtn.getAttribute('aria-pressed'), 'false');
@@ -1121,7 +1122,7 @@ const base = {
       const all = collectRows();
       f();
       assert.deepEqual(all.map(r => r.getAttribute('data-address')), ['0xl', '0xm', '0xs']);
-      assert.equal(s.DOM.explorerTinyToggle.textContent, 'Hide under $1K');
+      assert.equal(s.DOM.explorerTinyToggle.getAttribute('aria-checked'), 'true');
       s.explorerFilters.showTiny = false;
     }),
     T('пошук за кількома словами: лічильник "N / M", сфера підсвічує перший результат', ({ renderVaultExplorer: f, __state: s }) => {
@@ -1161,7 +1162,7 @@ const base = {
       assert.match(s.DOM.explorerVaultsList.innerHTML, /No vaults match your filter criteria/);
       assert.equal(s.DOM.explorerCount.textContent, '0 / 1 Vaults');
     }),
-    T('сортування за APY, ліквідністю, ризиком і виходом', ({ renderVaultExplorer: f, __state: s }) => {
+    T('сортування за APY, ліквідністю і ризиком', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
         cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, exitCapPercent: 50, stressedExitCapPercent: 50 }),
         cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, exitCapPercent: null, flagCount: 1, worstFlagLevel: 'medium', worstFlagTitle: 'Unknown Exit Liquidity' }),
@@ -1172,7 +1173,6 @@ const base = {
       assert.equal(order('apy_desc'), 'bcad');
       assert.equal(order('liq_desc'), 'acbd');
       assert.equal(order('risk_desc'), 'dcba'); // critical, high, medium, none
-      assert.equal(order('exit_asc'), 'cdab'); // lowest stressed exit first, unknown exit last
     }),
     T('бейджі рядка: найгірший прапорець з "+N", підказка з назвою, рядок без прапорців без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
@@ -1189,20 +1189,6 @@ const base = {
       assert.deepEqual(rows.map(badge), ['No price', 'Bad market +2', 'Partial data', null]);
       assert.match(rows[1].innerHTML, /title="Compromised Market Exposure and 2 more"/);
       assert.match(rows[0].innerHTML, /vault-mini-badge bad/); assert.match(rows[2].innerHTML, /vault-mini-badge warn/);
-    }),
-    T('колонка виходу: звичайний вихід, стресовий лише коли падіння від 5 пунктів, n/a для невідомого', ({ renderVaultExplorer: f, __state: s }) => {
-      s.allVaults = [
-        cv({ address: '1', totalAssetsUsd: 9, exitCapPercent: 31.1, stressedExitCapPercent: 10.1 }),
-        cv({ address: '2', totalAssetsUsd: 8, exitCapPercent: 40, stressedExitCapPercent: 38 }),
-        cv({ address: '3', totalAssetsUsd: 7, exitCapPercent: null })
-      ];
-      s.explorerFilters.showTiny = true;
-      const rows = collectRows();
-      f();
-      s.explorerFilters.showTiny = false;
-      assert.match(rows[0].innerHTML, /vault-item-exit-main">31\.1%<[\s\S]*vault-item-exit-stress">run 10\.1%</);
-      assert.doesNotMatch(rows[1].innerHTML, /vault-item-exit-stress/);
-      assert.match(rows[2].innerHTML, /vault-item-exit-main">n\/a</);
     }),
     T('відʼємний APY має клас negative, назва екранується, TVL падає на ліквідність', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [cv({ name: '"><img onerror=1>', netApy: -0.02, totalAssetsUsd: 0, liquidityUsd: 2500, isUnpriced: true })];
@@ -2021,25 +2007,6 @@ const base = {
       assert.equal(f({ worstFlagLevel: 'high', flagCount: 2 }), 202);
       assert.equal(f({ worstFlagLevel: 'critical', flagCount: 1 }), 301);
       assert.ok(f({ worstFlagLevel: 'critical', flagCount: 1 }) > f({ worstFlagLevel: 'high', flagCount: 50 }));
-    }],
-  ],
-  exitSortKey: [
-    ['береться нижчий зі стресового і звичайного виходу, невідомий - Infinity', ({ exitSortKey: f }) => {
-      assert.equal(f({ exitCapPercent: 40, stressedExitCapPercent: 10 }), 10);
-      assert.equal(f({ exitCapPercent: 40 }), 40);
-      assert.equal(f({ exitCapPercent: null }), Infinity);
-      assert.equal(f({}), Infinity);
-    }],
-  ],
-  exitCellInfo: [
-    ['невідомий вихід -> n/a з підказкою, без стресу', ({ exitCellInfo: f }) => {
-      const r = f({ exitCapPercent: null });
-      assert.equal(r.main, 'n/a'); assert.equal(r.stress, ''); assert.match(r.title, /not reported/);
-    }],
-    ['стрес показується від падіння 5 пунктів', ({ exitCellInfo: f }) => {
-      assert.deepEqual(f({ exitCapPercent: 31.1, stressedExitCapPercent: 10.1 }), { main: '31.1%', stress: 'run 10.1%', title: '31.1% of deposits can be withdrawn now; if competing vaults withdraw at once, about 10.1%' });
-      assert.equal(f({ exitCapPercent: 40, stressedExitCapPercent: 36 }).stress, '');
-      assert.equal(f({ exitCapPercent: 40 }).stress, '');
     }],
   ],
   summarizeFlags: [

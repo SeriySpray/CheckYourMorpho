@@ -3,6 +3,9 @@ import { calculateHHI } from './hhiEngine.js';
 import { calculateCollateralMix } from './collateralEngine.js';
 import { calculateLiquidityMetrics } from './liquidityEngine.js';
 
+// A low share is only a warning when the absolute amount is small too: 14% of a $500M vault is still $70M
+export const RESTRICTED_EXIT_MAX_USD = 10e6;
+
 /**
  * Synthesizes the institutional vault audit based strictly on:
  * 1. Market Quality Index (MQI)
@@ -79,7 +82,7 @@ export function generateVaultVerdict(vault, allocations = []) {
         message: 'Withdrawable liquidity was not reported for this vault, so how much of the deposits can be withdrawn immediately is unknown.'
       });
     }
-  } else if (liquidity.instantExitCapacityPercent < 20) {
+  } else if (liquidity.instantExitCapacityPercent < 20 && liquidity.instantExitCapacityUsd < RESTRICTED_EXIT_MAX_USD) {
     redFlags.push({
       level: 'HIGH',
       title: 'Restricted Exit Liquidity',
