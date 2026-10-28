@@ -2011,6 +2011,18 @@ const roleLabel = r => (r === 'proxy_admin' ? 'proxy admin (it can change the co
 const THIN_POOLS_USD = 10000;
 /** Where the pool list is cut off by the data source: the count and the sum are then a lower bound. */
 const POOLS_LISTED_MAX = 20;
+// How a token without DEX pools is usually exited, by the kind of token the collector recognised. Worded as "usually": it is not a promise.
+const NO_POOLS_NOTE = {
+  pt: 'It has no DEX pools of its own: Pendle principal tokens trade on Pendle and can be redeemed for the underlying asset at maturity.',
+  rwa: 'No DEX pools were found. Tokens like this one are usually redeemed with the issuer instead of being sold on an exchange.',
+  vault: "No DEX pools were found. This is a vault share: it is normally redeemed from the vault itself, and how fast depends on the vault's own liquidity.",
+  none: 'No DEX pools were found, so it may not be easy to sell on exchanges.'
+};
+const THIN_POOLS_NOTE = {
+  pt: 'Principal tokens usually trade on Pendle instead.',
+  rwa: 'Tokens like this one are usually redeemed with the issuer.',
+  vault: 'A vault share is normally redeemed from the vault itself.'
+};
 
 /**
  * What the collected data says about one token, as plain sentences grouped under headings, plus a one-line summary.
@@ -2059,18 +2071,21 @@ function describeTokenFacts(t) {
   const poolsUsd = d.liquidity?.total_reserve_usd;
   const price = Number(d.price?.usd);
   const impact = swap?.status === 'ok' ? swap.price_impact_pct : null;
+  // "No pools" is only said when GeckoTerminal answered (200, or 404 for a token it does not know); a failed request is "not found"
+  const poolsChecked = d.meta?.sources ? d.meta.sources.some(x => x.key === 'gecko_pools' && [200, 404].includes(x.status)) : d.liquidity != null;
+  const exitClass = d.pendle ? 'pt' : d.rwa?.issuer ? 'rwa' : fn.erc4626 === true || d.price?.share_price_assets != null ? 'vault' : null;
   const market = [
     d.price?.usd != null ? `It trades at $${price.toLocaleString('en-US', { maximumFractionDigits: price >= 100 ? 2 : 4 })}.` : null,
-    !pools ? null
-      : poolsUsd < THIN_POOLS_USD ? `Almost no trading liquidity: its ${plural(pools, 'pool')} ${pools === 1 ? 'holds' : 'hold'} only ${formatCurrency(poolsUsd)}.`
+    !pools ? (poolsChecked ? NO_POOLS_NOTE[exitClass ?? 'none'] : null)
+      : poolsUsd < THIN_POOLS_USD ? `Almost no trading liquidity: its ${plural(pools, 'pool')} ${pools === 1 ? 'holds' : 'hold'} only ${formatCurrency(poolsUsd)}.${exitClass ? ` ${THIN_POOLS_NOTE[exitClass]}` : ''}`
         : pools >= POOLS_LISTED_MAX ? `Its ${POOLS_LISTED_MAX} biggest pools hold ${formatCurrency(poolsUsd)}; there may be more.`
           : `It trades in ${plural(pools, 'pool')} holding ${formatCurrency(poolsUsd)}.`,
     impact != null ? `Selling ${size} worth would move the price by about ${impact}%${impact >= 5 ? ', so it is hard to sell in size' : ''}.` : null,
-    swap?.status === 'no_route' ? 'KyberSwap found no way to swap it, so it may not be easy to sell on exchanges.' : null,
+    swap?.status === 'no_route' && pools ? 'KyberSwap found no way to swap it, so it may not be easy to sell on exchanges.' : null,
     d.rwa?.issuer ? `It is issued by ${d.rwa.issuer}.` : null,
     d.pendle?.days_to_expiry != null ? `It expires in ${d.pendle.days_to_expiry} days.` : null
   ].filter(Boolean);
-  const missing = [h.count == null && h.top10_pct == null ? 'holders' : null, d.price?.usd == null ? 'price' : null, !pools ? 'trading liquidity' : null,
+  const missing = [h.count == null && h.top10_pct == null ? 'holders' : null, d.price?.usd == null ? 'price' : null, !pools && !poolsChecked ? 'trading liquidity' : null,
     !ctrls.length && !can.length && proxy == null ? 'who controls it' : null].filter(Boolean);
   const section = (title, sentences) => (sentences.length ? `<h4>${title}</h4><p>${escapeHtml(sentences.join(' '))}</p>` : '');
   const date = new Date((t.collectedAt || 0) * 1000).toISOString().slice(0, 10);

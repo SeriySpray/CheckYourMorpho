@@ -1763,12 +1763,27 @@ const base = {
       assert.ok(thin.html.includes('Almost no trading liquidity: its 1 pool holds only $0.40'));
     }),
     T('невідомі значення пропускаються, no_route, чужий HTML екранується, увесь запас у протоколах', ({ describeTokenFacts: f }) => {
-      const r = f({ coverage: 0.9, collectedAt: 0, data: { contract: { fn: {} }, holders: { count: 50, top10_pct: 100, top10_nonprotocol_pct: 0 }, liquidity: { kyber: { 1000000: { status: 'no_route' } } },
+      const r = f({ coverage: 0.9, collectedAt: 0, data: { contract: { fn: {} }, holders: { count: 50, top10_pct: 100, top10_nonprotocol_pct: 0 }, liquidity: { pools_count: 3, total_reserve_usd: 1e6, kyber: { 1000000: { status: 'no_route' } } },
         control: { controllers: [{ role: '<b>', is_contract: true, name: 'Vault<i>', safe: null }] } } });
       assert.ok(r.html.includes('KyberSwap found no way to swap it')); assert.ok(r.html.includes('The &lt;b&gt; is Vault&lt;i&gt;, a smart contract.'));
       assert.ok(r.html.includes('Almost the whole supply sits in protocol contracts')); assert.doesNotMatch(r.html, /100\.0|code is public/);
       assert.equal(f({ coverage: 1, collectedAt: 0, data: {} }).hasData, false);
       assert.equal(f({ coverage: 0, collectedAt: 0, stale: true, data: {} }).summary, 'Old data, almost nothing found');
+    }),
+    T('токен без DEX-пулів: пояснення за класом (PT, RWA, vault-частка, інше), без відповіді Gecko нічого не стверджується', ({ describeTokenFacts: f }) => {
+      const tok = extra => f({ coverage: 1, collectedAt: 0, data: { liquidity: { pools_count: null, total_reserve_usd: null }, ...extra } }).html;
+      assert.ok(tok({ pendle: { active: false, days_to_expiry: 40 } }).includes('Pendle principal tokens trade on Pendle and can be redeemed for the underlying asset at maturity'));
+      assert.ok(tok({ rwa: { issuer: 'Midas' } }).includes('usually redeemed with the issuer instead of being sold on an exchange'));
+      assert.ok(tok({ contract: { fn: { erc4626: true } } }).includes('This is a vault share: it is normally redeemed from the vault itself'));
+      assert.ok(tok({}).includes('No DEX pools were found, so it may not be easy to sell on exchanges'));
+      assert.ok(tok({ pendle: { days_to_expiry: 3 }, rwa: { issuer: 'X' } }).includes('Pendle principal tokens'), 'PT wins over RWA');
+      assert.doesNotMatch(tok({ price: { usd: 1 } }), /Trading liquidity could not|trading liquidity could not/);
+      const failed = f({ coverage: 1, collectedAt: 0, data: { price: { usd: 1 }, liquidity: { pools_count: null }, meta: { sources: [{ key: 'gecko_pools', status: 429 }] } } }).html;
+      assert.doesNotMatch(failed, /No DEX pools/); assert.ok(failed.includes('trading liquidity'));
+      const unknownToken = f({ coverage: 1, collectedAt: 0, data: { price: { usd: 1 }, liquidity: { pools_count: null }, meta: { sources: [{ key: 'gecko_pools', status: 404 }] } } }).html;
+      assert.ok(unknownToken.includes('No DEX pools were found'));
+      const thin = f({ coverage: 1, collectedAt: 0, data: { liquidity: { pools_count: 2, total_reserve_usd: 500 }, pendle: { days_to_expiry: 9 } } }).html;
+      assert.ok(thin.includes('Almost no trading liquidity: its 2 pools hold only $500.00. Principal tokens usually trade on Pendle instead.'));
     }),
     T('назва проксі замінюється реалізацією, а мультисиг не Safe читається як multisig', ({ describeTokenFacts: f }) => {
       const r = f({ data: { control: { controllers: [{ role: 'blacklister', name: 'UUPSProxy', implementation_names: ['Blacklister'], is_contract: true }, { role: 'accessControl', is_contract: true, is_multisig: true }] } } });
