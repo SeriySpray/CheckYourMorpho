@@ -2107,6 +2107,21 @@ const fixed = {
   escapeHtml: [
         ['0 -> "0"', ({ escapeHtml: f }) => assert.equal(f(0), '0')],
   ],
+  formatSharePercent: [
+    ['пил, що округлився до 0, але має гроші, дає <0.1%; справжній нуль і звичайні значення без змін', ({ formatSharePercent: f }) => {
+      assert.equal(f(0), '0%'); assert.equal(f(0, true), '<0.1%'); assert.equal(f(0.01), '<0.1%');
+      assert.equal(f(0.05), '0.05%'); assert.equal(f(66.35), '66.35%'); assert.equal(f(100), '100%');
+    }],
+  ],
+
+  formatWeightPercent: [
+    ['нуль і порожнє лишаються 0.0%, пил менше 0.05% дає <0.1%, решта округлюється до десятих', ({ formatWeightPercent: f }) => {
+      assert.equal(f(0), '0.0%'); assert.equal(f(undefined), '0.0%');
+      assert.equal(f(4.08e-9), '<0.1%'); assert.equal(f(0.0004), '<0.1%');
+      assert.equal(f(0.0005), '0.1%'); assert.equal(f(0.663484), '66.3%'); assert.equal(f(1), '100.0%');
+    }],
+  ],
+
   formatCurrency: [
     ['негативна сума менша за цент за модулем: "> -$0.01", додатна: "< $0.01"', ({ formatCurrency: f }) => {
       assert.equal(f(-0.004), '> -$0.01'); assert.equal(f(0.004), '< $0.01'); assert.equal(f(-0.01), '-$0.01');

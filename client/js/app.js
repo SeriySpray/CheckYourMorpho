@@ -166,6 +166,11 @@ async function initApp() {
   } catch (err) {
     console.error('Failed to fetch vaults:', err);
     if (DOM.headerStatusText) DOM.headerStatusText.textContent = 'API Offline';
+    // The placeholders would otherwise stay forever
+    if (allVaults.length === 0 && DOM.explorerVaultsList) {
+      DOM.explorerVaultsList.removeAttribute('aria-busy');
+      DOM.explorerVaultsList.innerHTML = '<li class="explorer-empty"><span class="explorer-empty-title">Vaults could not be loaded</span><span class="explorer-empty-hint">Check the connection and reload the page.</span></li>';
+    }
   }
   refreshStaleIndicator();
 
@@ -1223,6 +1228,7 @@ function renderVaultExplorer() {
   if (!DOM.explorerVaultsList) return;
   const savedScrollTop = DOM.vaultExplorerWidget ? DOM.vaultExplorerWidget.scrollTop : 0;
   DOM.explorerVaultsList.innerHTML = '';
+  DOM.explorerVaultsList.removeAttribute('aria-busy');
   explorerRenderToken++;
 
   const pinnedList = getPinnedAddresses();
@@ -1808,6 +1814,7 @@ async function openVaultAuditFlow(vault, startPos, token) {
   pOpen.style.border = '1px solid rgba(255, 255, 255, 0.6)';
   pOpen.style.boxShadow = '0 0 16px rgba(255, 255, 255, 0.5), 0 0 32px rgba(255, 255, 255, 0.2)';
   pOpen.classList.remove('hidden');
+  pOpen.classList.remove('is-loading');
 
   // Stage 1: Ball flies out across 3D space to the left dock position (440ms)
   requestAnimationFrame(() => {
@@ -1830,8 +1837,11 @@ async function openVaultAuditFlow(vault, startPos, token) {
 
   const animStartTime = Date.now();
 
-  // Simultaneously resolve audit data and finish population
+  // Simultaneously resolve audit data and finish population. Past the unfold, an empty panel shows the layout it will have
+  const skeletonTimer = setTimeout(() => { if (token === auditOpenToken) pOpen.classList.add('is-loading'); }, 720);
   const data = await auditDataPromise;
+  clearTimeout(skeletonTimer);
+  pOpen.classList.remove('is-loading');
   if (token !== auditOpenToken) return; // cancelled with Escape while loading
   if (!data) {
     pOpen.classList.add('hidden');
@@ -2115,7 +2125,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
     if (categories.length) {
       const shade = i => (1 - i * 0.17).toFixed(2);
       const bar = categories.map(([cat, pct], i) => `<span class="category-seg" style="flex:${pct}; opacity:${shade(i)};"></span>`).join('');
-      const rows = categories.map(([cat, pct], i) => `<li class="category-row"><span class="category-swatch" style="opacity:${shade(i)};"></span><span class="category-name">${escapeHtml(CATEGORY_LABELS[cat] || cat)}</span><span class="category-pct">${pct}%</span></li>`).join('');
+      const rows = categories.map(([cat, pct], i) => `<li class="category-row"><span class="category-swatch" style="opacity:${shade(i)};"></span><span class="category-name">${escapeHtml(CATEGORY_LABELS[cat] || cat)}</span><span class="category-pct">${formatSharePercent(pct)}</span></li>`).join('');
       const box = document.createElement('div');
       box.className = 'category-shares';
       box.innerHTML = `<div class="category-bar" role="img" aria-label="Collateral by category">${bar}</div><ul class="category-list">${rows}</ul>`;
@@ -2129,7 +2139,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
         row.className = 'collateral-row';
         row.innerHTML = `
           <span class="collateral-token">${escapeHtml(item.label)}</span>
-          <span class="collateral-usd">${formatCurrency(item.usd)} <strong>${item.sharePercent}%</strong></span>
+          <span class="collateral-usd">${formatCurrency(item.usd)} <strong>${formatSharePercent(item.sharePercent, item.usd > 0)}</strong></span>
         `;
         DOM.riskCollateralList.appendChild(row);
       });
@@ -2196,7 +2206,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
       tr.innerHTML = `
         <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong></td>
         <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
-        <td>${((a.weight || 0) * 100).toFixed(1)}%</td>
+        <td>${formatWeightPercent(a.weight)}</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>
         <td>${formatCurrency(a.marketFreeLiquidityUsd)}</td>
         <td>${statusBadge}</td>
@@ -2342,6 +2352,17 @@ function setupAuditNavTabs() {
 }
 
 // Utility Formatter Functions
+/** Share of the vault in a market; a market that holds some money never reads as 0.0% */
+function formatWeightPercent(weight) {
+  const pct = (weight || 0) * 100;
+  return pct > 0 && pct < 0.05 ? '<0.1%' : `${pct.toFixed(1)}%`;
+}
+
+/** A percent the server already rounded (to hundredths): dust that rounded to 0 still reads as <0.1% when it holds money */
+function formatSharePercent(pct, holdsMoney = false) {
+  return pct < 0.05 && (pct > 0 || holdsMoney) ? '<0.1%' : `${pct}%`;
+}
+
 function formatCurrency(val, fallback = '—') {
   if (val === null || val === undefined || val === '') return fallback;
   const num = Number(val);

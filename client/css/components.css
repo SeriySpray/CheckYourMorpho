@@ -1679,3 +1679,98 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 
 .explorer-empty-title { font-size: 15px; font-weight: 500; color: var(--fg); }
 .explorer-empty-hint { max-width: 34ch; font-size: 13px; line-height: 1.5; color: var(--fg-3); text-wrap: balance; }
+
+
+/* Placeholders: a dim block where data will be, a slow sweep so the page reads as loading and not as broken */
+.sk {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 4px;
+  background: oklch(0.22 0.006 260);
+  vertical-align: middle;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.07), transparent);
+  animation: sk-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes sk-sweep { to { transform: translateX(100%); } }
+.sk-count { width: 104px; height: 0.9em; border-radius: 6px; }
+.sk-star { width: 13px; height: 13px; border-radius: 50%; }
+.sk-end { display: block; margin-left: auto; }
+.explorer-vault-item.is-skeleton { cursor: default; pointer-events: none; }
+.explorer-vault-item.is-skeleton .vault-item-name-cell { display: flex; flex-direction: column; gap: 7px; }
+
+/* Audit panel while its data is still on the way: the unfolded proxy carries the layout of the finished panel */
+.audit-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+.morph-proxy.is-loading .audit-skeleton { opacity: 1; }
+.audit-sk-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.audit-sk-title { align-items: flex-end; }
+.audit-sk-stack { display: flex; flex-direction: column; gap: 10px; }
+.audit-sk-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.audit-sk-table { display: flex; flex-direction: column; gap: 22px; }
+.activity-skeleton { list-style: none; display: flex; flex-direction: column; gap: 18px; padding: 24px var(--pad-x); }
+.activity-skeleton .sk-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.activity-skeleton .sk { height: 12px; }
+
+/* Telegram strip while the favorites travel to the chat and back */
+.activity-tg { position: relative; overflow: hidden; }
+.activity-tg-lead { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+body.audit-open .activity-tg-lead { gap: 10px; }
+.activity-tg-ico { display: none; flex: none; width: 22px; height: 22px; place-items: center; border-radius: 50%; }
+.activity-tg[data-sync] .activity-tg-ico { display: grid; }
+.activity-tg-ico > * { display: none; }
+.activity-tg[data-sync="syncing"] .tg-ring { display: block; }
+.activity-tg[data-sync="done"] .tg-check, .activity-tg[data-sync="failed"] .tg-warn { display: block; }
+.activity-tg[data-sync="done"] .activity-tg-ico { background: var(--ok-soft); color: var(--ok); animation: tg-pop 420ms var(--ease-out); }
+.activity-tg[data-sync="failed"] .activity-tg-ico { background: var(--warn-soft); color: var(--warn); }
+.tg-ring {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--fg);
+  border-radius: 50%;
+  animation: tg-spin 0.9s linear infinite;
+}
+.activity-tg-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; opacity: 0; pointer-events: none; }
+.activity-tg[data-sync="syncing"] .activity-tg-bar { opacity: 1; background: var(--line); }
+.activity-tg[data-sync="syncing"] .activity-tg-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 34%;
+  background: var(--fg);
+  animation: tg-run 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.activity-tg[data-sync="done"] .activity-tg-bar { background: var(--ok); animation: tg-fade 3.8s ease-in forwards; }
+@keyframes tg-spin { to { transform: rotate(360deg); } }
+@keyframes tg-run { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@keyframes tg-fade { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tg-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+/* A sync message is short and matters: it shows in full and wraps instead of being cut by an ellipsis */
+.activity-tg[data-sync] .activity-tg-note { display: block; white-space: normal; overflow: visible; text-overflow: clip; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk::after, .tg-ring, .activity-tg[data-sync="syncing"] .activity-tg-bar::after, .activity-tg[data-sync="done"] .activity-tg-bar, .activity-tg[data-sync="done"] .activity-tg-ico { animation: none; }
+}

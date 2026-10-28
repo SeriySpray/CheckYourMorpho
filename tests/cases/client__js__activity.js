@@ -1109,12 +1109,47 @@ export default {
     }],
   ],
 
+  favoritesUpdatedNote: [
+    ['одна обране в однині, решта у множині', ({ favoritesUpdatedNote: f }) => {
+      assert.equal(f(1), '1 favorite updated | just now');
+      assert.equal(f(0), 'favorites cleared | just now');
+      assert.equal(f(5), '5 favorites updated | just now');
+    }],
+  ],
+
+  setTgSync: [
+    ['записує стан і примітку; done сам повертається в idle через TG_DONE_MS', ({ setTgSync, __state: s }) => {
+      try {
+        setTgSync('failed'); assert.deepEqual(s.tgSync, { state: 'failed', note: '' });
+        setTgSync('done', 'ok'); assert.deepEqual(s.tgSync, { state: 'done', note: 'ok' });
+        assert.ok(s.tgDoneTimer, 'таймер повернення в idle заведено');
+        setTgSync('idle'); assert.equal(s.tgSync.state, 'idle');
+      } finally { setTgSync('idle'); }
+    }],
+  ],
+
+  retryTelegramSync: [
+    ['Retry відправляє обрані заново: з незвантаженою зміною закінчується done, без неї смужка повертається в idle', async ({ retryTelegramSync, setTgSync, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot'; s.deps.getPinnedAddresses = () => [];
+      try {
+        s.tgDirty = true;
+        await withFetch(async () => jsonResponse({ vaults: 0, connected: true }), () => retryTelegramSync());
+        assert.equal(s.tgSync.state, 'done');
+        setTgSync('idle'); s.tgDirty = false;
+        await withFetch(async () => jsonResponse({ vaults: 0, connected: true }), () => retryTelegramSync());
+        assert.equal(s.tgSync.state, 'idle');
+      } finally { setTgSync('idle'); s.tgDirty = false; s.tgUsername = null; s.tgConnected = false; }
+    }],
+  ],
+
   renderTelegramStrip: [
     ['без бота смужка прихована; з ботом без обраних - Connect на бота без коду; з обраними і непідключеним чатом - Connect з кодом; підключений - Open chat і кількість vault-ів', ({ renderTelegramStrip, __state: s }) => {
       const els = {};
       const realGet = document.getElementById;
       document.getElementById = id => (els[id] ??= realGet.call(document, id) ?? makeElement());
       try {
+        s.tgSync = { state: 'idle', note: '' };
         localStorage.setItem('cym_tg_sub', 'abcdefghijklmnopqrstuv');
         const ADDR = '0x1111111111111111111111111111111111111111';
         s.tgUsername = null; s.tgConnected = false; s.deps.getPinnedAddresses = () => [ADDR];
@@ -1137,6 +1172,52 @@ export default {
         assert.equal(els['activity-tg-note'].textContent, 'alerts for 1 vault  |  @cym_bot');
         assert.ok(els['activity-tg'].classList.contains('connected'));
       } finally { document.getElementById = realGet; s.tgUsername = null; s.tgConnected = false; }
+    }],
+    ['синхронізація в польоті підміняє заголовок і примітку, готово показує кількість, збій дає Retry, зі стану idle смужка звичайна', ({ renderTelegramStrip, __state: s }) => {
+      const els = {};
+      const realGet = document.getElementById;
+      document.getElementById = id => (els[id] ??= realGet.call(document, id) ?? makeElement());
+      try {
+        localStorage.setItem('cym_tg_sub', 'abcdefghijklmnopqrstuv');
+        s.tgUsername = 'cym_bot'; s.deps.getPinnedAddresses = () => [];
+        s.tgConnected = true;
+        s.tgSync = { state: 'syncing', note: '' }; renderTelegramStrip();
+        assert.equal(els['activity-tg'].dataset.sync, 'syncing');
+        assert.equal(els['activity-tg-title'].textContent, 'Syncing with Telegram');
+        s.tgSync = { state: 'done', note: '5 favorites updated | just now' }; renderTelegramStrip();
+        assert.equal(els['activity-tg'].dataset.sync, 'done');
+        assert.equal(els['activity-tg-title'].textContent, 'Synced with Telegram');
+        assert.equal(els['activity-tg-note'].textContent, '5 favorites updated | just now');
+        s.tgSync = { state: 'failed', note: '' }; renderTelegramStrip();
+        assert.equal(els['activity-tg-title'].textContent, 'Sync failed');
+        assert.equal(els['activity-tg-link'].textContent, 'Retry');
+        s.tgSync = { state: 'idle', note: '' }; renderTelegramStrip();
+        assert.equal(els['activity-tg'].dataset.sync, undefined);
+        assert.equal(els['activity-tg-title'].textContent, 'Telegram connected');
+        s.tgConnected = false; s.tgSync = { state: 'syncing', note: '' }; renderTelegramStrip();
+        assert.equal(els['activity-tg'].dataset.sync, 'syncing', 'читання чату видно й до першої відповіді');
+        s.tgSync = { state: 'failed', note: '' }; renderTelegramStrip();
+        assert.equal(els['activity-tg'].dataset.sync, undefined, 'збій для чату, який ще не підключено, не показуємо');
+        assert.equal(els['activity-tg-link'].textContent, 'Connect');
+      } finally { document.getElementById = realGet; s.tgUsername = null; s.tgConnected = false; s.tgSync = { state: 'idle', note: '' }; }
+    }],
+    ['зміна обраних, що йде на сервер, закінчується станом done з кількістю; збій мережі дає failed; без зміни смужка мовчить', async ({ syncTelegram, setTgSync, __state: s }) => {
+      localStorage.setItem('cym_tg_sub', 'existing-subscription-id');
+      s.tgUsername = 'cym_bot';
+      s.deps.getPinnedAddresses = () => ['0x1111111111111111111111111111111111111111'];
+      try {
+        s.tgDirty = true;
+        await withFetch(async () => jsonResponse({ vaults: 1, connected: true }), () => syncTelegram());
+        assert.equal(s.tgSync.state, 'done'); assert.equal(s.tgSync.note, '1 favorite updated | just now');
+        setTgSync('idle');
+        s.tgDirty = true;
+        await withFetch(async () => { throw new Error('offline'); }, () => syncTelegram());
+        assert.equal(s.tgSync.state, 'failed');
+        setTgSync('idle');
+        s.tgDirty = false;
+        await withFetch(async () => jsonResponse({ vaults: 1, connected: true }), () => syncTelegram());
+        assert.equal(s.tgSync.state, 'idle');
+      } finally { setTgSync('idle'); s.tgDirty = false; s.tgUsername = null; s.tgConnected = false; }
     }],
     ['syncTelegram зберігає connected з відповіді сервера', async ({ syncTelegram, __state: s }) => {
       localStorage.setItem('cym_tg_sub', 'existing-subscription-id');

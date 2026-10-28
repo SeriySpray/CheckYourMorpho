@@ -58,6 +58,10 @@ let tgDirty = false; // the favorites changed here and the server does not know 
 let favChangeSeq = 0; // counts local favorites changes, so an answer to an older request is recognised
 let tgConnected = false; // the server's answer to the last favorites push: the chat is bound and active
 let tgSyncTimer = null;
+const TG_DONE_MS = 3800;
+const TG_SPIN_DELAY_MS = 300;
+let tgSync = { state: 'idle', note: '' };
+let tgDoneTimer = null;
 let showReallocMemoryFallback = null;
 
 // External dependencies injected by app.js
@@ -796,6 +800,19 @@ function ensureSubId() {
   return subId;
 }
 
+/** What the Telegram strip shows about a sync in flight: idle, syncing, done (back to idle after a few seconds) or failed. */
+function setTgSync(state, note = '') {
+  clearTimeout(tgDoneTimer);
+  tgSync = { state, note };
+  if (state === 'done') tgDoneTimer = setTimeout(() => setTgSync('idle'), TG_DONE_MS);
+  renderTelegramStrip();
+}
+
+function favoritesUpdatedNote(count) {
+  if (count === 0) return 'favorites cleared | just now';
+  return `${count} favorite${count === 1 ? '' : 's'} updated | just now`;
+}
+
 /** Marks the favorites as not yet delivered to the server. Stored, so a closed page or a dropped request still gets delivered next time. */
 function setTgDirty(value) {
   tgDirty = value;
@@ -819,6 +836,9 @@ async function syncTelegram({ keepalive = false } = {}) {
   const subId = ensureSubId();
   const seq = favChangeSeq;
   const vaults = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress).slice(0, 100);
+  // Only a change the user made is announced; the routine push when the panel renders stays silent
+  const announce = tgDirty && !keepalive;
+  if (announce) setTgSync('syncing');
   try {
     // keepalive lets the request finish after the page is hidden or closed
     const res = await fetch('/api/tg/subscription', {
@@ -829,8 +849,15 @@ async function syncTelegram({ keepalive = false } = {}) {
       signal: AbortSignal.timeout(10000)
     });
     tgConnected = Boolean((await res.json())?.connected);
-    if (res.ok && seq === favChangeSeq) setTgDirty(false);
-  } catch { /* the next render or favorites change retries */ }
+    if (res.ok && seq === favChangeSeq) {
+      setTgDirty(false);
+      if (announce) tgConnected ? setTgSync('done', favoritesUpdatedNote(vaults.length)) : setTgSync('idle');
+    } else if (!res.ok && announce) {
+      setTgSync('failed');
+    }
+  } catch { /* the next render or favorites change retries */
+    if (announce) setTgSync('failed');
+  }
   return subId;
 }
 
@@ -870,6 +897,28 @@ function renderTelegramStrip() {
   link.textContent = connected ? 'Open chat' : 'Connect';
   // The code in the link is what lets the chat adopt this browser's favorites and this browser adopt the chat's
   link.href = connected ? `https://t.me/${encodeURIComponent(tgUsername)}` : buildTelegramUrl(tgUsername, ensureSubId());
+  // A sync in flight replaces the title and note until it is over; a failure matters only once the chat is known to be connected
+  const sync = tgSync.state === 'failed' && !connected ? 'idle' : tgSync.state;
+  if (sync === 'idle') delete strip.dataset.sync; else strip.dataset.sync = sync;
+  if (sync === 'syncing') {
+    document.getElementById('activity-tg-title').textContent = 'Syncing with Telegram';
+    document.getElementById('activity-tg-note').textContent = 'Updating your favorites';
+  } else if (sync === 'done') {
+    document.getElementById('activity-tg-title').textContent = 'Synced with Telegram';
+    document.getElementById('activity-tg-note').textContent = tgSync.note;
+  } else if (sync === 'failed') {
+    document.getElementById('activity-tg-title').textContent = 'Sync failed';
+    document.getElementById('activity-tg-note').textContent = 'Telegram did not respond';
+    link.textContent = 'Retry';
+    link.href = '#';
+  }
+}
+
+/** The Retry button of a failed sync: no navigation, the favorites are sent again. */
+async function retryTelegramSync() {
+  setTgSync('syncing');
+  await syncTelegram();
+  if (tgSync.state === 'syncing') setTgSync('idle');
 }
 
 const PULL_MIN_GAP_MS = 5000;
@@ -887,6 +936,9 @@ async function pullTelegram() {
   if (tgDirty) { await flushTelegramSync(); renderTelegramStrip(); return false; }
   const seq = favChangeSeq;
   let changed = false;
+  // A quick answer needs no spinner; a slow one shows that the chat is being read
+  const spinTimer = setTimeout(() => setTgSync('syncing'), TG_SPIN_DELAY_MS);
+  let failed = false;
   try {
     const res = await fetch(`/api/tg/subscription?sub_id=${encodeURIComponent(subId)}`, { signal: AbortSignal.timeout(10000) });
     const body = await res.json();
@@ -901,7 +953,15 @@ async function pullTelegram() {
         changed = true;
       }
     }
-  } catch { /* offline: the next focus or page load asks again */ }
+  } catch { failed = true; /* offline: the next focus or page load asks again */ }
+  clearTimeout(spinTimer);
+  if (failed) {
+    if (tgSync.state === 'syncing') setTgSync(tgConnected ? 'failed' : 'idle');
+  } else if (changed) {
+    setTgSync('done', favoritesUpdatedNote((deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress).length));
+  } else if (tgSync.state === 'syncing') {
+    setTgSync('idle');
+  }
   renderTelegramStrip();
   return changed;
 }
@@ -1240,7 +1300,7 @@ function renderActivityPanel() {
 
   // 1. Loading state
   if (isLoading && cachedPendingEvents.length === 0 && cachedHistoryEvents.length === 0) {
-    list.innerHTML = '<li class="activity-state-loading">Loading activity...</li>';
+    list.innerHTML = '<li class="activity-skeleton" role="status"><span class="sk-text">Loading activity...</span>' + ['86%', '72%', '80%', '64%'].map(w => `<span class="sk" aria-hidden="true" style="width:${w}"></span>`).join('') + '</li>';
     return;
   }
 
@@ -1640,6 +1700,11 @@ export async function initActivity(dependencies = {}) {
     if (!tgConnected) scheduleTelegramSync();
     renderTelegramStrip();
     if (isPanelOpen) renderActivityPanel();
+  });
+  document.getElementById('activity-tg-link')?.addEventListener?.('click', (e) => {
+    if (document.getElementById('activity-tg')?.dataset.sync !== 'failed') return;
+    e.preventDefault();
+    retryTelegramSync();
   });
   document.addEventListener?.('visibilitychange', pullTelegramOnReturn);
   globalThis.addEventListener?.('focus', pullTelegramOnReturn);
