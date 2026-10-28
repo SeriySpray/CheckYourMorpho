@@ -248,8 +248,8 @@
   "symbol": "sUSDai",
   "category": "real_world_asset",
   "subtype": "credit_fund",
-  "confidence": "low",
-  "reason": "USD.AI GPU-backed loans drive the yield"
+  "confidence": "medium",
+  "reason": "USD.AI ERC4626 stake token; yield from GPU-backed loans held in off-chain SPVs, 30-day redemption, loan book reported by the issuer"
  },
  "1:0xba96292ee7673e3b546cc90db6d97111cd9a314f": {
   "symbol": "PT-USDat-14JAN2027",
@@ -438,7 +438,7 @@
   "category": "real_world_asset",
   "subtype": "other",
   "confidence": "low",
-  "reason": "USDC carry vault, likely off-chain managed, unverified"
+  "reason": "Agua Global Carry Vault, on-chain ERC4626 over USDC; strategy undocumented, off-chain management assumed"
  },
  "1:0x4e72025984424e52838cf8953e2863eff036b67a": {
   "symbol": "mWIN",
@@ -1032,8 +1032,8 @@
   "symbol": "stBRL",
   "category": "real_world_asset",
   "subtype": "other",
-  "confidence": "low",
-  "reason": "Tenbin staked FX token, off-chain hedged backing"
+  "confidence": "medium",
+  "reason": "Tenbin staked tBRL: ERC4626 over an unsecured BVI note hedged with off-chain futures (Ripple Prime), no proof of reserves, cooldown to unstake"
  },
  "1:0x12d706f0adff3be5d9fa119424a85388fecd6960": {
   "symbol": "stakedao-frxUsDOLA",
@@ -1221,8 +1221,8 @@
   "symbol": "sUSDai",
   "category": "real_world_asset",
   "subtype": "credit_fund",
-  "confidence": "low",
-  "reason": "USD.AI GPU-backed loans drive the yield"
+  "confidence": "medium",
+  "reason": "USD.AI ERC4626 stake token; yield from GPU-backed loans held in off-chain SPVs, 30-day redemption, loan book reported by the issuer"
  },
  "143:0x3bd359c1119da7da1d913d1c4d2b7c461115433a": {
   "symbol": "WMON",
@@ -1305,8 +1305,8 @@
   "symbol": "sUSDai",
   "category": "real_world_asset",
   "subtype": "credit_fund",
-  "confidence": "low",
-  "reason": "USD.AI GPU-backed loans drive the yield"
+  "confidence": "medium",
+  "reason": "USD.AI ERC4626 stake token; yield from GPU-backed loans held in off-chain SPVs, 30-day redemption, loan book reported by the issuer"
  },
  "137:0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270": {
   "symbol": "WPOL",
@@ -1403,8 +1403,8 @@
   "symbol": "hbHYPE",
   "category": "vault_or_lp_share",
   "subtype": "erc4626_vault",
-  "confidence": "low",
-  "reason": "Hyperbeat vault share"
+  "confidence": "medium",
+  "reason": "Hyperbeat Ultra HYPE: ERC4626 over WHYPE, strategist Edge UltraYield, deployed in HyperEVM protocols, 3-day withdrawal"
  },
  "8453:0x1c2757c1fef1038428b5bef062495ce94bbe92b2": {
   "symbol": "mBASIS",
@@ -1620,8 +1620,8 @@
   "symbol": "WHLP",
   "category": "vault_or_lp_share",
   "subtype": "erc4626_vault",
-  "confidence": "low",
-  "reason": "wrapper of Hyperliquid HLP vault share"
+  "confidence": "medium",
+  "reason": "BoringVault share over Hyperliquid HLP (USDC), accruing NAV, Looping Collective; not ERC4626"
  },
  "1:0xe72b141df173b999ae7c1adcbf60cc9833ce56a8": {
   "symbol": "ETH+",
@@ -1634,8 +1634,8 @@
   "symbol": "hwHLP",
   "category": "vault_or_lp_share",
   "subtype": "erc4626_vault",
-  "confidence": "low",
-  "reason": "wrapper of Hyperliquid HLP vault share"
+  "confidence": "medium",
+  "reason": "Hyperwave liquid wrapper of HLP vault (USDC), accruing NAV, BoringVault-style; not ERC4626"
  },
  "4663:0x117cc2133c37b721f49de2a7a74833232b3b4c0c": {
   "symbol": "SPY",
@@ -1697,8 +1697,8 @@
   "symbol": "liUSD-1w",
   "category": "vault_or_lp_share",
   "subtype": "erc4626_vault",
-  "confidence": "low",
-  "reason": "infiniFi locked iUSD position token"
+  "confidence": "medium",
+  "reason": "infiniFi Locked-iUSD 1-week position token (plain ERC20, not 4626); junior first-loss tranche, redemption rate vs iUSD, on-chain DeFi backing"
  },
  "8453:0xb20000000000000000000078ee7ce2fe4908108c": {
   "symbol": "NVDAc",
@@ -1844,8 +1844,8 @@
   "symbol": "stGLD",
   "category": "real_world_asset",
   "subtype": "commodity",
-  "confidence": "low",
-  "reason": "Tenbin staked gold token"
+  "confidence": "medium",
+  "reason": "Tenbin staked tGLD: ERC4626 over an unsecured BVI note, gold via futures hedge, no physical gold held for holders"
  },
  "999:0x31a75680de78bb2787ffe9840da569dbdf4504f5": {
   "symbol": "PT-hbUSDT-18DEC2025",
@@ -1907,8 +1907,8 @@
   "symbol": "stMXN",
   "category": "real_world_asset",
   "subtype": "other",
-  "confidence": "low",
-  "reason": "Tenbin staked FX token, off-chain hedged backing"
+  "confidence": "medium",
+  "reason": "Tenbin staked tMXN: ERC4626 over an unsecured BVI note hedged with off-chain futures (Ripple Prime), no proof of reserves, cooldown to unstake"
  },
  "130:0x9d9874e867b877dd0a3f1eafb8bb1bc54eecc682": {
   "symbol": "PT-cUSD-23JUL2026-(ETH)",
@@ -2096,8 +2096,8 @@
   "symbol": "Ultra_BTC",
   "category": "real_world_asset",
   "subtype": "other",
-  "confidence": "low",
-  "reason": "Edge fund vault in BTC/ETH, NAV oracle"
+  "confidence": "medium",
+  "reason": "UltraYield (Edge Capital) ERC-7540 vault over cbBTC, NAV set by trusted oracle, assets with external fundsHolder"
  },
  "1:0x498d9329555471bf6073a5f2d047f746d522a373": {
   "symbol": "CASH+",
@@ -2152,8 +2152,8 @@
   "symbol": "Ultra_ETH",
   "category": "real_world_asset",
   "subtype": "other",
-  "confidence": "low",
-  "reason": "Edge fund vault in BTC/ETH, NAV oracle"
+  "confidence": "medium",
+  "reason": "UltraYield (Edge Capital) ERC-7540 vault over WETH, NAV set by trusted oracle, assets with external fundsHolder"
  },
  "1:0xc6dec62c975f20e60635ddd1341f3ea35bc284c5": {
   "symbol": "oTFYe",
@@ -2364,5 +2364,19 @@
   "subtype": "live",
   "confidence": "high",
   "reason": "principal token, maturity 2027-01-07 after 2026-10-28"
+ },
+ "1:0x70a3b0fd5d7781b759a60398a1e9edb465aa420e": {
+  "symbol": "PT-apxUSD-11FEB2027",
+  "category": "pendle_pt",
+  "subtype": "live",
+  "confidence": "high",
+  "reason": "principal token, maturity 2027-02-11 after 2026-10-28"
+ },
+ "1:0x60b1e75ede859e496c281d308bc94b6965ac4847": {
+  "symbol": "PT-apyUSD-11FEB2027",
+  "category": "pendle_pt",
+  "subtype": "live",
+  "confidence": "high",
+  "reason": "principal token, maturity 2027-02-11 after 2026-10-28"
  }
 }
