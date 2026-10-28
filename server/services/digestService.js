@@ -4,6 +4,7 @@ import { escapeHtml, message, vaultBlock, paginate } from '../engine/notifyRules
 const DAY = 86400;
 const DIGEST_HOUR_KYIV = 9;
 const MIN_APY_SAMPLES = 48;
+const LEVEL_HOLD_SECONDS = 3 * 3600;
 
 const compactUsd = n => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(Math.round(n)));
 
@@ -30,6 +31,7 @@ export function buildDigest(db, addresses, nowSec = Math.floor(Date.now() / 1000
     SELECT * FROM vault_samples WHERE vault_address = ? AND sampled_at BETWEEN ? AND ?
     ORDER BY ABS(sampled_at - ?) LIMIT 1
   `);
+  const recentStmt = db.prepare('SELECT verdict_level FROM vault_samples WHERE vault_address = ? AND sampled_at >= ?');
   const avgStmt = db.prepare('SELECT AVG(net_apy) AS avg, COUNT(net_apy) AS n FROM vault_samples WHERE vault_address = ? AND sampled_at >= ? AND net_apy IS NOT NULL');
   const eventsStmt = db.prepare(`
     SELECT kind, title, details_json FROM vault_events
@@ -43,7 +45,7 @@ export function buildDigest(db, addresses, nowSec = Math.floor(Date.now() / 1000
     const baseline = baselineStmt.get(addr, nowSec - 36 * 3600, nowSec - 12 * 3600, nowSec - DAY);
     const avg = avgStmt.get(addr, nowSec - 7 * DAY);
     const items = current && baseline && current.hour_bucket !== baseline.hour_bucket
-      ? diffVaultSamples(baseline, current, avg.n >= MIN_APY_SAMPLES ? avg.avg : null)
+      ? diffVaultSamples(baseline, current, avg.n >= MIN_APY_SAMPLES ? avg.avg : null, recentStmt.all(addr, nowSec - LEVEL_HOLD_SECONDS).map(r => r.verdict_level))
       : [];
 
     let reallocCount = 0;

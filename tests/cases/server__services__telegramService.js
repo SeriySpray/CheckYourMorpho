@@ -473,6 +473,33 @@ export default {
       db.close();
     }],
   ],
+  dispatchStaleNotice: [
+    ['дані не оновлювались понад 24 год: один раз повідомляє чат, не повторює, а після відновлення пише один раз "restored"', async ({ dispatchStaleNotice }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db);
+      const sync = t => db.prepare("INSERT INTO sync_state (key, value, updated_at) VALUES ('last_sync_all', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(t), t);
+      assert.equal(await dispatchStaleNotice(db, tg, NOW, noSleep), 0); // sync-у ще не було
+      sync(NOW - 23 * 3600);
+      assert.equal(await dispatchStaleNotice(db, tg, NOW, noSleep), 0);
+      assert.equal(await dispatchStaleNotice(db, tg, NOW + 2 * 3600, noSleep), 1);
+      assert.match(tg.sent()[0].text, /^<b>Monitoring paused<\/b>\n\nVault data has not been updated for 25 hours/);
+      assert.equal(await dispatchStaleNotice(db, tg, NOW + 3 * 3600, noSleep), 0);
+      sync(NOW + 4 * 3600);
+      assert.equal(await dispatchStaleNotice(db, tg, NOW + 4 * 3600, noSleep), 1);
+      assert.match(tg.sent()[1].text, /^<b>Monitoring restored<\/b>/);
+      assert.equal(await dispatchStaleNotice(db, tg, NOW + 5 * 3600, noSleep), 0);
+      assert.equal(tg.sent().length, 2);
+      db.close();
+    }],
+    ['дайджест при застарілих даних не шлеться і лишається належним', async ({ dispatchDigest }) => {
+      const db = makeDb(); const tg = makeTg();
+      bound(db);
+      db.prepare("INSERT INTO sync_state (key, value, updated_at) VALUES ('last_sync_all', ?, ?)").run(String(NOW - 30 * 3600), NOW);
+      assert.equal(await dispatchDigest(db, tg, NOW, noSleep), 0);
+      assert.equal(db.prepare("SELECT value FROM sync_state WHERE key = 'last_digest_date'").get(), undefined);
+      db.close();
+    }],
+  ],
   dispatchPins: [
     ['оновлює закріплене повідомлення всіх активних чатів, лічить лише надіслані чи змінені, пропускає вимкнені', async ({ dispatchPins }) => {
       const db = makeDb(); const tg = makeTg();

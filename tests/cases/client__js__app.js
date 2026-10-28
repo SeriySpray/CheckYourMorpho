@@ -7,7 +7,7 @@ const realSetTimeout = globalThis.setTimeout;
 const sleep = ms => new Promise(r => realSetTimeout(r, ms));
 const tick = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise(r => setImmediate(r)); };
 
-const DEFAULT_FILTERS = { query: '', network: 'all', asset: 'all', curator: 'all', sort: 'tvl_desc', pinnedOnly: false };
+const DEFAULT_FILTERS = { query: '', network: 'all', asset: 'all', curator: 'all', sort: 'tvl_desc', pinnedOnly: false, showTiny: false };
 const EXIT_STATE = { normalExitPct: 0, normalExitUsd: 0, stressedExitPct: 0, stressedExitUsd: 0, dropPct: 0, topPeer: '' };
 const OVERRIDES = ['addEventListener', 'appendChild', 'querySelector', 'querySelectorAll', 'focus', 'blur', 'click', 'getContext', 'parentElement', 'scrollWidth'];
 
@@ -113,9 +113,10 @@ const T = (title, body) => [title, async m => {
 
 // Клієнтський vault (camelCase, як у /api/vaults) і повний аудит (/api/vaults/:address)
 const cv = (over = {}) => ({
-  address: '0xAAA1', name: 'Steakhouse USDC', chainId: 1, version: 'v1', isListed: true, curatorName: 'Steakhouse',
+  address: '0xAAA1', name: 'Steakhouse USDC', chainId: 1, version: 'v1', isListed: true, curatorName: 'Steakhouse Financial',
   asset: { symbol: 'USDC', decimals: 6, priceUsd: 1 }, totalAssetsUsd: 10e6, totalAssets: '10000000000000',
-  liquidityUsd: 4e6, netApy: 0.05, fee: 0.1, mqiPercent: 100, isAllClean: true, exitCapPercent: 40, ...over
+  liquidityUsd: 4e6, netApy: 0.05, fee: 0.1, mqiPercent: 100, isAllClean: true, exitCapPercent: 40,
+  flagCount: 0, worstFlagLevel: null, worstFlagTitle: null, ...over
 });
 const verdictOf = (over = {}) => ({
   mqi: { mqiPercent: 100, isAllClean: true, compromisedMarkets: [], compromisedPercent: 0, unverifiedPercent: 0, unpriced: false, ...over.mqi },
@@ -154,7 +155,7 @@ function fakePillCard() {
 
 /** Фейковий dropdown з пунктами [value, label]. */
 function fakeDropdown(filter, entries) {
-  const trigger = capEl(), valEl = makeElement(), menu = makeElement();
+  const trigger = capEl(), valEl = makeElement(), menu = capEl();
   valEl.textContent = 'initial';
   const items = entries.map(([value, label]) => {
     const item = capEl();
@@ -164,9 +165,10 @@ function fakeDropdown(filter, entries) {
     return item;
   });
   menu.querySelectorAll = s => (s === '.dropdown-item' ? items : []);
+  const clickItem = (item, ev) => menu.handlers.click({ ...ev, target: { closest: () => item } });
   const dd = fakeNode({ '.dropdown-trigger': trigger, '.trigger-value': valEl, '.dropdown-menu': menu, '.dropdown-item': items });
   dd.setAttribute('data-filter', filter);
-  return { dd, trigger, valEl, items };
+  return { dd, trigger, valEl, items, clickItem };
 }
 
 const pin = (...addrs) => localStorage.setItem('cym_pinned_vaults', JSON.stringify(addrs));
@@ -499,20 +501,13 @@ const base = {
     }],
   ],
   formatCuratorName: [
-    ['відомі куратори впізнаються з назви vault без урахування регістру', ({ formatCuratorName: f }) => {
-      assert.equal(f('0x1', 'STEAKHOUSE USDC'), 'Steakhouse Financial');
-      assert.equal(f(null, 'Gauntlet WETH Prime'), 'Gauntlet');
-      assert.equal(f('', 'Re7 USDT'), 'Re7 Labs');
-      assert.equal(f('', 'PayPal PYUSD'), 'PayPal USD');
-      assert.equal(f('', 'Flagship ETH'), 'Morpho Flagship');
-      assert.equal(f('', 'BlockAnalitica USDC'), 'B.Protocol');
-      assert.equal(f('', 'bprotocol vault'), 'B.Protocol');
+    ['назва куратора береться лише з API: назва vault її не підміняє', ({ formatCuratorName: f }) => {
+      assert.equal(f('Anthias Labs'), 'Anthias Labs');
+      assert.equal(f('Sentora'), 'Sentora');
+      assert.equal(f('Gauntlet', 'Steakhouse USDC'), 'Gauntlet');
     }],
-    ['назва vault має пріоритет над полем curatorName', ({ formatCuratorName: f }) =>
-      assert.equal(f('Gauntlet', 'Steakhouse USDC'), 'Steakhouse Financial')],
-    ['порожній, Independent, Permissionless -> "Permissionless"', ({ formatCuratorName: f }) => {
-      for (const n of [undefined, null, '', 'Independent', 'Permissionless']) assert.equal(f(n, 'Some Vault'), 'Permissionless');
-      assert.equal(f(undefined), 'Permissionless');
+    ['порожній, Independent, Permissionless -> "Independent"', ({ formatCuratorName: f }) => {
+      for (const n of [undefined, null, '', 'Independent', 'Permissionless']) assert.equal(f(n), 'Independent');
     }],
     ['довга адреса скорочується, коротка і звичайна назва лишаються', ({ formatCuratorName: f }) => {
       assert.equal(f('0x1234567890abcdef'), '0x1234...cdef');
@@ -612,7 +607,7 @@ const base = {
     }),
     T('чіпи мережі, активу, куратора і сортування з людськими підписами', ({ updateActiveFilterChips: f, __state: s }) => {
       s.DOM.activeFilterChips.classList.add('hidden');
-      Object.assign(s.explorerFilters, { network: '8453', asset: 'USDC', curator: 're7', sort: 'apy_desc' });
+      Object.assign(s.explorerFilters, { network: '8453', asset: 'USDC', curator: 'Re7 Labs', sort: 'apy_desc' });
       f();
       const html = s.DOM.chipsContainer.innerHTML;
       assert.equal(s.DOM.activeFilterChips.classList.contains('hidden'), false);
@@ -620,12 +615,12 @@ const base = {
       assert.ok(!html.includes('Favorites'));
     }),
     T('значення фільтра екрануються (XSS), невідомий куратор показується як є', ({ updateActiveFilterChips: f, __state: s }) => {
-      Object.assign(s.explorerFilters, { asset: '<img src=x onerror=alert(1)>', curator: 'mev' });
+      Object.assign(s.explorerFilters, { asset: '<img src=x onerror=alert(1)>', curator: 'MEV Capital' });
       f();
       const html = s.DOM.chipsContainer.innerHTML;
       assert.ok(!html.includes('<img'));
       assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
-      assert.ok(html.includes('>mev<'));
+      assert.ok(html.includes('>MEV Capital<'));
     }),
     T('кнопки видалення чіпів скидають свій фільтр', ({ updateActiveFilterChips: f, __state: s }) => {
       Object.assign(s.explorerFilters, { network: '1', sort: 'liq_desc', pinnedOnly: true });
@@ -701,12 +696,27 @@ const base = {
       s.DOM.explorerResetBtn.handlers.click();
       assert.equal(s.explorerFilters.network, 'all'); assert.equal(s.explorerFilters.query, '');
     }),
+    T('перемикач малих vault: клік вмикає і вимикає показ, список перемальовується', ({ setupVaultExplorerEvents: f, __state: s }) => {
+      const t = s.DOM.explorerTinyToggle;
+      t.handlers = {}; t.addEventListener = (e, fn) => { t.handlers[e] = fn; };
+      s.allVaults = [cv({ address: '0x1', totalAssetsUsd: 5 }), cv({ address: '0x2', totalAssetsUsd: 5e6 })];
+      f();
+      const count = () => { const rows = collectRows(); s.DOM.explorerTinyToggle.handlers.click(); return rows.length; };
+      assert.equal(s.explorerFilters.showTiny, false);
+      count();
+      assert.equal(s.explorerFilters.showTiny, true);
+      assert.equal(s.DOM.explorerCount.textContent, '2 Vaults');
+      count();
+      assert.equal(s.explorerFilters.showTiny, false);
+      assert.equal(s.DOM.explorerCount.textContent, '1 Vaults');
+    }),
     T('dropdown: тригер відкриває/закриває, пункт задає фільтр, клік поза меню закриває', ({ setupVaultExplorerEvents: f, __state: s }) => {
       const x = fakeDropdown('asset', [['all', 'All'], ['USDC', 'USDC']]);
       const docHandlers = {};
       document.addEventListener = (t, fn) => { docHandlers[t] = fn; };
       document.querySelectorAll = sel => (sel === '.custom-dropdown' ? [x.dd] : sel === '.custom-dropdown.open' && x.dd.classList.contains('open') ? [x.dd] : []);
-      document.querySelector = () => x.dd;
+      document.querySelector = sel => (sel.includes('data-filter="asset"') ? x.dd : null);
+      s.allVaults = [cv({ asset: { symbol: 'USDC' } })]; // a value absent from the data is reset to 'all'
       f();
       const ev = { stopPropagation() {}, preventDefault() {}, detail: 1 };
       x.trigger.handlers.click(ev);
@@ -716,7 +726,7 @@ const base = {
       assert.equal(x.dd.classList.contains('open'), false);
 
       x.trigger.handlers.click(ev);
-      x.items[1].handlers.click(ev);
+      x.clickItem(x.items[1], ev);
       assert.equal(s.explorerFilters.asset, 'USDC');
       assert.equal(x.items[1].classList.contains('selected'), true);
       assert.equal(x.dd.classList.contains('open'), false);
@@ -729,7 +739,7 @@ const base = {
   ],
   resetDropdownFilters: [
     T('повертає фільтри списку до типових, пошуковий запит не чіпає', ({ resetDropdownFilters: f, __state: s }) => {
-      Object.assign(s.explorerFilters, { query: 'keep', network: '1', asset: 'ETH', curator: 're7', sort: 'apy_desc', pinnedOnly: true });
+      Object.assign(s.explorerFilters, { query: 'keep', network: '1', asset: 'ETH', curator: 're7', sort: 'apy_desc', pinnedOnly: true, showTiny: true });
       s.DOM.explorerFavFilterBtn.classList.add('active');
       f();
       assert.deepEqual({ ...s.explorerFilters }, { ...DEFAULT_FILTERS, query: 'keep' });
@@ -754,32 +764,27 @@ const base = {
     ['символ відсутній при активному фільтрі -> false', ({ matchesAssetFilter: f }) => {
       for (const sym of [undefined, null, '']) assert.equal(f(sym, 'USDC'), false);
     }],
-    ['ETH охоплює похідні ETH, USDE - sUSDe, EURC - будь-який EUR', ({ matchesAssetFilter: f }) => {
-      assert.equal(f('WETH', 'ETH'), true); assert.equal(f('wstETH', 'eth'), true); assert.equal(f('USDC', 'ETH'), false);
-      assert.equal(f('sUSDe', 'USDE'), true); assert.equal(f('USDC', 'USDE'), false);
-      assert.equal(f('EURe', 'EURC'), true); assert.equal(f('USDC', 'EURC'), false);
+    ['ключ активу: регістр і знак Tether (USD₮0) нормалізуються, часткове входження не рахується', ({ matchesAssetFilter: f }) => {
+      assert.equal(f('usdc', 'USDC'), true); assert.equal(f('USD₮0', 'USDT0'), true);
+      assert.equal(f('wstETH', 'ETH'), false); assert.equal(f('USDC.e', 'USDC'), false);
     }],
-    ['решта: точний збіг або входження без урахування регістру', ({ matchesAssetFilter: f }) => {
-      assert.equal(f('usdc', 'USDC'), true); assert.equal(f('USDC.e', 'USDC'), true);
-      assert.equal(f('USDT', 'USDC'), false); assert.equal(f('PYUSD', 'USDG'), false);
+    ['точний збіг ключа: різні активи не змішуються', ({ matchesAssetFilter: f }) => {
+      assert.equal(f('USDT', 'USDC'), false); assert.equal(f('PYUSD', 'USDG'), false); assert.equal(f('USDC', 'USDC'), true);
     }],
   ],
   matchesCuratorFilter: [
     ['без фільтра або "all" -> true', ({ matchesCuratorFilter: f }) => {
       for (const filter of [undefined, '', 'all']) assert.equal(f({}, filter), true);
     }],
-    ['впізнає куратора з назви або поля curatorName', ({ matchesCuratorFilter: f }) => {
-      assert.equal(f({ name: 'Steakhouse USDC' }, 'steakhouse'), true);
-      assert.equal(f({ curatorName: 'Gauntlet' }, 'GAUNTLET'), true);
-      assert.equal(f({ name: 'Re7 WETH' }, 're7'), true);
-      assert.equal(f({ name: 'Morpho USDC' }, 'flagship'), true);
-      assert.equal(f({ curatorName: 'Morpho Association' }, 'flagship'), true);
-      assert.equal(f({ name: 'BlockAnalitica USDC' }, 'bprotocol'), true);
+    ['збіг за відображуваним іменем куратора з API, назва vault не береться до уваги', ({ matchesCuratorFilter: f }) => {
+      assert.equal(f({ curatorName: 'Gauntlet' }, 'Gauntlet'), true);
+      assert.equal(f({ curatorName: 'Independent' }, 'Independent'), true);
+      assert.equal(f({ curatorName: null }, 'Independent'), true);
+      assert.equal(f({ name: 'Morpho USDC', curatorName: 'Anthias Labs' }, 'Morpho Flagship'), false);
     }],
     ['чужий куратор, порожній vault і невідомий фільтр -> false', ({ matchesCuratorFilter: f }) => {
-      assert.equal(f({ name: 'Gauntlet USDC' }, 'steakhouse'), false);
-      assert.equal(f({}, 're7'), false);
-      assert.equal(f({ name: 'Steakhouse' }, 'unknown'), false);
+      assert.equal(f({ curatorName: 'Gauntlet' }, 'Steakhouse Financial'), false);
+      assert.equal(f({ curatorName: 'X' }, 'unknown'), false);
     }],
   ],
 
@@ -922,36 +927,36 @@ const base = {
       assert.equal(s.activeAuditData, data);
       assert.equal(s.DOM.modalVaultName.textContent, 'Open Update');
     }),
-    T('картка закріпленого vault отримує свіжі значення і чистий бейдж', ({ applyVaultAuditData: f, __state: s }) => {
+    T('картка закріпленого vault отримує свіжі значення і бейдж без прапорців', ({ applyVaultAuditData: f, __state: s }) => {
       s.allVaults = [cv()];
       pin('0xaaa1');
       const p = fakePillCard();
       s.DOM.pinnedRichPills.querySelector = sel => (sel.includes('0xAAA1') ? p.card : null);
       f('0xAAA1', audit({ totalAssetsUsd: 2e6, liquidityUsd: 5e5, netApy: 0.0425, fee: 0.15, totalAssets: '2000000000000' }));
-      assert.equal(p.badge.textContent, '100% Clean');
-      assert.equal(p.badge.className, 'rich-pill-mqi-badge clean');
+      assert.equal(p.badge.textContent, 'No flags');
+      assert.equal(p.badge.className, 'rich-pill-mqi-badge none');
       assert.equal(p.val(0), '$2.00M'); assert.equal(p.sub(0), '2.00M USDC');
       assert.equal(p.val(1), '$500.0K'); assert.equal(p.sub(1), '40% Exit Cap');
       assert.equal(p.val(2), '4.25%'); assert.equal(p.sub(2), 'Fee: 15.0%');
     }),
-    T('картка: unpriced -> "Unpriced", flagged, невідомий вихід -> "Exit Cap N/A"', ({ applyVaultAuditData: f, __state: s }) => {
+    T('картка: прапорець Unpriced Vault -> "No price", невідомий вихід -> "Exit Cap N/A"', ({ applyVaultAuditData: f, __state: s }) => {
       s.allVaults = [cv()];
       pin('0xaaa1');
       const p = fakePillCard();
       s.DOM.pinnedRichPills.querySelector = () => p.card;
-      f('0xAAA1', audit({}, { mqi: { mqiPercent: null, isAllClean: false, unpriced: true }, liquidity: { instantExitCapacityPercent: null } }));
-      assert.equal(p.badge.textContent, 'Unpriced');
-      assert.equal(p.badge.className, 'rich-pill-mqi-badge flagged');
+      f('0xAAA1', audit({}, { mqi: { mqiPercent: null, isAllClean: false, unpriced: true }, liquidity: { instantExitCapacityPercent: null }, redFlags: [{ level: 'HIGH', title: 'Unpriced Vault' }] }));
+      assert.equal(p.badge.textContent, 'No price');
+      assert.equal(p.badge.className, 'rich-pill-mqi-badge bad');
       assert.equal(p.sub(1), 'Exit Cap N/A');
     }),
-    T('картка: 100% з позначеним ринком -> "Flagged", а не "Clean"', ({ applyVaultAuditData: f, __state: s }) => {
+    T('картка: найгірший із кількох прапорців і "+N"', ({ applyVaultAuditData: f, __state: s }) => {
       s.allVaults = [cv()];
       pin('0xaaa1');
       const p = fakePillCard();
       s.DOM.pinnedRichPills.querySelector = () => p.card;
-      f('0xAAA1', audit({}, { mqi: { mqiPercent: 100, isAllClean: false, compromisedMarkets: [{}] } }));
-      assert.equal(p.badge.textContent, 'Flagged');
-      assert.equal(p.badge.className, 'rich-pill-mqi-badge flagged');
+      f('0xAAA1', audit({}, { redFlags: [{ level: 'MEDIUM', title: 'Unverified Markets' }, { level: 'HIGH', title: 'Restricted Exit Liquidity' }] }));
+      assert.equal(p.badge.textContent, 'Low exit +1');
+      assert.equal(p.badge.className, 'rich-pill-mqi-badge bad');
     }),
     T('рядок у списку vault отримує нові TVL і APY', ({ applyVaultAuditData: f, __state: s }) => {
       const tvl = makeElement(), apy = makeElement();
@@ -986,20 +991,20 @@ const base = {
       assert.equal(cards.length, 1);
       assert.equal(cards[0].dataset.address, '0xAAA1');
       const html = cards[0].innerHTML;
-      for (const t of ['badge-chain base">BASE<', 'Steakhouse Financial', 'rich-pill-mqi-badge clean">100% Clean<', '>$10.00M<',
+      for (const t of ['badge-chain base">BASE<', 'Steakhouse Financial', 'rich-pill-mqi-badge none">No flags<', '>$10.00M<',
         '>10.00M USDC<', '>$4.00M<', '>40% Exit Cap<', '>5.00%<', '>Fee: 10.0%<', 'data-unpin="0xAAA1"']) assert.ok(html.includes(t), t);
     }),
-    T('невідомі MQI і ліквідність: "Unpriced"/"Unverified", "—" і "Exit Cap N/A"', ({ renderPinnedRichPills: f, __state: s }, env) => {
+    T('невідома ліквідність: бейдж за прапорцем списку, "—" і "Exit Cap N/A"', ({ renderPinnedRichPills: f, __state: s }, env) => {
       env.fetch(() => jsonResponse({}, 404));
-      s.allVaults = [cv({ address: '0xa', mqiPercent: null, isUnpriced: true, liquidityUsd: null, exitCapPercent: undefined }),
-        cv({ address: '0xb', mqiPercent: null })];
+      s.allVaults = [cv({ address: '0xa', mqiPercent: null, isUnpriced: true, liquidityUsd: null, exitCapPercent: undefined, flagCount: 1, worstFlagLevel: 'high', worstFlagTitle: 'Unpriced Vault' }),
+        cv({ address: '0xb', mqiPercent: null, flagCount: 1, worstFlagLevel: 'medium', worstFlagTitle: 'Unverified Markets' })];
       pin('0xa', '0xb');
       const cards = collect(s.DOM.pinnedRichPills);
       f();
-      assert.ok(cards[0].innerHTML.includes('flagged">Unpriced<'));
+      assert.ok(cards[0].innerHTML.includes('bad">No price<'));
       assert.ok(cards[0].innerHTML.includes('>—<'));
       assert.ok(cards[0].innerHTML.includes('>Exit Cap N/A<'));
-      assert.ok(cards[1].innerHTML.includes('flagged">Unverified<'));
+      assert.ok(cards[1].innerHTML.includes('warn">Partial data<'));
     }),
     T('назва з HTML екранується', ({ renderPinnedRichPills: f, __state: s }, env) => {
       env.fetch(() => jsonResponse({}, 404));
@@ -1102,14 +1107,22 @@ const base = {
       const rows = collectRows();
       s.DOM.vaultExplorerWidget.scrollTop = 77;
       f();
-      assert.deepEqual(rows.map(r => r.getAttribute('data-address')), ['0xl', '0xm', '0xs']);
-      assert.equal(s.DOM.explorerCount.textContent, '3 Vaults');
+      assert.deepEqual(rows.map(r => r.getAttribute('data-address')), ['0xl', '0xm']); // $1 vault is hidden by default
+      assert.equal(s.DOM.explorerCount.textContent, '2 Vaults');
+      assert.equal(s.DOM.explorerTinyToggle.textContent, 'Show 1 under $1K');
+      assert.equal(s.DOM.explorerTinyToggle.classList.contains('hidden'), false);
       assert.equal(s.DOM.explorerFavCount.textContent, 1);
       assert.equal(s.DOM.explorerFavFilterBtn.getAttribute('aria-pressed'), 'false');
       assert.deepEqual(s.sphere.calls.at(-1), ['highlight', null]);
       assert.equal(s.DOM.vaultExplorerWidget.scrollTop, 77);
       assert.ok(rows[1].innerHTML.includes('aria-pressed="true"'));
       assert.ok(rows[0].innerHTML.includes('aria-pressed="false"'));
+      s.explorerFilters.showTiny = true;
+      const all = collectRows();
+      f();
+      assert.deepEqual(all.map(r => r.getAttribute('data-address')), ['0xl', '0xm', '0xs']);
+      assert.equal(s.DOM.explorerTinyToggle.textContent, 'Hide under $1K');
+      s.explorerFilters.showTiny = false;
     }),
     T('пошук за кількома словами: лічильник "N / M", сфера підсвічує перший результат', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [cv({ address: '0x1', name: 'Steakhouse USDC' }), cv({ address: '0x2', name: 'Gauntlet WETH', curatorName: 'Gauntlet', asset: { symbol: 'WETH' } })];
@@ -1121,12 +1134,12 @@ const base = {
       assert.deepEqual(s.sphere.calls.at(-1), ['highlight', '0x2']);
     }),
     T('фільтри мережі, активу, куратора і обраних', ({ renderVaultExplorer: f, __state: s }) => {
-      s.allVaults = [cv({ address: '0x1', chainId: 1, asset: { symbol: 'WETH' }, name: 'Re7 WETH', curatorName: '' }),
-        cv({ address: '0x2', chainId: 8453, asset: { symbol: 'USDC' } }), cv({ address: '0x3', chainId: 8453, asset: { symbol: 'wstETH' }, name: 'Gauntlet', curatorName: '' })];
+      s.allVaults = [cv({ address: '0x1', chainId: 1, asset: { symbol: 'WETH' }, name: 'Re7 WETH', curatorName: 'Re7 Labs' }),
+        cv({ address: '0x2', chainId: 8453, asset: { symbol: 'USDC' } }), cv({ address: '0x3', chainId: 8453, asset: { symbol: 'wstETH' }, name: 'Gauntlet', curatorName: 'Gauntlet' })];
       const run = filters => { Object.assign(s.explorerFilters, DEFAULT_FILTERS, filters); const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')); };
       assert.deepEqual(run({ network: '8453' }), ['0x2', '0x3']);
-      assert.deepEqual(run({ asset: 'ETH' }), ['0x1', '0x3']);
-      assert.deepEqual(run({ curator: 're7' }), ['0x1']);
+      assert.deepEqual(run({ asset: 'WSTETH' }), ['0x3']);
+      assert.deepEqual(run({ curator: 'Re7 Labs' }), ['0x1']);
       pin('0x3');
       assert.deepEqual(run({ pinnedOnly: true }), ['0x3']);
       s.DOM.activityPanel.classList.add('hidden');
@@ -1148,35 +1161,51 @@ const base = {
       assert.match(s.DOM.explorerVaultsList.innerHTML, /No vaults match your filter criteria/);
       assert.equal(s.DOM.explorerCount.textContent, '0 / 1 Vaults');
     }),
-    T('сортування за APY, ліквідністю і MQI', ({ renderVaultExplorer: f, __state: s }) => {
+    T('сортування за APY, ліквідністю, ризиком і виходом', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
-        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, mqiPercent: 100, isAllClean: true }),
-        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, mqiPercent: null }),
-        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, mqiPercent: 100, isAllClean: false }),
-        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, mqiPercent: 60, isAllClean: false })
+        cv({ address: 'a', netApy: 0.01, liquidityUsd: 3, exitCapPercent: 50, stressedExitCapPercent: 50 }),
+        cv({ address: 'b', netApy: 0.09, liquidityUsd: 1, exitCapPercent: null, flagCount: 1, worstFlagLevel: 'medium', worstFlagTitle: 'Unknown Exit Liquidity' }),
+        cv({ address: 'c', netApy: 0.05, liquidityUsd: 2, exitCapPercent: 15, stressedExitCapPercent: 5, flagCount: 2, worstFlagLevel: 'high', worstFlagTitle: 'Restricted Exit Liquidity' }),
+        cv({ address: 'd', netApy: undefined, liquidityUsd: undefined, exitCapPercent: 30, stressedExitCapPercent: 10, flagCount: 1, worstFlagLevel: 'critical', worstFlagTitle: 'Compromised Market Exposure' })
       ];
       const order = sort => { s.explorerFilters.sort = sort; const rows = collectRows(); f(); return rows.map(r => r.getAttribute('data-address')).join(''); };
       assert.equal(order('apy_desc'), 'bcad');
       assert.equal(order('liq_desc'), 'acbd');
-      assert.equal(order('mqi_asc'), 'bdca'); // невідомий першим, позначений 100 - перед чистим
-      assert.equal(order('mqi_desc'), 'acdb');
+      assert.equal(order('risk_desc'), 'dcba'); // critical, high, medium, none
+      assert.equal(order('exit_asc'), 'cdab'); // lowest stressed exit first, unknown exit last
     }),
-    T('бейджі рядка: Unpriced, Unverified, % Flagged, кількість Flagged, % Unverified, чистий без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
+    T('бейджі рядка: найгірший прапорець з "+N", підказка з назвою, рядок без прапорців без бейджа', ({ renderVaultExplorer: f, __state: s }) => {
       s.allVaults = [
-        cv({ address: '1', totalAssetsUsd: 6, mqiPercent: null, isUnpriced: true }),
-        cv({ address: '2', totalAssetsUsd: 5, mqiPercent: null }),
-        cv({ address: '3', totalAssetsUsd: 4, mqiPercent: 87.5, isAllClean: false, compromisedCount: 2, compromisedPercent: 12.5 }),
-        cv({ address: '4', totalAssetsUsd: 3, mqiPercent: 100, isAllClean: false, compromisedCount: 1, compromisedPercent: 0 }),
-        cv({ address: '5', totalAssetsUsd: 2, mqiPercent: 97, isAllClean: false, unverifiedPercent: 3 }),
-        cv({ address: '6', totalAssetsUsd: 1, mqiPercent: 100, isAllClean: undefined })
+        cv({ address: '1', totalAssetsUsd: 6, flagCount: 1, worstFlagLevel: 'high', worstFlagTitle: 'Unpriced Vault' }),
+        cv({ address: '2', totalAssetsUsd: 5, flagCount: 3, worstFlagLevel: 'critical', worstFlagTitle: 'Compromised Market Exposure' }),
+        cv({ address: '3', totalAssetsUsd: 4, flagCount: 1, worstFlagLevel: 'medium', worstFlagTitle: 'Unverified Markets' }),
+        cv({ address: '4', totalAssetsUsd: 3 })
       ];
+      s.explorerFilters.showTiny = true;
       const rows = collectRows();
       f();
-      const badge = r => r.innerHTML.match(/vault-mini-badge flagged">([^<]*)</)?.[1] ?? null;
-      assert.deepEqual(rows.map(badge), ['Unpriced', 'Unverified', '12.5% Flagged', '1 Flagged', '3% Unverified', null]);
+      s.explorerFilters.showTiny = false;
+      const badge = r => r.innerHTML.match(/vault-mini-badge (?:warn|bad)"[^>]*>([^<]*)</)?.[1] ?? null;
+      assert.deepEqual(rows.map(badge), ['No price', 'Bad market +2', 'Partial data', null]);
+      assert.match(rows[1].innerHTML, /title="Compromised Market Exposure and 2 more"/);
+      assert.match(rows[0].innerHTML, /vault-mini-badge bad/); assert.match(rows[2].innerHTML, /vault-mini-badge warn/);
+    }),
+    T('колонка виходу: звичайний вихід, стресовий лише коли падіння від 5 пунктів, n/a для невідомого', ({ renderVaultExplorer: f, __state: s }) => {
+      s.allVaults = [
+        cv({ address: '1', totalAssetsUsd: 9, exitCapPercent: 31.1, stressedExitCapPercent: 10.1 }),
+        cv({ address: '2', totalAssetsUsd: 8, exitCapPercent: 40, stressedExitCapPercent: 38 }),
+        cv({ address: '3', totalAssetsUsd: 7, exitCapPercent: null })
+      ];
+      s.explorerFilters.showTiny = true;
+      const rows = collectRows();
+      f();
+      s.explorerFilters.showTiny = false;
+      assert.match(rows[0].innerHTML, /vault-item-exit-main">31\.1%<[\s\S]*vault-item-exit-stress">run 10\.1%</);
+      assert.doesNotMatch(rows[1].innerHTML, /vault-item-exit-stress/);
+      assert.match(rows[2].innerHTML, /vault-item-exit-main">n\/a</);
     }),
     T('відʼємний APY має клас negative, назва екранується, TVL падає на ліквідність', ({ renderVaultExplorer: f, __state: s }) => {
-      s.allVaults = [cv({ name: '"><img onerror=1>', netApy: -0.02, totalAssetsUsd: 0, liquidityUsd: 2500 })];
+      s.allVaults = [cv({ name: '"><img onerror=1>', netApy: -0.02, totalAssetsUsd: 0, liquidityUsd: 2500, isUnpriced: true })];
       const rows = collectRows();
       f();
       const html = rows[0].innerHTML;
@@ -1223,18 +1252,19 @@ const base = {
       assert.equal(D.modalTvl.textContent, '$10.00M'); assert.equal(D.modalAssetsHuman.textContent, '10.00M USDC');
       assert.equal(D.modalLiq.textContent, '$4.00M'); assert.equal(D.modalExitCapPct.textContent, '40% Exit Cap');
       assert.equal(D.modalNetApy.textContent, '5.00%'); assert.equal(D.modalFee.textContent, 'Fee: 10.0%');
-      assert.equal(D.modalGrade.textContent, '100%'); assert.equal(D.modalGrade.dataset.tone, 'ok');
+      assert.equal(D.modalGrade.textContent, '0'); assert.equal(D.modalGrade.dataset.tone, 'none');
     }),
-    T('тон MQI: null -> N/A bad, 100 з прапорцем -> warn, 85 -> warn, 50 -> bad', ({ populateBasicVaultInfo: f, __state: s }) => {
+    T('шапка за прапорцями списку: кількість і тон найгіршого', ({ populateBasicVaultInfo: f, __state: s }) => {
       const g = s.DOM.modalGrade;
-      f(cv({ mqiPercent: null })); assert.equal(g.textContent, 'N/A'); assert.equal(g.dataset.tone, 'bad');
-      f(cv({ mqiPercent: 100, isAllClean: false })); assert.equal(g.dataset.tone, 'warn');
-      f(cv({ mqiPercent: 85, isAllClean: undefined })); assert.equal(g.textContent, '85%'); assert.equal(g.dataset.tone, 'warn');
-      f(cv({ mqiPercent: 50 })); assert.equal(g.dataset.tone, 'bad');
+      f(cv({ flagCount: 2, worstFlagLevel: 'critical', worstFlagTitle: 'X' })); assert.equal(g.textContent, '2'); assert.equal(g.dataset.tone, 'bad');
+      assert.equal(s.DOM.modalScore.textContent, 'Worst: Critical');
+      f(cv({ flagCount: 1, worstFlagLevel: 'medium', worstFlagTitle: 'X' })); assert.equal(g.dataset.tone, 'warn');
+      f(cv({ flagCount: 0, worstFlagLevel: null })); assert.equal(g.textContent, '0'); assert.equal(g.dataset.tone, 'none');
+      assert.equal(s.DOM.modalScore.textContent, 'None raised');
     }),
-    T('відсутні поля MQI і виходу не перезаписують попередні значення, null виходу -> N/A', ({ populateBasicVaultInfo: f, __state: s }) => {
+    T('відсутні поля прапорців і виходу не перезаписують попередні значення, null виходу -> N/A', ({ populateBasicVaultInfo: f, __state: s }) => {
       s.DOM.modalGrade.textContent = 'sentinel'; s.DOM.modalExitCapPct.textContent = 'sentinel';
-      f(cv({ mqiPercent: undefined, exitCapPercent: undefined }));
+      f(cv({ flagCount: undefined, exitCapPercent: undefined }));
       assert.equal(s.DOM.modalGrade.textContent, 'sentinel');
       assert.equal(s.DOM.modalExitCapPct.textContent, 'sentinel');
       f(cv({ exitCapPercent: null }));
@@ -1246,7 +1276,7 @@ const base = {
       assert.equal(D.modalVersionBadge.textContent, 'V1');
       assert.equal(D.modalListedBadge.textContent, 'UNLISTED'); assert.equal(D.modalListedBadge.className, 'badge badge-chain');
       assert.equal(D.modalChainBadge.className, 'badge badge-chain ');
-      assert.equal(D.modalVaultName.textContent, 'Morpho Vault'); assert.equal(D.modalCuratorName.textContent, 'Permissionless');
+      assert.equal(D.modalVaultName.textContent, 'Morpho Vault'); assert.equal(D.modalCuratorName.textContent, 'Independent');
       assert.equal(D.modalAssetsHuman.textContent, '2.00 WETH');
       assert.equal(D.modalLiq.textContent, '—');
       assert.equal(D.modalNetApy.textContent, '0.00%'); assert.equal(D.modalFee.textContent, 'Fee: 0.0%');
@@ -1423,14 +1453,14 @@ const base = {
       assert.equal(s.clientAuditCache.get('0xaaa1').vault.name, 'Revalidated');
       assert.equal(s.DOM.modalVaultName.textContent, 'Revalidated');
     }),
-    T('попередній кеш (навіть застарілий) одразу заповнює шапку з MQI аудиту', async ({ openVaultAuditFlow: f, __state: s }, env) => {
+    T('попередній кеш (навіть застарілий) одразу заповнює шапку прапорцями аудиту', async ({ openVaultAuditFlow: f, __state: s }, env) => {
       s.REDUCED_MOTION.matches = true;
-      s.clientAuditCache.set('0xaaa1', { ...audit({ name: 'Stale Cache' }, { mqi: { mqiPercent: 42 } }), cachedAt: 0 });
+      s.clientAuditCache.set('0xaaa1', { ...audit({ name: 'Stale Cache' }, { redFlags: [{ level: 'HIGH', title: 'Restricted Exit Liquidity' }] }), cachedAt: 0 });
       let resolve;
       env.fetch(() => new Promise(r => { resolve = r; }));
       const p = f(cv({ mqiPercent: 100 }), null, s.auditOpenToken);
       assert.equal(s.DOM.modalVaultName.textContent, 'Stale Cache');
-      assert.equal(s.DOM.modalGrade.textContent, '42%');
+      assert.equal(s.DOM.modalGrade.textContent, '1');
       resolve(jsonResponse(audit()));
       await p;
     }),
@@ -1627,46 +1657,45 @@ const base = {
       assert.equal(D.modalChainBadge.textContent, 'ARB'); assert.equal(D.modalChainBadge.className, 'badge badge-chain arbitrum');
       assert.equal(D.modalVersionBadge.textContent, 'V2'); assert.equal(D.modalListedBadge.textContent, 'LISTED');
       assert.equal(D.modalFavBtn.classList.contains('active'), true);
-      assert.equal(D.modalGrade.textContent, '100%'); assert.equal(D.modalScore.textContent, 'Clean Capital');
-      assert.equal(D.modalGrade.dataset.tone, 'ok');
+      assert.equal(D.modalGrade.textContent, '0'); assert.equal(D.modalScore.textContent, 'None raised');
+      assert.equal(D.modalGrade.dataset.tone, 'none');
       assert.equal(D.modalTvl.textContent, '$10.00M'); assert.equal(D.modalAssetsHuman.textContent, '1.23M USDC');
       assert.equal(D.modalExitCapPct.textContent, '40% Exit Cap');
       assert.equal(D.overviewMarketsCount.textContent, '0 MARKETS');
       assert.equal(D.riskMqiPct.textContent, '100%'); assert.equal(D.riskMqiBar.style.width, '100%');
-      assert.equal(D.riskMqiDesc.textContent, '100% of capital is deployed in verified, non-defaulted markets');
+      assert.match(D.riskMqiDesc.textContent, /^No listing problem, bad debt or protocol warning found in any market\./);
       assert.equal(D.riskEffectiveAssets.textContent, '2 tokens');
       assert.equal(collateral.length, 2); // two tokens
       assert.match(collateral[0].innerHTML, /WETH[\s\S]*\$5\.00M[\s\S]*50%/);
-      assert.equal(D.riskFlagsList.innerHTML, '<div class="flag-item clear">No critical risk flags detected for this vault.</div>');
+      assert.equal(D.riskFlagsList.innerHTML, '<div class="flag-item clear">No flags were raised. That is not a safety guarantee, see below.</div>');
       assert.match(D.allocationsTbody.innerHTML, /No active market allocations recorded/);
       assert.match(D.riskExitPopoverBody.innerHTML, /fully preserved at <strong>40%<\/strong> \(\$4\.00M\)/);
       assert.equal(D.riskExitPct.textContent, '40%');
     }),
-    T('невідомий MQI: Unpriced Vault і Unverified, тон bad, N/A і порожня смуга', ({ populateAuditModal: f, __state: s }) => {
+    T('невідомий MQI: N/A і порожня смуга, прапорець Unpriced Vault в шапці', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
-      f(audit({}, { mqi: { mqiPercent: null, isAllClean: false, unpriced: true } }));
-      assert.equal(D.modalGrade.textContent, 'N/A'); assert.equal(D.modalScore.textContent, 'Unpriced Vault');
+      f(audit({}, { mqi: { mqiPercent: null, isAllClean: false, unpriced: true }, redFlags: [{ level: 'HIGH', title: 'Unpriced Vault', message: 'm' }] }));
+      assert.equal(D.modalGrade.textContent, '1'); assert.equal(D.modalScore.textContent, 'Worst: High');
       assert.equal(D.modalGrade.dataset.tone, 'bad');
       assert.equal(D.riskMqiPct.textContent, 'N/A'); assert.equal(D.riskMqiBar.style.width, '0%');
       assert.match(D.riskMqiDesc.textContent, /no USD price/);
       f(audit({}, { mqi: { mqiPercent: null, isAllClean: false, unpriced: false } }));
-      assert.equal(D.modalScore.textContent, 'Unverified');
       assert.equal(D.riskMqiDesc.textContent, 'None of the capital could be verified yet, so there is no score');
     }),
-    T('позначені ринки: відсоток або кількість, тон warn/bad', ({ populateAuditModal: f, __state: s }) => {
+    T('позначені ринки: опис MQI, шапка за найгіршим прапорцем і підсумок вердикту', ({ populateAuditModal: f, __state: s }) => {
       const D = s.DOM;
-      f(audit({}, { mqi: { mqiPercent: 87.5, isAllClean: false, compromisedMarkets: [{}, {}], compromisedPercent: 12.5 } }));
-      assert.equal(D.modalScore.textContent, '12.5% Flagged'); assert.equal(D.modalGrade.dataset.tone, 'warn');
+      f(audit({}, {
+        mqi: { mqiPercent: 87.5, isAllClean: false, compromisedMarkets: [{}, {}], compromisedPercent: 12.5 },
+        redFlags: [{ level: 'MEDIUM', title: 'A' }, { level: 'CRITICAL', title: 'B' }]
+      }));
       assert.equal(D.riskMqiDesc.textContent, '2 market(s) with verification or debt issues detected');
-      f(audit({}, { mqi: { mqiPercent: 100, isAllClean: false, compromisedMarkets: [{}], compromisedPercent: 0 } }));
-      assert.equal(D.modalScore.textContent, '1 Flagged Market'); assert.equal(D.modalGrade.dataset.tone, 'warn');
-      assert.equal(D.modalGrade.textContent, '100%');
-      f(audit({}, { mqi: { mqiPercent: 70, isAllClean: false, compromisedMarkets: [{}, {}, {}], compromisedPercent: 0 } }));
-      assert.equal(D.modalScore.textContent, '3 Flagged Markets'); assert.equal(D.modalGrade.dataset.tone, 'bad');
+      assert.equal(D.modalGrade.textContent, '2'); assert.equal(D.modalScore.textContent, 'Worst: Critical');
+      assert.equal(D.modalVerdictSummary.hidden, true);
+      f({ ...audit(), verdict: { ...audit().verdict, summary: 'MQI: 100%. Exit Liquidity: 40%.' } });
+      assert.equal(D.modalVerdictSummary.textContent, 'MQI: 100%. Exit Liquidity: 40%.'); assert.equal(D.modalVerdictSummary.hidden, false);
     }),
-    T('лише неперевірений капітал: "% Unverified" і сума поза оцінкою', ({ populateAuditModal: f, __state: s }) => {
+    T('лише неперевірений капітал: сума поза оцінкою', ({ populateAuditModal: f, __state: s }) => {
       f(audit({}, { mqi: { mqiPercent: 100, isAllClean: false, unverifiedPercent: 3, unverifiedAssetsUsd: 300000 } }));
-      assert.equal(s.DOM.modalScore.textContent, '3% Unverified');
       assert.equal(s.DOM.riskMqiDesc.textContent, '$300.0K is unverified (data missing or not expanded) and left out of the score');
     }),
     T('розбивка застав по токенах: символ екранується, пустий символ - Unknown, однина для одного токена, без токенів - 0 tokens', ({ populateAuditModal: f, __state: s }) => {
@@ -1701,7 +1730,7 @@ const base = {
       assert.equal(D.riskExitInfoBtn.classList.contains('active'), false);
       assert.equal(D.riskExitInfoBtn.getAttribute('aria-expanded'), 'false');
     }),
-    T('таблиця ринків: FLAGGED, UNVERIFIED, CLEAN, неявний прапорець і n/a для LLTV', ({ populateAuditModal: f, __state: s }) => {
+    T('таблиця ринків: FLAGGED, UNVERIFIED, NO ISSUES, неявний прапорець і n/a для LLTV', ({ populateAuditModal: f, __state: s }) => {
       const rows = collect(s.DOM.allocationsTbody);
       const created = [];
       const origCreate = document.createElement;
@@ -1715,8 +1744,8 @@ const base = {
       ]));
       assert.equal(s.DOM.overviewMarketsCount.textContent, '5 MARKETS');
       assert.equal(rows.length, 5);
-      const status = r => r.innerHTML.match(/badge-status[^>]*>(\w+)</)[1];
-      assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'CLEAN', 'FLAGGED', 'CLEAN']);
+      const status = r => r.innerHTML.match(/badge-status[^>]*>([\w ]+)</)[1];
+      assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'NO ISSUES', 'FLAGGED', 'NO ISSUES']);
       assert.match(rows[0].innerHTML, /<td>86%<\/td>[\s\S]*<td>50\.0%<\/td>[\s\S]*\$500\.0K[\s\S]*\$100\.0K[\s\S]*4\.12%/);
       assert.doesNotMatch(rows[0].innerHTML, /eth, lst|no tags|token-facts/); assert.doesNotMatch(rows[1].innerHTML, /no tags|token-facts/);
       assert.match(rows[1].innerHTML, /<td>n\/a<\/td>/);
@@ -1985,18 +2014,85 @@ const base = {
       assert.equal(f(42.5), 42.5); assert.equal(f('42'), 42); assert.equal(f(0), 0); assert.equal(f(-5), -5);
     }],
   ],
-  mqiSortKey: [
-    ['невідомий MQI -> -1, відсутній -> 100', ({ mqiSortKey: f }) => {
-      assert.equal(f({ mqiPercent: null }), -1);
-      assert.equal(f({}), 100);
+  riskSortKey: [
+    ['найгірший прапорець важить найбільше, далі кількість прапорців, без прапорців - 0', ({ riskSortKey: f }) => {
+      assert.equal(f({}), 0);
+      assert.equal(f({ worstFlagLevel: 'medium', flagCount: 1 }), 101);
+      assert.equal(f({ worstFlagLevel: 'high', flagCount: 2 }), 202);
+      assert.equal(f({ worstFlagLevel: 'critical', flagCount: 1 }), 301);
+      assert.ok(f({ worstFlagLevel: 'critical', flagCount: 1 }) > f({ worstFlagLevel: 'high', flagCount: 50 }));
     }],
-    ['100 з позначеним ринком -> 99.95 (нижче чистих), інакше саме значення', ({ mqiSortKey: f }) => {
-      assert.equal(f({ mqiPercent: 100, isAllClean: false }), 99.95);
-      assert.equal(f({ mqiPercent: 100, isAllClean: true }), 100);
-      assert.equal(f({ mqiPercent: 100 }), 100);
-      assert.equal(f({ mqiPercent: 87.5, isAllClean: false }), 87.5);
-      assert.equal(f({ mqiPercent: 0 }), 0);
+  ],
+  exitSortKey: [
+    ['береться нижчий зі стресового і звичайного виходу, невідомий - Infinity', ({ exitSortKey: f }) => {
+      assert.equal(f({ exitCapPercent: 40, stressedExitCapPercent: 10 }), 10);
+      assert.equal(f({ exitCapPercent: 40 }), 40);
+      assert.equal(f({ exitCapPercent: null }), Infinity);
+      assert.equal(f({}), Infinity);
     }],
+  ],
+  exitCellInfo: [
+    ['невідомий вихід -> n/a з підказкою, без стресу', ({ exitCellInfo: f }) => {
+      const r = f({ exitCapPercent: null });
+      assert.equal(r.main, 'n/a'); assert.equal(r.stress, ''); assert.match(r.title, /not reported/);
+    }],
+    ['стрес показується від падіння 5 пунктів', ({ exitCellInfo: f }) => {
+      assert.deepEqual(f({ exitCapPercent: 31.1, stressedExitCapPercent: 10.1 }), { main: '31.1%', stress: 'run 10.1%', title: '31.1% of deposits can be withdrawn now; if competing vaults withdraw at once, about 10.1%' });
+      assert.equal(f({ exitCapPercent: 40, stressedExitCapPercent: 36 }).stress, '');
+      assert.equal(f({ exitCapPercent: 40 }).stress, '');
+    }],
+  ],
+  summarizeFlags: [
+    ['найгірший рівень, його назва і кількість; порожній список -> level null', ({ summarizeFlags: f }) => {
+      assert.deepEqual(f([]), { level: null, title: null, count: 0 });
+      assert.deepEqual(f(undefined), { level: null, title: null, count: 0 });
+      assert.deepEqual(f([{ level: 'MEDIUM', title: 'A' }, { level: 'CRITICAL', title: 'B' }, { level: 'HIGH', title: 'C' }]), { level: 'critical', title: 'B', count: 3 });
+    }],
+  ],
+  vaultRisk: [
+    ['читає поля списку, відсутні -> без прапорців', ({ vaultRisk: f }) => {
+      assert.deepEqual(f({ worstFlagLevel: 'high', worstFlagTitle: 'T', flagCount: 2 }), { level: 'high', title: 'T', count: 2 });
+      assert.deepEqual(f({}), { level: null, title: null, count: 0 });
+    }],
+  ],
+  riskBadgeInfo: [
+    ['без прапорців - нейтральний "No flags", не зелений', ({ riskBadgeInfo: f }) => {
+      assert.deepEqual(f({ level: null, title: null, count: 0 }), { text: 'No flags', tone: 'none' });
+    }],
+    ['коротка назва за заголовком, +N для решти, тон за рівнем', ({ riskBadgeInfo: f }) => {
+      assert.deepEqual(f({ level: 'high', title: 'Restricted Exit Liquidity', count: 1 }), { text: 'Low exit', tone: 'bad' });
+      assert.deepEqual(f({ level: 'critical', title: 'Compromised Market Exposure', count: 3 }), { text: 'Bad market +2', tone: 'bad' });
+      assert.deepEqual(f({ level: 'medium', title: 'Unverified Markets', count: 1 }), { text: 'Partial data', tone: 'warn' });
+      assert.deepEqual(f({ level: 'high', title: 'Some New Flag', count: 1 }), { text: 'High', tone: 'bad' });
+    }],
+  ],
+  setRiskPill: [
+    ['кількість і тон найгіршого прапорця, нуль - нейтральний', ({ setRiskPill: f, __state: s }) => {
+      f({ level: 'high', title: 'X', count: 2 });
+      assert.equal(s.DOM.modalGrade.textContent, '2'); assert.equal(s.DOM.modalGrade.dataset.tone, 'bad'); assert.equal(s.DOM.modalScore.textContent, 'Worst: High');
+      f({ level: null, title: null, count: 0 });
+      assert.equal(s.DOM.modalGrade.textContent, '0'); assert.equal(s.DOM.modalGrade.dataset.tone, 'none'); assert.equal(s.DOM.modalScore.textContent, 'None raised');
+    }],
+  ],
+  populateFilterMenus: [
+    T('меню мережі, активу і куратора будуються з даних, найбільші першими, USD₮0 зливається з USDT0', ({ populateFilterMenus: f, __state: s }) => {
+      const menus = {};
+      document.getElementById = id => {
+        const m = id.startsWith('menu-') ? (menus[id] ||= (() => { const e = capEl(); const all = capEl(); all.setAttribute('data-value', 'all'); e.querySelector = sel => (sel === '[data-value="all"]' ? all : null); e.kids = []; e.appendChild = n => { e.kids.push(n); }; return e; })()) : null;
+        return m;
+      };
+      document.createElement = () => { const e = capEl(); e.setAttribute = (k, v) => { e.attrs = { ...(e.attrs || {}), [k]: v }; }; return e; };
+      s.allVaults = [
+        cv({ address: '1', chainId: 1, totalAssetsUsd: 5, asset: { symbol: 'USDC' }, curatorName: 'A' }),
+        cv({ address: '2', chainId: 8453, totalAssetsUsd: 9, asset: { symbol: 'USD₮0' }, curatorName: 'B' }),
+        cv({ address: '3', chainId: 8453, totalAssetsUsd: 1, asset: { symbol: 'USDT0' }, curatorName: null })
+      ];
+      f();
+      assert.deepEqual(menus['menu-network'].kids.slice(1).map(k => k.attrs['data-value']), ['8453', '1']);
+      assert.deepEqual(menus['menu-asset'].kids.slice(1).map(k => k.attrs['data-value']), ['USDT0', 'USDC']);
+      assert.deepEqual(menus['menu-curator'].kids.slice(1).map(k => k.attrs['data-value']), ['B', 'A', 'Independent']);
+      assert.match(menus['menu-asset'].kids[1].innerHTML, /item-count">2</);
+    }),
   ],
   firstDefined: [
     ['null - справжня відповідь, undefined пропускається', ({ firstDefined: f }) => {
@@ -2008,28 +2104,6 @@ const base = {
     ['усі undefined або без аргументів -> undefined', ({ firstDefined: f }) => {
       assert.equal(f(), undefined);
       assert.equal(f(undefined, undefined), undefined);
-    }],
-  ],
-  mqiBadgeInfo: [
-    ['невідомий MQI: Unpriced або Unverified, ніколи не clean', ({ mqiBadgeInfo: f }) => {
-      assert.deepEqual(f(null, true, false, true), { text: 'Unpriced', clean: false });
-      assert.deepEqual(f(undefined, true, false, false), { text: 'Unverified', clean: false });
-      assert.deepEqual(f(null, true), { text: 'Unverified', clean: false });
-    }],
-    ['100 і не позначений (true або undefined) -> "100% Clean"', ({ mqiBadgeInfo: f }) => {
-      assert.deepEqual(f(100, true), { text: '100% Clean', clean: true });
-      assert.deepEqual(f(100, undefined), { text: '100% Clean', clean: true });
-    }],
-    ['100 з isAllClean false: Flagged або Unverified залежно від позначених ринків', ({ mqiBadgeInfo: f }) => {
-      assert.deepEqual(f(100, false, true), { text: 'Flagged', clean: false });
-      assert.deepEqual(f(100, false), { text: 'Flagged', clean: false });
-      assert.deepEqual(f(100, false, false), { text: 'Unverified', clean: false });
-    }],
-    ['нижче 100 -> "<n>% MQI", навіть якщо isAllClean true; NaN не стає clean', ({ mqiBadgeInfo: f }) => {
-      assert.deepEqual(f(87.5, false), { text: '87.5% MQI', clean: false });
-      assert.deepEqual(f(99.9, true), { text: '99.9% MQI', clean: false });
-      assert.deepEqual(f(0, true), { text: '0% MQI', clean: false });
-      assert.equal(f(NaN, true).clean, false);
     }],
   ],
   pickExitMetric: [
@@ -2074,10 +2148,10 @@ const base = {
 // Кейси для виправлених дефектів, злиті з основними за назвою функції
 const fixed = {
   updateActiveFilterChips: [
-        T('чіп сортування mqi_asc має підпис з dropdown', ({ updateActiveFilterChips: f, __state: s }) => {
-      s.explorerFilters.sort = 'mqi_asc';
+        T('чіп сортування risk_desc має підпис з dropdown', ({ updateActiveFilterChips: f, __state: s }) => {
+      s.explorerFilters.sort = 'risk_desc';
       f();
-      assert.ok(s.DOM.chipsContainer.innerHTML.includes('>Market Quality: Flagged First<'));
+      assert.ok(s.DOM.chipsContainer.innerHTML.includes('>Risk: Flagged First<'));
     }),
         T('лише фільтр обраних показує чіп Favorites', ({ updateActiveFilterChips: f, __state: s }) => {
       s.explorerFilters.pinnedOnly = true;

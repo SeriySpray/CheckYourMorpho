@@ -246,6 +246,25 @@ body.audit-open .explorer-count {
   font-size: 22px;
 }
 
+.explorer-tiny-toggle {
+  display: block;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 400 11.5px var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--fg-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-3);
+  cursor: pointer;
+}
+
+.explorer-tiny-toggle:hover { color: var(--fg); }
+.explorer-tiny-toggle.hidden { display: none; }
+body.audit-open .explorer-tiny-toggle { display: none; }
+
 .explorer-header .stale-indicator {
   display: flex;
   margin-top: 8px;
@@ -267,6 +286,7 @@ body.audit-open .explorer-header .stale-indicator {
 }
 
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-count,
+.vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-tiny-toggle,
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-search-box,
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-filters-grid,
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .active-filter-chips,
@@ -388,8 +408,9 @@ body.audit-open .pinned-viewport { display: none; }
   background: currentColor;
 }
 
-.rich-pill-mqi-badge.clean { color: var(--ok); }
-.rich-pill-mqi-badge.flagged { color: var(--warn); }
+.rich-pill-mqi-badge.none { color: var(--fg-3); }
+.rich-pill-mqi-badge.warn { color: var(--warn); }
+.rich-pill-mqi-badge.bad { color: var(--bad); }
 
 .rich-pill-star-btn {
   display: grid;
@@ -530,6 +551,9 @@ body.audit-open .explorer-filters-grid { display: none; }
   border-radius: 12px;
   box-shadow: 0 18px 44px oklch(0 0 0 / 0.6);
   z-index: 40;
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dropdown-menu.align-right { left: auto; right: 0; }
@@ -557,7 +581,8 @@ body.audit-open .explorer-filters-grid { display: none; }
 .dropdown-item.selected { color: var(--fg); }
 .item-check { opacity: 0; flex: none; }
 .dropdown-item.selected .item-check { opacity: 1; }
-.item-text { display: inline-flex; align-items: center; }
+.item-text { display: inline-flex; align-items: center; margin-right: auto; }
+.item-count { font: 400 11px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--fg-3); }
 
 /* Network colors: dots in the filter and on the table's network cell */
 .chain-dot,
@@ -639,7 +664,7 @@ body.audit-open .explorer-filters-grid { display: none; }
 .vault-table-head,
 .explorer-vault-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 88px 128px 88px 80px;
+  grid-template-columns: 24px minmax(0, 1fr) 88px 128px 88px 80px 72px;
   column-gap: 8px;
   align-items: center;
   padding-inline: var(--pad-x);
@@ -711,6 +736,7 @@ body.audit-open .explorer-filters-grid { display: none; }
   font: 400 11.5px/1.4 var(--font-mono);
   color: var(--fg-3);
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .vault-item-sub > * + *::before { content: "·"; margin-right: 7px; color: var(--fg-3); }
@@ -745,27 +771,43 @@ body.audit-open .explorer-filters-grid { display: none; }
 
 .vault-item-apy.negative { color: var(--bad); }
 
-.vault-mini-badge.flagged {
+.vault-item-exit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vault-item-exit-main { font: 400 12px var(--font-mono); color: var(--fg-2); }
+.vault-item-exit-stress { font: 400 11px var(--font-mono); color: var(--fg-3); }
+.vault-item-sub .vault-item-exit-inline { display: none; }
+
+.vault-mini-badge {
   display: inline-block;
   padding: 0 6px;
   border-radius: 4px;
-  background: var(--warn-soft);
-  color: var(--warn);
-  font: 400 10.5px/1.5 var(--font-mono);
+  font: 400 11px/1.5 var(--font-mono);
 }
+
+.vault-item-sub > .vault-mini-badge::before { content: none; }
+.vault-item-sub > .vault-mini-badge { flex: none; }
+.vault-item-sub .vault-item-asset { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vault-mini-badge.warn { background: var(--warn-soft); color: var(--warn); }
+.vault-mini-badge.bad { background: var(--bad-soft); color: var(--bad); }
 
 /* Narrower ledgers drop columns, widest first. Driven by viewport and audit state, not container queries:
    container queries re-evaluate every row on each frame of the width animation (about 6 ms per frame here). */
 @media (min-width: 769px) and (max-width: 1190px) {
   body:not(.audit-open) .vault-table-head,
-  body:not(.audit-open) .explorer-vault-item { grid-template-columns: 24px minmax(0, 1fr) 88px 88px 80px; }
+  body:not(.audit-open) .explorer-vault-item { grid-template-columns: 24px minmax(0, 1fr) 88px 88px 80px 72px; }
   body:not(.audit-open) .col-curator,
   body:not(.audit-open) .vault-item-curator { display: none; }
 }
 
 @media (min-width: 769px) and (max-width: 983px) {
   body:not(.audit-open) .vault-table-head,
-  body:not(.audit-open) .explorer-vault-item { grid-template-columns: 24px minmax(0, 1fr) 88px 80px; }
+  body:not(.audit-open) .explorer-vault-item { grid-template-columns: 24px minmax(0, 1fr) 88px 80px 72px; }
   body:not(.audit-open) .col-network,
   body:not(.audit-open) .vault-item-meta .vault-chain-badge { display: none; }
   body:not(.audit-open) .vault-item-sub .vault-item-chain-inline { display: inline; }
@@ -778,7 +820,9 @@ body.audit-open .explorer-filters-grid { display: none; }
   body.audit-open .col-network,
   body.audit-open .col-curator,
   body.audit-open .vault-item-meta .vault-chain-badge,
-  body.audit-open .vault-item-curator { display: none; }
+  body.audit-open .vault-item-curator,
+  body.audit-open .col-exit,
+  body.audit-open .vault-item-exit { display: none; }
   body.audit-open .vault-item-sub .vault-item-chain-inline { display: inline; }
   body.audit-open .vault-item-tvl { font-size: 12px; }
   body.audit-open .vault-item-apy { font-size: 11px; }
@@ -787,7 +831,7 @@ body.audit-open .explorer-filters-grid { display: none; }
 @media (min-width: 769px) and (max-width: 1179px) {
   body.audit-open .vault-table-head,
   body.audit-open .explorer-vault-item { grid-template-columns: 24px minmax(0, 1fr) 76px; }
-  body.audit-open .vault-table-head span:last-child,
+  body.audit-open .col-apy,
   body.audit-open .vault-item-apy { display: none; }
 }
 
@@ -1226,6 +1270,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .audit-panel-header { display: contents; }
 .audit-header-top-row,
 .audit-identity-row,
+.verdict-summary,
 .compact-financials-grid { margin-inline: 28px; }
 
 .audit-header-top-row {
@@ -1280,11 +1325,20 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   font-variant-numeric: tabular-nums;
 }
 
+.score-grade[data-tone="none"] { color: var(--fg-3); }
 .score-grade[data-tone="warn"] { color: var(--warn); }
 .score-grade[data-tone="bad"] { color: var(--bad); }
 .score-meta { display: flex; flex-direction: column; gap: 2px; max-width: 96px; }
 .score-label { font: 400 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
 .score-number { font-size: 12.5px; line-height: 1.3; color: var(--fg); }
+
+.verdict-summary {
+  margin-top: 12px;
+  max-width: 62ch;
+  font: 400 12.5px/1.5 var(--font-mono);
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
 
 .compact-financials-grid {
   display: grid;
@@ -1380,7 +1434,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .badge-status { font: 400 11px var(--font-mono); letter-spacing: 0.04em; }
 .badge-flagged { color: var(--bad); }
 .badge-unverified { color: var(--warn); }
-.badge-clean { color: var(--ok); }
+.badge-clean { color: var(--fg-2); }
 
 .token-facts {
   margin-top: 3px;
@@ -1486,7 +1540,36 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 .flag-item.critical strong { color: var(--bad); }
 .flag-item.high strong,
 .flag-item.medium strong { color: var(--warn); }
-.flag-item.clear { color: var(--ok); }
+.flag-item.clear { color: var(--fg-2); }
+
+.model-limits {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+
+.model-limits summary {
+  cursor: pointer;
+  font: 400 11px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.model-limits summary:hover { color: var(--fg); }
+.model-limits ul { margin: 12px 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.model-limits p { margin-top: 12px; color: var(--fg-3); }
+
+.ledger-disclaimer {
+  padding: 0 var(--pad-x) 28px;
+  max-width: 62ch;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg-3);
+}
 
 /* ---------- Tablet: the ledger and the audit panel share the width ---------- */
 @media (min-width: 769px) and (max-width: 1179px) {
@@ -1609,7 +1692,8 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
 
   .vault-table { margin-top: 0; }
   .vault-table-head { display: none; }
-  .explorer-vaults-list { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+  .explorer-vaults-list { padding-bottom: 12px; }
+  .ledger-disclaimer { padding: 0 16px calc(24px + env(safe-area-inset-bottom, 0px)); }
 
   .explorer-vault-item,
   .explorer-vault-item:hover {
@@ -1626,6 +1710,8 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .vault-item-star-btn { grid-row: 1 / 3; grid-column: 1; align-self: center; }
   .vault-item-name-cell { grid-row: 1 / 3; grid-column: 2; align-self: center; }
   .vault-item-meta { display: none; }
+  .vault-item-exit { display: none; }
+  .vault-item-sub .vault-item-exit-inline { display: inline; }
   .vault-item-tvl { grid-column: 3; grid-row: 1; align-self: end; }
   .vault-item-apy { grid-column: 3; grid-row: 2; align-self: start; }
   .vault-item-sub .vault-item-chain-inline { display: inline; }
@@ -1650,6 +1736,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .audit-panel-widget.hidden { transform: translateY(40px); }
   .audit-header-top-row,
   .audit-identity-row,
+  .verdict-summary,
   .compact-financials-grid { margin-inline: 20px; }
   .audit-nav-tabs { padding-inline: 20px; }
   .vault-name { font-size: 22px; }

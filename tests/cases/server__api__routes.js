@@ -105,9 +105,9 @@ function seedCatalog(db) {
 const ids = body => body.vaults.map(v => parseInt(v.address, 16));
 const list = (mod, qs = '') => getJson(mod, '/api/vaults' + qs).body;
 
-// Ринок mk1: вільна ліквідність 2M - 1.5M = 500K. P і Q мають по 1M, R - дрібна позиція, S - look-through V2 через Q.
+// Ринок mk1: утилізація 95% (поріг crowded), вільна ліквідність 10M - 9.5M = 500K. P і Q мають по 1M, R - дрібна позиція, S - look-through V2 через Q.
 function seedCrowded(db) {
-  ins(db, 'markets', M('mk1'));
+  ins(db, 'markets', M('mk1', { total_supply_assets_usd: 1e7, total_borrow_assets_usd: 9.5e6 }));
   ins(db, 'vaults', V(0x10, { name: 'Vault P', total_assets_usd: 1e6, liquidity_usd: 1e6 }));
   ins(db, 'vaults', V(0x11, { name: 'Peer Q', total_assets_usd: 1e6 }));
   ins(db, 'vaults', V(0x12, { name: 'Peer R', total_assets_usd: 900 }));

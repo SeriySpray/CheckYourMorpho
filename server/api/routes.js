@@ -6,10 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { getDatabase } from '../db/database.js';
 import { CONFIG } from '../config.js';
 import { generateVaultVerdict } from '../engine/verdictEngine.js';
-import { calculateMQI, isMarketClean, withMaterialUnresolved } from '../engine/mqiEngine.js';
-import { calculateHHI, isIdleReserveMarket } from '../engine/hhiEngine.js';
+import { isMarketClean } from '../engine/mqiEngine.js';
+import { isIdleReserveMarket } from '../engine/hhiEngine.js';
 import { parseTagsJson, withTokenClasses } from '../engine/collateralEngine.js';
-import { calculateLiquidityMetrics } from '../engine/liquidityEngine.js';
 import { TOKEN_CLASSES } from '../data/tokenClasses.js';
 import { EVENT_KINDS } from '../engine/eventsEngine.js';
 import { syncAllVaults, isSyncing, getLastSyncResult, onSyncSuccess } from '../services/syncEngine.js';
@@ -111,6 +110,8 @@ export function summarizePeers(marketRows, vaultAddress, alloc) {
   peers.sort((a, b) => b.supplyUsd - a.supplyUsd);
   return { total, peers: peers.slice(0, 5) };
 }
+
+const FLAG_RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 
 /**
  * A vault the API reports with 0 USD total but with priced allocations would otherwise score as perfectly
@@ -545,9 +546,9 @@ export function getVaultCatalog() {
   const vaults = rows.map(row => {
     const allocs = allocMap.get(row.address.toLowerCase()) || [];
     const scored = withEffectiveTotal(row, allocs);
-    const mqi = calculateMQI(scored, allocs);
-    const hhi = calculateHHI(withMaterialUnresolved(scored, mqi), allocs);
-    const liq = calculateLiquidityMetrics(withMaterialUnresolved(scored, mqi), allocs);
+    const verdict = generateVaultVerdict(scored, allocs);
+    const { mqi, hhi, liquidity: liq } = verdict;
+    const worst = verdict.redFlags.reduce((w, f) => ((FLAG_RANK[f.level] || 0) > (FLAG_RANK[w?.level] || 0) ? f : w), null);
 
     return {
       address: row.address,
@@ -586,7 +587,10 @@ export function getVaultCatalog() {
       hhi: hhi.hhi,
       hhiTier: hhi.tier,
       effectiveAssets: hhi.effectiveAssets,
-      updatedAt: row.metadata_updated_at
+      updatedAt: row.metadata_updated_at,
+      flagCount: verdict.redFlags.length,
+      worstFlagLevel: worst ? worst.level.toLowerCase() : null,
+      worstFlagTitle: worst ? worst.title : null
     };
   });
 

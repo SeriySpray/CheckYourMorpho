@@ -8,7 +8,7 @@ const crowdLevel = r => (flag(r, 'Critical Crowded Exit Deficit') ? 'CRITICAL' :
 
 const mkt = (i, supply, free, peer = 0) => alloc({
   market_unique_key: `1:0xm${i}`, collateral_asset_address: `0xc${i}`, collateral_asset_symbol: `C${i}`,
-  supply_assets_usd: supply, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 1e9 - free, peer_supply_usd: peer
+  supply_assets_usd: supply, total_supply_assets_usd: Math.max(1e9, free / 0.03), total_borrow_assets_usd: Math.max(1e9, free / 0.03) - free, peer_supply_usd: peer
 });
 // Vault 100M: crowded-ринок (S, F вільних, P пірів) + решта TVL у неліквідному ринку без пірів (не crowded).
 // Тоді норма = min(S, F)/TVL, стрес = F*S/(S+P)/TVL, частка crowded = S/TVL.
@@ -55,7 +55,7 @@ export default {
     ['повертає метадані vault і точний summary', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), diversified());
       assert.equal(r.vaultAddress, '0xvault'); assert.equal(r.vaultName, 'Test Vault'); assert.equal(r.version, 'v1'); assert.equal(r.chainId, 1);
-      assert.match(r.summary, /^MQI: 100% clean capital\. Exit Liquidity: 100%\.$/);
+      assert.match(r.summary, /^MQI: 100% of capital has no defect found\. Exit Liquidity: 100%\.$/);
     }],
     ['vault без активної застави -> summary без застав', ({ generateVaultVerdict: f }) =>
       assert.match(f(vault({ liquidity_usd: 100e6 }), []).summary, /^MQI: .*\. Exit Liquidity: 100%\.$/)],
@@ -93,55 +93,60 @@ export default {
       assert.ok(!titles(f(vault(), [mkt(0, 100e6, 20e6)])).includes('Restricted Exit Liquidity'));
       assert.ok(titles(f(vault(), [mkt(0, 100e6, 19.9e6)])).includes('Restricted Exit Liquidity'));
     }],
-    ['crowded: 30% капіталу, 30% -> 7.5% -> CRITICAL (стрес < 15, падіння >= 15, норма >= 20)', ({ generateVaultVerdict: f }) => {
+    ['crowded: 30% капіталу, 30% -> 7.5% -> HIGH (стрес < 20, падіння >= 10, але не < 5)', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(30e6, 30e6, 90e6));
-      assert.equal(r.liquidity.stressedExitCapacityPercent, 7.5); assert.equal(crowdLevel(r), 'CRITICAL');
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 7.5); assert.equal(crowdLevel(r), 'HIGH');
     }],
-    ['crowded: падіння рівно 15 п.п. (25% -> 10%) -> CRITICAL', ({ generateVaultVerdict: f }) => {
+    ['crowded: падіння 15 п.п. (25% -> 10%) -> HIGH', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(100e6, 25e6, 150e6));
-      assert.equal(r.liquidity.stressedExitCapacityPercent, 10); assert.equal(crowdLevel(r), 'CRITICAL');
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 10); assert.equal(crowdLevel(r), 'HIGH');
     }],
-    ['crowded: норма рівно 20% при частці 20% (20% -> 5%) -> CRITICAL', ({ generateVaultVerdict: f }) => {
+    ['crowded: стрес рівно 5% (20% -> 5%) -> HIGH, межа CRITICAL не включно', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(20e6, 20e6, 60e6));
-      assert.equal(r.liquidity.instantExitCapacityPercent, 20); assert.equal(crowdLevel(r), 'CRITICAL');
+      assert.equal(r.liquidity.instantExitCapacityPercent, 20); assert.equal(crowdLevel(r), 'HIGH');
     }],
-    ['crowded: норма 19% і частка 20% (< 25) -> лише HIGH', ({ generateVaultVerdict: f }) => {
+    ['crowded: стрес 1.9% при частці 20% -> CRITICAL', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(20e6, 19e6, 180e6));
-      assert.equal(r.liquidity.stressedExitCapacityPercent, 1.9); assert.equal(crowdLevel(r), 'HIGH');
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 1.9); assert.equal(crowdLevel(r), 'CRITICAL');
     }],
-    ['crowded: норма 19% і частка рівно 25% -> CRITICAL', ({ generateVaultVerdict: f }) =>
+    ['crowded: стрес 1.9% при частці 25% -> CRITICAL', ({ generateVaultVerdict: f }) =>
       assert.equal(crowdLevel(f(vault(), crowd(25e6, 19e6, 225e6))), 'CRITICAL')],
     ['crowded: стрес 17% (>= 15) при частці 34% (< 35) -> HIGH, не CRITICAL', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(34e6, 34e6, 34e6));
       assert.equal(r.liquidity.stressedExitCapacityPercent, 17); assert.equal(crowdLevel(r), 'HIGH');
     }],
-    ['crowded: частка 40% (>= 35), падіння 24, стрес 16% (< 20) -> CRITICAL', ({ generateVaultVerdict: f }) => {
+    ['crowded: частка 40%, падіння 24, стрес 16% (< 20) -> HIGH', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(40e6, 40e6, 60e6));
-      assert.equal(r.liquidity.stressedExitCapacityPercent, 16); assert.equal(crowdLevel(r), 'CRITICAL');
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 16); assert.equal(crowdLevel(r), 'HIGH');
     }],
-    ['crowded: стрес рівно 20% (50% -> 20%) -> HIGH, не CRITICAL', ({ generateVaultVerdict: f }) => {
+    ['crowded: стрес рівно 20% (50% -> 20%) -> без прапорця, межа HIGH не включно', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(100e6, 50e6, 150e6));
-      assert.equal(r.liquidity.stressedExitCapacityPercent, 20); assert.equal(crowdLevel(r), 'HIGH');
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 20); assert.equal(crowdLevel(r), null);
     }],
-    ['crowded: 60% -> 30% (стрес < 35, падіння >= 20) -> HIGH', ({ generateVaultVerdict: f }) => {
+    ['crowded: 60% -> 30% (стрес >= 20) -> без прапорця', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(100e6, 60e6, 100e6));
-      assert.equal(r.liquidity.stressedExitCapacityPercent, 30); assert.equal(crowdLevel(r), 'HIGH');
+      assert.equal(r.liquidity.stressedExitCapacityPercent, 30); assert.equal(crowdLevel(r), null);
     }],
     ['crowded: 80% -> 40% (стрес >= 35) -> без прапорця, але summary показує worst-case', ({ generateVaultVerdict: f }) => {
       const r = f(vault(), crowd(100e6, 80e6, 100e6));
       assert.equal(crowdLevel(r), null); assert.equal(r.liquidity.isCrowded, true);
       assert.match(r.summary, /Exit Liquidity: 80% \(worst-case: 40%\)\.$/);
     }],
-    ['crowded: частка рівно 15% (15% -> 1.5%, падіння 13.5) -> HIGH', ({ generateVaultVerdict: f }) =>
-      assert.equal(crowdLevel(f(vault(), crowd(15e6, 15e6, 135e6))), 'HIGH')],
+    ['crowded: частка рівно 15% (15% -> 1.5%, падіння 13.5) -> CRITICAL', ({ generateVaultVerdict: f }) =>
+      assert.equal(crowdLevel(f(vault(), crowd(15e6, 15e6, 135e6))), 'CRITICAL')],
+    ['crowded: ринок з утилізацією 90% (ціль IRM) не є переповненим, навіть коли піри забирають усю вільну ліквідність', ({ generateVaultVerdict: f }) => {
+      const m = alloc({ market_unique_key: '1:0xm0', collateral_asset_address: '0xc0', collateral_asset_symbol: 'C0', supply_assets_usd: 100e6, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 0.9e9, peer_supply_usd: 500e6 });
+      const r = f(vault(), [m]);
+      assert.equal(r.liquidity.crowdedMarkets.length, 0); assert.equal(r.liquidity.isCrowded, false); assert.equal(crowdLevel(r), null);
+    }],
     ['crowded: частка 14% (< 15) -> без прапорця crowded', ({ generateVaultVerdict: f }) =>
       assert.equal(crowdLevel(f(vault(), crowd(14e6, 14e6, 126e6))), null)],
     // Частка crowded рахується від TVL (vault capital); 10M нерозподіленого кешу розводять TVL і розподілений капітал (90M).
-    ['HIGH crowded: 40M із TVL 100M (90M розподілено), 50% -> 20% -> текст "40% of vault capital", не "allocated"', ({ generateVaultVerdict: f }) => {
-      // норма: 10 + 40 = 50; стрес: 10 + 40*40/160 = 20; падіння 30; частка 40/100 = 40 (від розподіленого було б 44.4)
-      const r = f(vault(), [mkt(0, 40e6, 40e6, 120e6), mkt(1, 50e6, 0)]);
+    ['HIGH crowded: 40M із TVL 100M (90M розподілено), 50% -> 14% -> текст "40% of vault capital", не "allocated"', ({ generateVaultVerdict: f }) => {
+      // норма: 10 + 40 = 50; стрес: 10 + 40*40/400 = 14; падіння 36; частка 40/100 = 40 (від розподіленого було б 44.4)
+      const r = f(vault(), [mkt(0, 40e6, 40e6, 360e6), mkt(1, 50e6, 0)]);
       assert.equal(crowdLevel(r), 'HIGH');
-      assert.match(flag(r, 'Elevated Crowded Exit Contagion').message, /from 50% to 20% across 40% of vault capital during/);
+      assert.match(flag(r, 'Elevated Crowded Exit Contagion').message, /from 50% to 14% across 40% of vault capital during/);
       assert.doesNotMatch(flag(r, 'Elevated Crowded Exit Contagion').message, /allocated/);
     }],
     ['поріг частки з кешем: 15M із TVL 100M, 25% -> 11.5% -> HIGH, "15% of vault capital"', ({ generateVaultVerdict: f }) => {
@@ -152,11 +157,11 @@ export default {
       const r = f(vault(), [mkt(0, 14e6, 14e6, 126e6), mkt(1, 76e6, 0)]);
       assert.equal(r.liquidity.stressedExitCapacityPercent, 11.4); assert.equal(crowdLevel(r), null);
     }],
-    ['CRITICAL crowded з кешем: 40M із TVL 100M, 50% -> 14% -> "(40% of vault capital in heavily contested markets)"', ({ generateVaultVerdict: f }) => {
-      // стрес: 10 + 40*40/400 = 14
-      const r = f(vault(), [mkt(0, 40e6, 40e6, 360e6), mkt(1, 50e6, 0)]);
+    ['CRITICAL crowded з кешем: 30M із TVL 100M, 32% -> 3.5% -> "(30% of vault capital in heavily contested markets)"', ({ generateVaultVerdict: f }) => {
+      // кеш 2M; норма: 2 + 30 = 32; стрес: 2 + 30*30/600 = 3.5
+      const r = f(vault(), [mkt(0, 30e6, 30e6, 570e6), mkt(1, 68e6, 0)]);
       assert.equal(crowdLevel(r), 'CRITICAL');
-      assert.match(flag(r, 'Critical Crowded Exit Deficit').message, /from 50% to 14% \(40% of vault capital in heavily contested markets\)\.$/);
+      assert.match(flag(r, 'Critical Crowded Exit Deficit').message, /from 32% to 3\.5% \(30% of vault capital in heavily contested markets\)\.$/);
     }],
     ['не crowded vault -> summary без worst-case', ({ generateVaultVerdict: f }) =>
       assert.doesNotMatch(f(vault(), [mkt(0, 100e6, 20e6)]).summary, /worst-case/)],
@@ -177,7 +182,7 @@ export default {
       assert.equal(flag(r, 'Unverified Markets').level, 'MEDIUM');
       assert.equal(flag(r, 'Compromised Market Exposure'), undefined);
       assert.equal(r.mqi.mqiPercent, 100);
-      assert.match(r.summary, /MQI: 100% of verified capital is clean \(50% of capital unverified\)/);
+      assert.match(r.summary, /MQI: 100% of the checked capital has no defect found \(50% of capital unchecked\)/);
     }],
     ['частково нерозкрито: summary та Restricted Exit позначають "перевіреного капіталу"', ({ generateVaultVerdict: f }) => {
       const r = f(vault({ unresolved_exposure_usd: 40e6 }), [alloc({ supply_assets_usd: 60e6, total_supply_assets_usd: 100e6, total_borrow_assets_usd: 95e6, collateral_asset_address: '0xc0' })]);

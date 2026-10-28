@@ -35,14 +35,17 @@ export function describeRisk(level, reasons = null) {
  * Compares the vault sample from about a day ago with the current one and returns digest items.
  * It is a snapshot diff, so a GREEN to RED to GREEN flap inside the day produces nothing.
  * `avgNetApy7d` is the mean Net APY of the last 7 days (fraction) or null.
+ * `recentLevels` are the verdict levels of the last few hourly samples: a level change is reported only once it has
+ * held through all of them, so a vault hovering around a threshold does not flip the digest back and forth.
  */
-export function diffVaultSamples(baseline, current, avgNetApy7d = null) {
+export function diffVaultSamples(baseline, current, avgNetApy7d = null, recentLevels = null) {
   if (!baseline || !current) return [];
   const items = [];
 
   const vPrev = String(baseline.verdict_level ?? '').toLowerCase();
   const vNow = String(current.verdict_level ?? '').toLowerCase();
-  if (vPrev && vNow && vPrev !== vNow) {
+  const levelHeld = !Array.isArray(recentLevels) || recentLevels.every(l => String(l ?? '').toLowerCase() === vNow);
+  if (vPrev && vNow && vPrev !== vNow && levelHeld) {
     const from = describeRisk(vPrev, baseline.verdict_reasons);
     const to = describeRisk(vNow, current.verdict_reasons);
     const worse = (RISK_RANK[vNow] ?? 0) > (RISK_RANK[vPrev] ?? 0);

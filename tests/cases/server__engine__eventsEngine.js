@@ -258,6 +258,12 @@ export default {
       assert.ok(Math.abs(d[0].tvlShareAdded - 0.3) < 1e-9); assert.equal(d[0].capWasZero, false);
       assert.equal(d[1].capWasZero, true); assert.ok(Math.abs(d[1].tvlShareAdded - 0.2) < 1e-9);
     }],
+    ['cap V1: caps vault-а зберігаються за market_unique_key (chain:marketId), тож старе значення знаходиться за ним, а не лишається null', ({ diffPendingConfigs }) => {
+      const ctx = baseCtx({ chainId: 1, assetsHuman: 1_000_000, caps: { '1:0xm1': 2_500_000 } });
+      const item = { functionName: 'SetCap', validAt: NOW + 3600, txHash: '0xh', decodedData: { __typename: 'VaultSetCapPendingData', supplyCap: String(4_000_000 * 1e6), market: { marketId: '0xM1', loanAsset: { symbol: 'USDC', decimals: 6 }, collateralAsset: { symbol: 'wstETH' } } } };
+      const d = JSON.parse(diffPendingConfigs(ctx, [item], [], NOW).events[0].details_json);
+      assert.equal(d.oldCap, 2_500_000); assert.equal(d.capWasZero, false);
+    }],
     ['мапить pendingConfigs для V1 і V2 та підвищує серйозність до critical при зниженні timelock, видаленні guardian або рості cap > 2x', ({ diffPendingConfigs }) => {
       const pending = [
         {
@@ -444,6 +450,15 @@ export default {
       assert.deepEqual(evs.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical'], ['vault_delisted', 'warning']]);
       const again = diffDerivedState(prev, next, baseCtx(), NOW + 3 * 3600);
       assert.deepEqual(again.map(e => e.dedupe_key), evs.map(e => e.dedupe_key));
+    }],
+    ['bad debt, про який вже сповіщали, але він виріс удвічі і більш ніж на $1000: нова подія раз на подвоєння; дрібне зростання мовчить', ({ diffDerivedState }) => {
+      const st = usd => ({ ...M, bad_debt_markets: { '0xm1': { label: 'wstETH/USDC', badDebtUsd: usd, supplyUsd: 4e7 } }, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 });
+      const grown = diffDerivedState(st(6000), st(2e7), baseCtx(), NOW);
+      assert.deepEqual(grown.map(e => [e.kind, e.severity]), [['bad_debt_appeared', 'critical']]);
+      assert.match(grown[0].title, /grew in wstETH\/USDC from \$6000 to \$20000000/);
+      assert.notEqual(grown[0].dedupe_key, diffDerivedState({ ...M, bad_debt_markets: {}, unverified_bad_debt_markets: [], flagged_markets: {}, is_listed: 1 }, st(6000), baseCtx(), NOW)[0].dedupe_key);
+      assert.deepEqual(diffDerivedState(st(6000), st(8000), baseCtx(), NOW), []);
+      assert.deepEqual(diffDerivedState(st(500), st(1200), baseCtx(), NOW), []);
     }],
     ['bad debt після пропуску даних: подія виходить один раз з afterDataGap, далі тиша', ({ diffDerivedState }) => {
       const debt = { '0xm1': { label: 'wstETH/USDC', badDebtUsd: 5e6, supplyUsd: 200000 } };

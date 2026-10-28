@@ -49,6 +49,8 @@ const DOM = {
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
+  explorerTinyToggle: document.getElementById('explorer-tiny-toggle'),
+  modalVerdictSummary: document.getElementById('modal-verdict-summary'),
   explorerActivityBtn: document.getElementById('explorer-activity-btn'),
   explorerActivityBadge: document.getElementById('explorer-activity-badge'),
   activityPanel: document.getElementById('activity-panel'),
@@ -395,21 +397,57 @@ function getChainClass(chainId) {
   }
 }
 
-function formatCuratorName(name, vaultName = '') {
-  const vName = vaultName || '';
-  if (/steakhouse/i.test(vName)) return 'Steakhouse Financial';
-  if (/gauntlet/i.test(vName)) return 'Gauntlet';
-  if (/re7/i.test(vName)) return 'Re7 Labs';
-  if (/paypal/i.test(vName)) return 'PayPal USD';
-  if (/flagship/i.test(vName)) return 'Morpho Flagship';
-  if (/blockanalitica|bprotocol/i.test(vName)) return 'B.Protocol';
-  if (!name || name === 'Independent' || name === 'Permissionless') {
-    return 'Permissionless';
-  }
-  if (name.startsWith('0x') && name.length > 10) {
-    return `${name.slice(0, 6)}...${name.slice(-4)}`;
-  }
+function formatCuratorName(name) {
+  if (!name || name === 'Independent' || name === 'Permissionless') return 'Independent';
+  if (name.startsWith('0x') && name.length > 10) return `${name.slice(0, 6)}...${name.slice(-4)}`;
   return name;
+}
+
+const FLAG_RANK = { critical: 3, high: 2, medium: 1 };
+const FLAG_LEVEL_LABELS = { critical: 'Critical', high: 'High', medium: 'Medium' };
+// Short names for the list: the full title and message are in the audit
+const FLAG_SHORT_LABELS = {
+  'Restricted Exit Liquidity': 'Low exit',
+  'Critical Crowded Exit Deficit': 'Bank-run risk',
+  'Elevated Crowded Exit Contagion': 'Bank-run risk',
+  'Compromised Market Exposure': 'Bad market',
+  'Unpriced Vault': 'No price',
+  'Unresolved Exposure': 'Unresolved',
+  'Unverified Markets': 'Partial data',
+  'Unknown Exit Liquidity': 'Exit unknown',
+  'Negative Net APY (Capital Decay)': 'Negative APY'
+};
+
+/** The worst of a verdict's red flags as { level, title, count }; level null = nothing was raised. */
+function summarizeFlags(flags) {
+  const list = Array.isArray(flags) ? flags : [];
+  let worst = null;
+  for (const f of list) {
+    if ((FLAG_RANK[String(f.level).toLowerCase()] || 0) > (FLAG_RANK[String(worst?.level).toLowerCase()] || 0)) worst = f;
+  }
+  return { level: worst ? String(worst.level).toLowerCase() : null, title: worst?.title || null, count: list.length };
+}
+
+/** Header pill of the audit: flag count in the tone of the worst flag, no green seal when nothing was raised. */
+function setRiskPill(risk) {
+  if (!DOM.modalGrade) return;
+  DOM.modalGrade.textContent = String(risk.count);
+  DOM.modalGrade.dataset.tone = !risk.level ? 'none' : (risk.level === 'medium' ? 'warn' : 'bad');
+  if (DOM.modalScore) {
+    DOM.modalScore.textContent = risk.level ? `Worst: ${FLAG_LEVEL_LABELS[risk.level] || risk.level}` : 'None raised';
+  }
+}
+
+/** The same summary from the fields the vault list carries. */
+function vaultRisk(v) {
+  return { level: v.worstFlagLevel || null, title: v.worstFlagTitle || null, count: v.flagCount || 0 };
+}
+
+/** Text and tone of the risk marker shared by the list, the pinned pills and the audit header. */
+function riskBadgeInfo(risk) {
+  if (!risk.level) return { text: 'No flags', tone: 'none' };
+  const label = FLAG_SHORT_LABELS[risk.title] || FLAG_LEVEL_LABELS[risk.level] || risk.level;
+  return { text: risk.count > 1 ? `${label} +${risk.count - 1}` : label, tone: risk.level === 'medium' ? 'warn' : 'bad' };
 }
 
 function handleParticleHover(vault, particle) {
@@ -425,8 +463,14 @@ const explorerFilters = {
   asset: 'all',
   curator: 'all',
   sort: 'tvl_desc',
-  pinnedOnly: false
+  pinnedOnly: false,
+  showTiny: false
 };
+
+// Vaults below this size are mostly empty test contracts whose APY is noise; search and favorites still reach them
+const MIN_LISTED_TVL_USD = 1000;
+// An unpriced vault reports 0 USD, which says nothing about its size, so it is never treated as tiny
+const isTinyVault = v => !v.isUnpriced && (v.totalAssetsUsd || 0) < MIN_LISTED_TVL_USD;
 
 /**
  * Closes all open custom dropdown menus.
@@ -522,14 +566,7 @@ function updateActiveFilterChips() {
   }
 
   if (explorerFilters.curator !== 'all') {
-    const curatorLabels = {
-      steakhouse: 'Steakhouse',
-      gauntlet: 'Gauntlet',
-      re7: 'Re7 Labs',
-      flagship: 'Morpho Flagship',
-      bprotocol: 'B.Protocol'
-    };
-    const label = curatorLabels[explorerFilters.curator] || explorerFilters.curator;
+    const label = explorerFilters.curator;
     chipsHtml += `
       <span class="filter-chip" data-type="curator">
         <span class="chip-label">${escapeHtml(label)}</span>
@@ -542,8 +579,8 @@ function updateActiveFilterChips() {
     const sortLabels = {
       apy_desc: 'APY: High to Low',
       liq_desc: 'Free Liquidity: High to Low',
-      mqi_asc: 'Market Quality: Flagged First',
-      mqi_desc: 'Market Quality: Clean First',
+      risk_desc: 'Risk: Flagged First',
+      exit_asc: 'Exit Capacity: Low to High',
     };
     const label = sortLabels[explorerFilters.sort] || explorerFilters.sort;
     chipsHtml += `
@@ -664,24 +701,25 @@ function setupVaultExplorerEvents() {
     }
 
     if (menu) {
-      menu.querySelectorAll('.dropdown-item').forEach(item => {
-        item.tabIndex = 0;
-        item.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            item.click();
-          } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            (e.key === 'ArrowDown' ? item.nextElementSibling : item.previousElementSibling)?.focus();
-          }
-        });
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const value = item.getAttribute('data-value');
-          setFilterValue(filterKey, value);
-          closeAllDropdowns();
-          trigger?.focus();
-        });
+      menu.querySelectorAll('.dropdown-item').forEach(item => { item.tabIndex = 0; });
+      menu.addEventListener('keydown', (e) => {
+        const item = e.target.closest('.dropdown-item');
+        if (!item) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          item.click();
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          (e.key === 'ArrowDown' ? item.nextElementSibling : item.previousElementSibling)?.focus();
+        }
+      });
+      menu.addEventListener('click', (e) => {
+        const item = e.target.closest('.dropdown-item');
+        if (!item) return;
+        e.stopPropagation();
+        setFilterValue(filterKey, item.getAttribute('data-value'));
+        closeAllDropdowns();
+        trigger?.focus();
       });
     }
   });
@@ -710,6 +748,13 @@ function setupVaultExplorerEvents() {
     });
   }
 
+  if (DOM.explorerTinyToggle) {
+    DOM.explorerTinyToggle.addEventListener('click', () => {
+      explorerFilters.showTiny = !explorerFilters.showTiny;
+      renderVaultExplorer();
+    });
+  }
+
   if (DOM.explorerResetBtn) {
     DOM.explorerResetBtn.addEventListener('click', () => {
       resetAllFilters();
@@ -723,6 +768,7 @@ function resetDropdownFilters() {
   explorerFilters.curator = 'all';
   explorerFilters.sort = 'tvl_desc';
   explorerFilters.pinnedOnly = false;
+  explorerFilters.showTiny = false;
 
   updateDropdownUI('network', 'all');
   updateDropdownUI('asset', 'all');
@@ -742,29 +788,68 @@ function resetAllFilters() {
   sphere.highlightVault(null);
 }
 
+/** Asset menu key: the symbol in upper case, with the Tether sign (USD₮0) read as T. */
+const assetKey = sym => String(sym || '').toUpperCase().replace(/₮/g, 'T');
+
 function matchesAssetFilter(assetSym, filter) {
   if (!filter || filter === 'all') return true;
-  if (!assetSym) return false;
-  const sym = assetSym.toUpperCase();
-  const f = filter.toUpperCase();
-  if (f === 'ETH') return sym.includes('ETH');
-  if (f === 'USDE') return sym.includes('USDE');
-  if (f === 'EURC') return sym.includes('EUR');
-  return sym === f || sym.includes(f);
+  return assetKey(assetSym) === filter;
 }
 
 function matchesCuratorFilter(v, filter) {
   if (!filter || filter === 'all') return true;
-  const name = (v.name || '').toLowerCase();
-  const curator = (v.curatorName || '').toLowerCase();
-  const f = filter.toLowerCase();
+  return formatCuratorName(v.curatorName) === filter;
+}
 
-  if (f === 'steakhouse') return name.includes('steakhouse') || curator.includes('steakhouse');
-  if (f === 'gauntlet') return name.includes('gauntlet') || curator.includes('gauntlet');
-  if (f === 're7') return name.includes('re7') || curator.includes('re7');
-  if (f === 'flagship') return name.includes('flagship') || name.includes('morpho') || curator.includes('morpho');
-  if (f === 'bprotocol') return name.includes('bprotocol') || name.includes('blockanalitica') || curator.includes('bprotocol');
-  return false;
+/**
+ * Fills the network, asset and curator menus from the vaults that exist, largest first, so every vault can be
+ * reached and no entry leads to an empty list. Rebuilt only when the set of options changes.
+ */
+let filterMenuSignature = '';
+function populateFilterMenus() {
+  const tally = (keyOf, labelOf) => {
+    const map = new Map();
+    for (const v of allVaults) {
+      const key = keyOf(v);
+      if (!key) continue;
+      const entry = map.get(key) || { value: key, label: labelOf(v), count: 0, tvl: 0, chainId: v.chainId };
+      entry.count++;
+      entry.tvl += v.totalAssetsUsd || 0;
+      map.set(key, entry);
+    }
+    return [...map.values()].sort((a, b) => b.tvl - a.tvl || a.label.localeCompare(b.label));
+  };
+  const menus = {
+    network: tally(v => String(v.chainId), v => formatChainName(v.chainId)),
+    asset: tally(v => assetKey(v.asset?.symbol), v => assetKey(v.asset?.symbol)),
+    curator: tally(v => formatCuratorName(v.curatorName), v => formatCuratorName(v.curatorName))
+  };
+  const signature = JSON.stringify(Object.values(menus).map(list => list.map(e => `${e.value}:${e.count}`)));
+  if (signature === filterMenuSignature) return;
+  filterMenuSignature = signature;
+
+  const check = '<svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+  for (const [key, entries] of Object.entries(menus)) {
+    const menu = document.getElementById(`menu-${key}`);
+    if (!menu) continue;
+    const allItem = menu.querySelector('[data-value="all"]');
+    menu.innerHTML = '';
+    if (allItem) menu.appendChild(allItem);
+    for (const e of entries) {
+      const item = document.createElement('div');
+      item.className = 'dropdown-item';
+      item.setAttribute('role', 'option');
+      item.setAttribute('data-value', e.value);
+      item.tabIndex = 0;
+      const dot = key === 'network' ? `<span class="chain-dot ${getChainClass(e.chainId)}"></span>` : '';
+      item.innerHTML = `<span class="item-text">${dot}${escapeHtml(e.label)}</span><span class="item-count">${e.count}</span>${check}`;
+      menu.appendChild(item);
+    }
+    if (allItem) allItem.tabIndex = 0;
+    // A selection that no longer exists would filter everything out
+    if (explorerFilters[key] !== 'all' && !entries.some(e => e.value === explorerFilters[key])) explorerFilters[key] = 'all';
+    updateDropdownUI(key, explorerFilters[key]);
+  }
 }
 
 /* --- Pinned Vaults (Favorites / Watchlist) Management --- */
@@ -887,6 +972,15 @@ function applyVaultAuditData(vaultAddress, auditData) {
       if (verdict.liquidity?.instantExitCapacityUsd !== undefined) {
         matchingVault.exitCapUsd = verdict.liquidity.instantExitCapacityUsd;
       }
+      if (verdict.liquidity?.stressedExitCapacityPercent !== undefined) {
+        matchingVault.stressedExitCapPercent = verdict.liquidity.stressedExitCapacityPercent;
+      }
+      if (Array.isArray(verdict.redFlags)) {
+        const risk = summarizeFlags(verdict.redFlags);
+        matchingVault.worstFlagLevel = risk.level;
+        matchingVault.worstFlagTitle = risk.title;
+        matchingVault.flagCount = risk.count;
+      }
     }
   }
 
@@ -915,9 +1009,7 @@ function applyVaultAuditData(vaultAddress, auditData) {
       const symbol = v.asset?.symbol || matchingVault?.asset?.symbol || '';
       const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
 
-      const mqiPercent = firstDefined(verdict?.mqi?.mqiPercent, matchingVault?.mqiPercent, 100);
-      const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, verdict?.mqi?.isAllClean ?? matchingVault?.isAllClean ?? true, (verdict?.mqi?.compromisedMarkets?.length ?? matchingVault?.compromisedCount ?? 0) > 0, verdict?.mqi?.unpriced ?? matchingVault?.isUnpriced);
-      const mqiClass = isClean ? 'clean' : 'flagged';
+      const { text: mqiText, tone: mqiClass } = riskBadgeInfo(verdict?.redFlags ? summarizeFlags(verdict.redFlags) : vaultRisk(matchingVault || {}));
       const exitCapText = formatExitCap(pickExitMetric(
         verdict?.liquidity?.instantExitCapacityPercent,
         matchingVault?.exitCapPercent,
@@ -1107,7 +1199,7 @@ function renderPinnedRichPills() {
   pinnedVaults.forEach(v => {
     const chainClass = getChainClass(v.chainId);
     const chainName = formatChainName(v.chainId);
-    const curator = formatCuratorName(v.curatorName, v.name);
+    const curator = formatCuratorName(v.curatorName);
     const cachedAudit = getFreshAudit(v.address);
 
     const totalAssetsUsd = cachedAudit?.vault?.totalAssetsUsd ?? v.totalAssetsUsd ?? 0;
@@ -1129,9 +1221,7 @@ function renderPinnedRichPills() {
       tokenAmount = price > 0 ? (totalAssetsUsd / price) : 0;
     }
     const humanAsset = `${formatNumber(tokenAmount)} ${symbol}`;
-    const mqiPercent = firstDefined(cachedAudit?.verdict?.mqi?.mqiPercent, v.mqiPercent, 100);
-    const { clean: isClean, text: mqiText } = mqiBadgeInfo(mqiPercent, cachedAudit?.verdict?.mqi?.isAllClean ?? v.isAllClean ?? true, (cachedAudit?.verdict?.mqi?.compromisedMarkets?.length ?? v.compromisedCount ?? 0) > 0, cachedAudit?.verdict?.mqi?.unpriced ?? v.isUnpriced);
-    const mqiClass = isClean ? 'clean' : 'flagged';
+    const { text: mqiText, tone: mqiClass } = riskBadgeInfo(cachedAudit?.verdict?.redFlags ? summarizeFlags(cachedAudit.verdict.redFlags) : vaultRisk(v));
     const exitCapText = formatExitCap(pickExitMetric(
       cachedAudit?.verdict?.liquidity?.instantExitCapacityPercent,
       v.exitCapPercent,
@@ -1238,6 +1328,8 @@ function renderVaultExplorer() {
   }
   syncFavFilterButton();
 
+  populateFilterMenus();
+
   const isFiltered = Boolean(
     explorerFilters.query ||
     explorerFilters.network !== 'all' ||
@@ -1249,6 +1341,7 @@ function renderVaultExplorer() {
 
   updateActiveFilterChips();
 
+  let tinyHidden = 0;
   let results = allVaults.filter(v => {
     // 0. Pinned / Favorites Filter
     if (explorerFilters.pinnedOnly) {
@@ -1289,6 +1382,12 @@ function renderVaultExplorer() {
       }
     }
 
+    // 5. Tiny vaults stay out of the default list; looking one up by name, or favoriting it, brings it back
+    if (!explorerFilters.showTiny && !explorerFilters.query && isTinyVault(v) && !isVaultPinned(v.address, pinnedSet)) {
+      tinyHidden++;
+      return false;
+    }
+
     return true;
   });
 
@@ -1300,22 +1399,25 @@ function renderVaultExplorer() {
     if (explorerFilters.sort === 'liq_desc') {
       return (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
     }
-    if (explorerFilters.sort === 'mqi_asc') {
-      return mqiSortKey(a) - mqiSortKey(b);
+    if (explorerFilters.sort === 'risk_desc') {
+      return riskSortKey(b) - riskSortKey(a) || (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
     }
-    if (explorerFilters.sort === 'mqi_desc') {
-      return mqiSortKey(b) - mqiSortKey(a);
+    if (explorerFilters.sort === 'exit_asc') {
+      return exitSortKey(a) - exitSortKey(b) || (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
     }
     // Default: Total Deposits (TVL)
     return (b.totalAssetsUsd || 0) - (a.totalAssetsUsd || 0);
   });
 
+  const tinyTotal = allVaults.filter(isTinyVault).length;
   if (DOM.explorerCount) {
-    if (isFiltered) {
-      DOM.explorerCount.textContent = `${results.length} / ${allVaults.length} Vaults`;
-    } else {
-      DOM.explorerCount.textContent = `${results.length} Vaults`;
-    }
+    const listable = explorerFilters.showTiny ? allVaults.length : allVaults.length - tinyTotal;
+    DOM.explorerCount.textContent = isFiltered ? `${results.length} / ${listable} Vaults` : `${results.length} Vaults`;
+  }
+  if (DOM.explorerTinyToggle) {
+    DOM.explorerTinyToggle.classList.toggle('hidden', tinyTotal === 0);
+    DOM.explorerTinyToggle.textContent = explorerFilters.showTiny ? 'Hide under $1K' : `Show ${tinyTotal} under $1K`;
+    DOM.explorerTinyToggle.setAttribute('aria-pressed', String(explorerFilters.showTiny));
   }
 
   // 3D sphere highlighting
@@ -1351,21 +1453,18 @@ function renderVaultExplorer() {
     const chainName = formatChainName(v.chainId);
     const chainClass = getChainClass(v.chainId);
     const assetSym = v.asset?.symbol || '';
-    const curator = formatCuratorName(v.curatorName, v.name);
+    const curator = formatCuratorName(v.curatorName);
     const tvl = v.totalAssetsUsd || v.liquidityUsd || 0;
     const apy = v.netApy || 0;
-    const mqi = v.mqiPercent;
-    const isClean = mqi !== null && (v.isAllClean ?? ((mqi ?? 100) === 100));
     const isPinned = isVaultPinned(v.address, pinnedSet);
     const apyClass = apy < 0 ? 'negative' : '';
 
-    const flaggedLabel = mqi === null ? (v.isUnpriced ? 'Unpriced' : 'Unverified')
-      : v.compromisedCount > 0
-        ? (v.compromisedPercent > 0 ? `${v.compromisedPercent}% Flagged` : `${v.compromisedCount} Flagged`)
-        : (v.unverifiedPercent > 0 ? `${v.unverifiedPercent}% Unverified` : 'Unverified');
-    const flaggedBadgeHtml = !isClean
-      ? `<span class="vault-mini-badge flagged">${flaggedLabel}</span>`
+    const risk = vaultRisk(v);
+    const riskBadge = riskBadgeInfo(risk);
+    const flaggedBadgeHtml = risk.level
+      ? `<span class="vault-mini-badge ${riskBadge.tone}" title="${escapeHtml(`${risk.title}${risk.count > 1 ? ` and ${risk.count - 1} more` : ''}`)}">${escapeHtml(riskBadge.text)}</span>`
       : '';
+    const exit = exitCellInfo(v);
 
     li.innerHTML = `
       <button type="button" class="vault-item-star-btn ${isPinned ? 'active' : ''}" data-pin-addr="${escapeHtml(v.address)}" title="${isPinned ? 'Unpin from favorites' : 'Pin to favorites'}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(v.name)}" aria-pressed="${isPinned}">
@@ -1375,7 +1474,7 @@ function renderVaultExplorer() {
       </button>
       <span class="vault-item-name-cell">
         <span class="vault-item-name" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</span>
-        <span class="vault-item-sub"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span>${flaggedBadgeHtml}</span>
+        <span class="vault-item-sub"><span class="vault-item-chain-inline">${escapeHtml(chainName)}</span><span class="vault-item-asset">${escapeHtml(assetSym)}</span><span class="vault-item-exit-inline">exit ${escapeHtml(exit.main)}</span>${flaggedBadgeHtml}</span>
       </span>
       <span class="vault-item-meta">
         <span class="vault-chain-badge ${chainClass}">${escapeHtml(chainName)}</span>
@@ -1383,6 +1482,7 @@ function renderVaultExplorer() {
       </span>
       <span class="vault-item-tvl">${formatCurrency(tvl)}</span>
       <span class="vault-item-apy ${apyClass}">${formatPercent(apy)} APY</span>
+      <span class="vault-item-exit" title="${escapeHtml(exit.title)}"><span class="vault-item-exit-main">${escapeHtml(exit.main)}</span>${exit.stress ? `<span class="vault-item-exit-stress">${escapeHtml(exit.stress)}</span>` : ''}</span>
     `;
 
     const starBtn = li.querySelector('.vault-item-star-btn');
@@ -1519,7 +1619,7 @@ function populateBasicVaultInfo(v) {
   }
 
   if (DOM.modalVaultName) DOM.modalVaultName.textContent = v.name || 'Morpho Vault';
-  if (DOM.modalCuratorName) DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName, v.name);
+  if (DOM.modalCuratorName) DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName);
 
   // Financials
   if (DOM.modalTvl) DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
@@ -1539,10 +1639,7 @@ function populateBasicVaultInfo(v) {
   }
   if (DOM.modalNetApy) DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
-  if (DOM.modalGrade && v.mqiPercent !== undefined) {
-    DOM.modalGrade.textContent = v.mqiPercent === null ? 'N/A' : `${v.mqiPercent}%`;
-    DOM.modalGrade.dataset.tone = v.mqiPercent === null ? 'bad' : (v.mqiPercent === 100 && v.isAllClean !== false ? 'ok' : (v.mqiPercent >= 80 ? 'warn' : 'bad'));
-  }
+  if (DOM.modalGrade && v.flagCount !== undefined) setRiskPill(vaultRisk(v));
 }
 
 /**
@@ -1650,7 +1747,8 @@ async function openVaultAuditFlow(vault, startPos, token) {
   const cachedData = clientAuditCache.get(cacheKey);
   const initialVaultObj = cachedData?.vault ? Object.assign({}, vault, cachedData.vault, {
     mqiPercent: firstDefined(cachedData.verdict?.mqi?.mqiPercent, vault.mqiPercent),
-    exitCapPercent: pickExitMetric(cachedData.verdict?.liquidity?.instantExitCapacityPercent, vault.exitCapPercent)
+    exitCapPercent: pickExitMetric(cachedData.verdict?.liquidity?.instantExitCapacityPercent, vault.exitCapPercent),
+    ...(cachedData.verdict?.redFlags ? (r => ({ worstFlagLevel: r.level, worstFlagTitle: r.title, flagCount: r.count }))(summarizeFlags(cachedData.verdict.redFlags)) : {})
   }) : vault;
   populateBasicVaultInfo(initialVaultObj);
 
@@ -2009,29 +2107,16 @@ function populateAuditModal(data, isQuietRefresh = false) {
   updateFavBtnUI(v.address);
 
   DOM.modalVaultName.textContent = v.name;
-  DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName, v.name);
+  DOM.modalCuratorName.textContent = formatCuratorName(v.curatorName);
 
-  // Market Quality Index (MQI) Header Pill
+  // Header pill: how many flags the audit raised and the worst one; the one-line summary says what was measured
   const mqiUnknown = verdict.mqi?.mqiPercent === null;
   const mqiVal = verdict.mqi?.mqiPercent ?? 100;
-  DOM.modalGrade.textContent = mqiUnknown ? 'N/A' : `${mqiVal}%`;
-  // mqiPercent is rounded to 0.1, so 100 can still come with flagged (small but material) markets
-  const flaggedMarketCount = verdict.mqi?.compromisedMarkets?.length || 0;
-  const isFullyClean = Boolean(verdict.mqi?.isAllClean);
-  const unresolvedPct = verdict.mqi?.unverifiedPercent ?? 0;
-  const compromisedPct = verdict.mqi?.compromisedPercent ?? 0;
-  DOM.modalScore.textContent = mqiUnknown
-    ? (verdict.mqi?.unpriced ? 'Unpriced Vault' : 'Unverified')
-    : isFullyClean
-      ? 'Clean Capital'
-      : flaggedMarketCount > 0
-        ? (compromisedPct > 0 ? `${compromisedPct}% Flagged` : `${flaggedMarketCount} Flagged Market${flaggedMarketCount === 1 ? '' : 's'}`)
-        : `${unresolvedPct}% Unverified`;
-  DOM.modalGrade.dataset.tone = mqiUnknown
-    ? 'bad'
-    : mqiVal === 100
-      ? (isFullyClean ? 'ok' : 'warn')
-      : (mqiVal >= 80 ? 'warn' : 'bad');
+  setRiskPill(summarizeFlags(verdict.redFlags));
+  if (DOM.modalVerdictSummary) {
+    DOM.modalVerdictSummary.textContent = verdict.summary || '';
+    DOM.modalVerdictSummary.hidden = !verdict.summary;
+  }
 
   // Financials
   DOM.modalTvl.textContent = formatCurrency(v.totalAssetsUsd);
@@ -2061,7 +2146,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
         ? 'The vault has no USD price, so the quality of its capital cannot be measured'
         : 'None of the capital could be verified yet, so there is no score')
       : verdict.mqi?.isAllClean
-      ? '100% of capital is deployed in verified, non-defaulted markets'
+      ? 'No listing problem, bad debt or protocol warning found in any market. Oracles and collateral quality are not scored.'
       : unresolvedUsd > 0 && !(verdict.mqi?.compromisedMarkets?.length)
         ? `${formatCurrency(unresolvedUsd)} is unverified (data missing or not expanded) and left out of the score`
         : `${verdict.mqi?.compromisedMarkets?.length || 0} market(s) with verification or debt issues detected`;
@@ -2150,7 +2235,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
   if (DOM.riskFlagsList) {
     DOM.riskFlagsList.innerHTML = '';
     if (!verdict.redFlags || verdict.redFlags.length === 0) {
-      DOM.riskFlagsList.innerHTML = '<div class="flag-item clear">No critical risk flags detected for this vault.</div>';
+      DOM.riskFlagsList.innerHTML = '<div class="flag-item clear">No flags were raised. That is not a safety guarantee, see below.</div>';
     } else {
       verdict.redFlags.forEach(flag => {
         const div = document.createElement('div');
@@ -2200,7 +2285,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
         ? '<span class="badge badge-status badge-flagged">FLAGGED</span>'
         : a.isUnverified
           ? '<span class="badge badge-status badge-unverified">UNVERIFIED</span>'
-          : '<span class="badge badge-listed badge-status badge-clean">CLEAN</span>';
+          : '<span class="badge badge-listed badge-status badge-clean">NO ISSUES</span>';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -2410,26 +2495,38 @@ function exitMetric(val) {
   return val === null || val === '' || !Number.isFinite(num) ? null : num;
 }
 
-/** Sort key for MQI: unknown first, then ascending; a flagged vault that rounds to 100 sits just below clean ones. */
-function mqiSortKey(v) {
-  if (v.mqiPercent === null) return -1;
-  const mqi = v.mqiPercent ?? 100;
-  return mqi === 100 && v.isAllClean === false ? 99.95 : mqi;
+/** Risk sort key: the worst flag first, then more flags. */
+function riskSortKey(v) {
+  const risk = vaultRisk(v);
+  return (FLAG_RANK[risk.level] || 0) * 100 + Math.min(risk.count, 99);
+}
+
+/** Exit sort key: the lowest stressed exit first, unknown exit last. */
+function exitSortKey(v) {
+  const stressed = exitMetric(v.stressedExitCapPercent);
+  const normal = exitMetric(v.exitCapPercent);
+  const worst = stressed ?? normal;
+  return worst === null || worst === undefined ? Infinity : worst;
+}
+
+/** Cells of the Exit column: the share withdrawable now and, when a bank run would cut it, the stressed share. */
+function exitCellInfo(v) {
+  const normal = exitMetric(v.exitCapPercent);
+  if (normal === null || normal === undefined) return { main: 'n/a', stress: '', title: 'Withdrawable liquidity is not reported for this vault' };
+  const stressed = exitMetric(v.stressedExitCapPercent);
+  const cut = stressed !== null && stressed !== undefined && normal - stressed >= 5;
+  return {
+    main: `${normal}%`,
+    stress: cut ? `run ${stressed}%` : '',
+    title: cut
+      ? `${normal}% of deposits can be withdrawn now; if competing vaults withdraw at once, about ${stressed}%`
+      : `${normal}% of deposits can be withdrawn now`
+  };
 }
 
 /** First value that is not undefined (null is a real answer: "unknown"). */
 function firstDefined(...values) {
   return values.find(value => value !== undefined);
-}
-
-/**
- * One reading of a vault's MQI for every surface: null = unpriced vault (unknown), isAllClean decides "clean"
- * (the rounded percent can read 100 while a small but material market is flagged).
- */
-function mqiBadgeInfo(mqiPercent, isAllClean, hasCompromised = true, isUnpriced = false) {
-  if (mqiPercent == null) return { text: isUnpriced ? 'Unpriced' : 'Unverified', clean: false };
-  if (isAllClean !== false && mqiPercent === 100) return { text: '100% Clean', clean: true };
-  return { text: mqiPercent === 100 ? (hasCompromised ? 'Flagged' : 'Unverified') : `${mqiPercent}% MQI`, clean: false };
 }
 
 /** First source that carries the field; an explicit unknown stops the chain instead of falling through. */

@@ -6,8 +6,8 @@
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_weight2">
-  <link rel="stylesheet" href="css/components.css?v=20261028_weight2">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk1">
+  <link rel="stylesheet" href="css/components.css?v=20261028_risk1">
 </head>
 <body>
   <!-- Background 3D Particle Sphere Canvas -->
@@ -50,6 +50,7 @@
     <div class="explorer-header">
       <h1 class="explorer-heading">Vaults Explorer</h1>
       <span id="explorer-count" class="explorer-count"><span class="sk sk-count" aria-hidden="true"></span> Vaults</span>
+      <button type="button" id="explorer-tiny-toggle" class="explorer-tiny-toggle hidden"></button>
       <span class="stale-indicator hidden" role="status"><span class="stale-dot" aria-hidden="true"></span><span class="stale-text"></span></span>
     </div>
 
@@ -104,30 +105,6 @@
             <span class="item-text">All Networks</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="1" role="option" aria-selected="false">
-            <span class="item-text"><span class="chain-dot ethereum"></span>Ethereum</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="8453" role="option" aria-selected="false">
-            <span class="item-text"><span class="chain-dot base"></span>Base</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="4663" role="option" aria-selected="false">
-            <span class="item-text"><span class="chain-dot robinhood"></span>Robinhood</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="42161" role="option" aria-selected="false">
-            <span class="item-text"><span class="chain-dot arbitrum"></span>Arbitrum</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="10" role="option" aria-selected="false">
-            <span class="item-text"><span class="chain-dot optimism"></span>Optimism</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="137" role="option" aria-selected="false">
-            <span class="item-text"><span class="chain-dot polygon"></span>Polygon</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
         </div>
       </div>
 
@@ -144,34 +121,6 @@
             <span class="item-text">All Assets</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="USDC" role="option" aria-selected="false">
-            <span class="item-text">USDC</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="USDG" role="option" aria-selected="false">
-            <span class="item-text">USDG</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="ETH" role="option" aria-selected="false">
-            <span class="item-text">ETH / WETH</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="PYUSD" role="option" aria-selected="false">
-            <span class="item-text">PYUSD</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="USDT" role="option" aria-selected="false">
-            <span class="item-text">USDT</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="USDE" role="option" aria-selected="false">
-            <span class="item-text">USDe / sUSDe</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="EURC" role="option" aria-selected="false">
-            <span class="item-text">EURC / EURCV</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
         </div>
       </div>
 
@@ -186,26 +135,6 @@
         <div class="dropdown-menu" id="menu-curator" role="listbox">
           <div class="dropdown-item selected" data-value="all" role="option" aria-selected="true">
             <span class="item-text">All Curators</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="steakhouse" role="option" aria-selected="false">
-            <span class="item-text">Steakhouse Financial</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="gauntlet" role="option" aria-selected="false">
-            <span class="item-text">Gauntlet</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="re7" role="option" aria-selected="false">
-            <span class="item-text">Re7 Labs</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="flagship" role="option" aria-selected="false">
-            <span class="item-text">Morpho Flagship</span>
-            <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-          </div>
-          <div class="dropdown-item" data-value="bprotocol" role="option" aria-selected="false">
-            <span class="item-text">B.Protocol</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
         </div>
@@ -232,12 +161,12 @@
             <span class="item-text">Free Liquidity: High to Low</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="mqi_asc" role="option" aria-selected="false">
-            <span class="item-text">Market Quality: Flagged First</span>
+          <div class="dropdown-item" data-value="risk_desc" role="option" aria-selected="false">
+            <span class="item-text">Risk: Flagged First</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <div class="dropdown-item" data-value="mqi_desc" role="option" aria-selected="false">
-            <span class="item-text">Market Quality: Clean First</span>
+          <div class="dropdown-item" data-value="exit_asc" role="option" aria-selected="false">
+            <span class="item-text">Exit Capacity: Low to High</span>
             <svg class="item-check" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
         </div>
@@ -253,7 +182,7 @@
     <!-- Vault table -->
     <div class="vault-table">
       <div class="vault-table-head" aria-hidden="true">
-        <span></span><span>Vault</span><span class="col-network">Network</span><span class="col-curator">Curator</span><span class="num">TVL</span><span class="num">APY</span>
+        <span></span><span>Vault</span><span class="col-network">Network</span><span class="col-curator">Curator</span><span class="num">TVL</span><span class="num col-apy">APY</span><span class="num col-exit" title="Share of deposits that can be withdrawn right now, and in a bank run">Exit</span>
       </div>
       <ul id="explorer-vaults-list" class="explorer-vaults-list" aria-busy="true">
         <li class="explorer-vault-item is-skeleton" aria-hidden="true" style="opacity:1">
@@ -320,6 +249,7 @@
           <span class="vault-item-apy"><span class="sk sk-end" style="width:44px;height:12px"></span></span>
         </li>
       </ul>
+      <p class="ledger-disclaimer">A vault with no flags is not guaranteed safe: the audit does not rate oracles, collateral quality or who controls the vault. For information only, not financial advice.</p>
     </div>
 
     <!-- Activity panel (replaces search, filters and the table while open) -->
@@ -425,13 +355,14 @@
         </div>
 
         <div class="safety-score-pill" id="modal-score-pill">
-          <span class="score-grade" id="modal-grade">100%</span>
+          <span class="score-grade" id="modal-grade">0</span>
           <span class="score-meta">
-            <span class="score-label">Market quality</span>
-            <span class="score-number" id="modal-score">Clean Capital</span>
+            <span class="score-label">Risk flags</span>
+            <span class="score-number" id="modal-score">None raised</span>
           </span>
         </div>
       </div>
+      <p class="verdict-summary" id="modal-verdict-summary" hidden></p>
 
       <!-- Key figures in one row -->
       <div class="compact-financials-grid">
@@ -515,7 +446,7 @@
           <div class="meter-track">
             <div class="meter-fill" id="risk-mqi-bar" style="width: 100%;"></div>
           </div>
-          <div class="meter-desc" id="risk-mqi-desc">Capital deployed in verified, non-defaulted markets</div>
+          <div class="meter-desc" id="risk-mqi-desc">Share of capital in markets with no defect found (listing, bad debt, protocol warnings). Oracles and collateral quality are not scored.</div>
         </div>
 
         <div class="meter-box" id="risk-exit-meter-box">
@@ -559,15 +490,26 @@
         <div class="red-flags-section">
           <div class="red-flags-header">Audit flags</div>
           <div class="flags-container" id="risk-flags-list">
-            <div class="flag-item clear">No critical risk flags detected for this vault.</div>
+            <div class="flag-item clear">No flags were raised. That is not a safety guarantee, see below.</div>
           </div>
         </div>
+
+        <details class="model-limits">
+          <summary>What this audit does not check</summary>
+          <ul>
+            <li>Oracles. Only the presence of an oracle address is checked, not how the price is built, whether it can be manipulated or whether it follows a depeg.</li>
+            <li>Collateral quality and liquidation buffer. Collateral is grouped by category and size, but LLTV headroom, redemption limits and token contract risk are not scored.</li>
+            <li>Who controls the vault. Owner, curator, guardian and timelock length are not rated. Pending changes show up in Activity and in Telegram.</li>
+            <li>The future. Exit capacity is a snapshot: borrowers can take free cash at any block, and a bank run can be faster than the estimate.</li>
+          </ul>
+          <p>For information only, not financial advice. Data comes from the Morpho API and can be late or incomplete.</p>
+        </details>
       </div>
 
     </div>
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261028_weight2"></script>
+  <script type="module" src="js/app.js?v=20261028_risk1"></script>
 </body>
 </html>

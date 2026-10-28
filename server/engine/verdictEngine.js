@@ -95,16 +95,10 @@ export function generateVaultVerdict(vault, allocations = []) {
     const crowdedSharePercent = totalAssetsUsd > 0 ? Math.round((totalCrowdedSupplyUsd / totalAssetsUsd) * 1000) / 10 : 0;
     const dropPct = Math.round((liquidity.instantExitCapacityPercent - liquidity.stressedExitCapacityPercent) * 10) / 10;
 
-    // Critical trigger: Stressed pro-rata exit capacity collapses into true danger zone (< 15%)
-    // with substantial drop (>= 15%) and material exposure to crowded markets
-    const isCritical = (liquidity.stressedExitCapacityPercent < 15 && dropPct >= 15 && (liquidity.instantExitCapacityPercent >= 20 || crowdedSharePercent >= 25))
-      || (crowdedSharePercent >= 35 && dropPct >= 20 && liquidity.stressedExitCapacityPercent < 20);
-
-    // High trigger: Material reduction in exit capacity (stressed < 25% with drop >= 10%, or drop >= 20% with stressed < 35%)
-    const isHigh = !isCritical && crowdedSharePercent >= 15 && (
-      (liquidity.stressedExitCapacityPercent < 25 && dropPct >= 10) ||
-      (dropPct >= 20 && liquidity.stressedExitCapacityPercent < 35)
-    );
+    // Only markets past the IRM target utilization reach this point (liquidityEngine), so the thresholds are about
+    // real shortage: CRITICAL when almost nothing could be withdrawn in a run, HIGH when it falls below the 20% line
+    const isCritical = liquidity.stressedExitCapacityPercent < 5 && dropPct >= 10 && crowdedSharePercent >= 15;
+    const isHigh = !isCritical && crowdedSharePercent >= 15 && liquidity.stressedExitCapacityPercent < 20 && dropPct >= 10;
 
     const topMarket = liquidity.crowdedMarkets[0];
     const topPeersStr = topMarket.topPeers && topMarket.topPeers.length > 0 ? topMarket.topPeers.join(', ') : 'peer vaults';
@@ -143,8 +137,8 @@ export function generateVaultVerdict(vault, allocations = []) {
   let mqiText = mqi.mqiPercent == null
     ? (mqi.unpriced ? 'unknown (no USD price)' : 'not available (no capital could be verified)')
     : mqi.unverifiedAssetsUsd > 0
-      ? `${mqi.mqiPercent}% of verified capital is clean (${mqi.unverifiedPercent}% of capital unverified)`
-      : `${mqi.mqiPercent}% clean capital`;
+      ? `${mqi.mqiPercent}% of the checked capital has no defect found (${mqi.unverifiedPercent}% of capital unchecked)`
+      : `${mqi.mqiPercent}% of capital has no defect found`;
   // A rounded 100 next to a real defect must not read as fully clean
   const summary = `MQI: ${mqiText}. ${exitSummary}.`;
 

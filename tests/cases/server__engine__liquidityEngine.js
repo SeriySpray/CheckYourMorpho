@@ -4,7 +4,7 @@ import { vault, alloc, idle } from '../fixtures.js';
 // Ринок i: наше постачання supply, вільна ліквідність free, постачання vaults-конкурентів peer.
 const mkt = (i, supply, free, peer = 0, over = {}) => alloc({
   market_unique_key: `1:0xm${i}`, collateral_asset_address: `0xc${i}`, collateral_asset_symbol: `C${i}`,
-  supply_assets_usd: supply, total_supply_assets_usd: 1e9, total_borrow_assets_usd: 1e9 - free, peer_supply_usd: peer, ...over
+  supply_assets_usd: supply, total_supply_assets_usd: Math.max(1e9, free / 0.03), total_borrow_assets_usd: Math.max(1e9, free / 0.03) - free, peer_supply_usd: peer, ...over
 });
 
 export default {

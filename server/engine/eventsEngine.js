@@ -83,6 +83,13 @@ const lltvPercentOf = raw => {
 const extractMarketId = market =>
   market?.marketId || market?.uniqueKey || market?.market_unique_key || null;
 
+// Caps are stored under market_unique_key (`${chainId}:${marketId}`), the API events carry the bare marketId
+const capKey = (chainId, marketId) => (marketId ? `${chainId}:${String(marketId).toLowerCase()}` : null);
+const capOf = (caps, chainId, marketId) => {
+  const v = caps?.[capKey(chainId, marketId)] ?? caps?.[marketId];
+  return v === undefined || v === null ? null : Number(v);
+};
+
 /**
  * Builds a deterministic deduplication key for vault_events.dedupe_key.
  */
@@ -170,7 +177,7 @@ const mapSingleAdminEvent = (vaultContext, ev, trackingState, nowSec, disambigua
     const newCapHuman = toHumanTokenAmount(rawCap, decimals);
     const oldCapHuman = data.oldCap !== undefined
       ? toHumanTokenAmount(data.oldCap, decimals)
-      : (marketId && trackingState.caps[marketId] !== undefined ? Number(trackingState.caps[marketId]) : null);
+      : (marketId ? capOf(trackingState.caps, chainId, marketId) : null);
     const raisedOver2x = oldCapHuman !== null && oldCapHuman > 0 && newCapHuman > oldCapHuman * 2;
     severity = raisedOver2x ? 'warning' : 'info';
     const label = marketLabelFromData(market);
@@ -183,7 +190,7 @@ const mapSingleAdminEvent = (vaultContext, ev, trackingState, nowSec, disambigua
       newCap: newCapHuman,
       rawCap: String(rawCap)
     };
-    if (marketId) trackingState.caps[marketId] = newCapHuman;
+    if (marketId) trackingState.caps[capKey(chainId, marketId)] = newCapHuman;
   } else if (type === 'setGuardian' || type === 'submitGuardian' || type === 'revokePendingGuardian') {
     kind = 'guardian_changed';
     severity = 'warning';
@@ -479,7 +486,7 @@ const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelock
     const decimals = market?.loanAsset?.decimals ?? vaultContext.assetDecimals ?? vaultContext.asset_decimals ?? 18;
     const rawCap = decoded.supplyCap ?? decoded.cap ?? 0;
     const newCapHuman = toHumanTokenAmount(rawCap, decimals);
-    const oldCapHuman = marketId && currentCaps[marketId] !== undefined ? Number(currentCaps[marketId]) : null;
+    const oldCapHuman = marketId ? capOf(currentCaps, chainId, marketId) : null;
     if (oldCapHuman !== null && oldCapHuman > 0 && newCapHuman > oldCapHuman * 2) {
       severity = 'critical';
     }
@@ -881,7 +888,21 @@ export function diffDerivedState(prevState, nextState, vaultContext, nowSec = Ma
   const nextBadDebt = nextState.bad_debt_markets ?? nextState.badDebtMarkets ?? {};
   const prevUnverifiedBd = new Set(prevState.unverified_bad_debt_markets ?? prevState.unverifiedBadDebtMarkets ?? []);
   for (const [mKey, info] of Object.entries(nextBadDebt)) {
-    if (prevBadDebt[mKey]) continue;
+    const prevInfo = prevBadDebt[mKey];
+    if (prevInfo) {
+      // Already reported once: say it again only when the debt at least doubles (and by a real sum), one event per doubling
+      const before = Number(prevInfo.badDebtUsd) || 0;
+      const grew = info.badDebtUsd >= before * 2 && info.badDebtUsd - before >= 1000;
+      if (!grew) continue;
+      pushDerived(
+        'bad_debt_appeared',
+        'critical',
+        `Bad debt grew in ${info.label || mKey} from $${before} to $${info.badDebtUsd}`,
+        { marketKey: mKey, marketLabel: info.label || mKey, badDebtUsd: info.badDebtUsd, previousBadDebtUsd: before, supplyUsd: info.supplyUsd, grew: true },
+        `${mKey}:x${Math.floor(Math.log2(info.badDebtUsd))}`
+      );
+      continue;
+    }
     // The market had no bad debt data last time: the debt may be old, but it must still be reported once
     const afterDataGap = prevUnverifiedBd.has(mKey);
     pushDerived(

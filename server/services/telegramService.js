@@ -10,6 +10,7 @@ const MAX_URGENT_PER_CHAT_PER_ROUND = 10;
 const URGENT_LOOKBACK_SECONDS = 2 * 86400;
 const SEND_GAP_MS = 1100;
 const POLL_TIMEOUT_SECONDS = 25;
+const STALE_DATA_SECONDS = 24 * 3600;
 
 const SITE_URL = process.env.SITE_URL || 'https://checkyourmorpho.duckdns.org';
 const SITE_BUTTON = { inline_keyboard: [[{ text: 'Open CheckYourMorpho', url: SITE_URL }]] };
@@ -192,6 +193,13 @@ function pendingFor(db, addrs) {
   `).all(JSON.stringify(addrs));
 }
 
+/** Seconds since the last committed full sync, or null when no sync was ever recorded. */
+const dataAgeSeconds = (db, nowSec) => {
+  const last = Number(getState(db, 'last_sync_all'));
+  return Number.isFinite(last) && last > 0 ? nowSec - last : null;
+};
+const isDataStale = (db, nowSec) => (dataAgeSeconds(db, nowSec) ?? 0) > STALE_DATA_SECONDS;
+
 function statusText(db, sub, nowSec) {
   const addrs = JSON.parse(sub.vaults_json);
   const n = addrs.length;
@@ -201,6 +209,7 @@ function statusText(db, sub, nowSec) {
     `Following ${n} vault${n === 1 ? '' : 's'}.`,
     `Pending changes: ${total}${ready > 0 ? ` (${ready} can be applied now)` : ''}. /upcoming shows them.`,
     `Urgent changes are sent immediately, the digest at 09:00 Kyiv time.${lastDigest ? ` Last digest: ${lastDigest}.` : ''}`,
+    isDataStale(db, nowSec) ? `Warning: vault data has not been updated for ${Math.floor(dataAgeSeconds(db, nowSec) / 3600)} hours, so silence does not mean that nothing changed.` : null,
     `${sub.active ? '/pause pauses alerts.' : '/resume turns them back on.'} /list shows the vaults.`);
 }
 
@@ -364,7 +373,8 @@ export async function dispatchUrgent(db, tg, nowSec = Math.floor(Date.now() / 10
 /** Sends the daily digest once per Kyiv date from 09:00; a transient failure keeps the date open for the next tick. */
 export async function dispatchDigest(db, tg, nowSec = Math.floor(Date.now() / 1000), sleep = defaultSleep) {
   const date = digestDue(nowSec, getState(db, 'last_digest_date'));
-  if (date === null) return 0;
+  // A digest built from old samples would claim "no changes"; it stays due and goes out after the data recovers
+  if (date === null || isDataStale(db, nowSec)) return 0;
   const key = `digest:${date}`;
   const sentStmt = db.prepare('SELECT 1 FROM tg_sent WHERE sub_id = ? AND message_key = ?');
   let sent = 0;
@@ -384,6 +394,34 @@ export async function dispatchDigest(db, tg, nowSec = Math.floor(Date.now() / 10
     if (res === 'retry') pending = true;
   }
   if (!pending) setState(db, 'last_digest_date', date, nowSec);
+  return sent;
+}
+
+/**
+ * Tells every active chat once when vault data stops updating (no full sync for 24 hours) and once when it recovers,
+ * because for a monitoring bot silence looks like "nothing happened".
+ */
+export async function dispatchStaleNotice(db, tg, nowSec = Math.floor(Date.now() / 1000), sleep = defaultSleep) {
+  const lastSync = getState(db, 'last_sync_all');
+  const flagged = getState(db, 'stale_notified');
+  const stale = isDataStale(db, nowSec);
+  if (!stale && flagged === null) return 0;
+  const key = stale ? `stale:${lastSync}` : `recovered:${flagged}`;
+  const text = stale
+    ? message('Monitoring paused', `Vault data has not been updated for ${Math.floor(dataAgeSeconds(db, nowSec) / 3600)} hours. No new alerts can arrive until it recovers, and silence does not mean that nothing changed.`)
+    : message('Monitoring restored', 'Vault data is updating again. Alerts and the digest continue.');
+  const sentStmt = db.prepare('SELECT 1 FROM tg_sent WHERE sub_id = ? AND message_key = ?');
+  let sent = 0;
+  let pending = false;
+  for (const sub of activeSubscriptions(db)) {
+    if (sentStmt.get(sub.sub_id, key)) continue;
+    if (sent > 0) await sleep(SEND_GAP_MS);
+    const res = await sendOnce(db, tg, sub, key, text, nowSec);
+    if (res === 'sent') sent++; else if (res === 'retry') pending = true;
+  }
+  if (!pending) {
+    if (stale) setState(db, 'stale_notified', lastSync, nowSec); else db.prepare("DELETE FROM sync_state WHERE key = 'stale_notified'").run();
+  }
   return sent;
 }
 
@@ -450,7 +488,7 @@ export async function startNotifications(db, { token = process.env.TELEGRAM_BOT_
   })();
 
   const tick = async () => {
-    try { await dispatchUrgent(db, tg, undefined, sleep); await dispatchDigest(db, tg, undefined, sleep); await dispatchPins(db, tg, undefined, sleep); } catch (err) { console.error('[Telegram] Dispatch failed:', err.message); }
+    try { await dispatchStaleNotice(db, tg, undefined, sleep); await dispatchUrgent(db, tg, undefined, sleep); await dispatchDigest(db, tg, undefined, sleep); await dispatchPins(db, tg, undefined, sleep); } catch (err) { console.error('[Telegram] Dispatch failed:', err.message); }
   };
   const timer = setInterval(tick, tickMs);
   return { stop() { running = false; liveTg = null; botUsername = null; clearInterval(timer); } };

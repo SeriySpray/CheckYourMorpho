@@ -394,9 +394,9 @@ const EXPLAINERS = {
     facts: []
   }),
   mqi_dropped: (d) => !has(d.currentMqi) ? null : ({
-    summary: `Clean collateral share fell to ${percent(d.currentMqi, false)}`,
+    summary: `Share of capital without a found defect fell to ${percent(d.currentMqi, false)}`,
     what: `The Market Quality Index fell from ${percent(d.previousMqi, false)} to ${percent(d.currentMqi, false)}.`,
-    impact: 'The index is the share of deposits lent against collateral we consider clean and verified. A drop means more of your deposit now backs loans with riskier or unverified collateral.',
+    impact: 'The index is the share of deposits in markets where no listing problem, bad debt or protocol warning was found. A drop means more of your deposit now sits in markets with a defect or without enough data. Oracle and collateral quality are not scored.',
     facts: []
   }),
   bad_debt_appeared: (d) => !has(d.badDebtUsd) ? null : ({

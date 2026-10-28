@@ -12,10 +12,16 @@ import { isUnpricedVault } from './mqiEngine.js';
  * Verified assets exclude capital behind adapters that could not be expanded: with no data about it, it neither
  * lowers nor raises the figure, and is reported as unverifiedPercent instead.
  * 
+ * Crowded markets: Morpho's AdaptiveCurveIRM steers every market to ~90% utilization, so a shared market with ~10%
+ * free liquidity is the protocol's normal state, not a risk. A market only counts as contested when utilization is
+ * above CROWDED_UTILIZATION (the rate curve is then past its target and the exit queue is real).
+ *
  * Stressed Pro-Rata Exit:
  * In a simultaneous bank run, Free Liquidity in Market_i is contested by all competing vaults:
  * Stressed Exit_i = min(Vault Supply_i, Free Liquidity_i * (Vault Supply_i / Total Vault Supply_i))
  */
+
+export const CROWDED_UTILIZATION = 0.95;
 
 /**
  * Calculates exit liquidity metrics for a vault.
@@ -114,10 +120,13 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
       // 1. Competing peer vaults' supply >= market free liquidity
       // 2. Peers materially dilute our exit capacity (by >= 30%) or market has 0 free liquidity
       // 3. Materiality check: vault capital must exceed 1.0% of total vault assets
+      // 4. Utilization is past the IRM target (CROWDED_UTILIZATION); at ~90% the shortage of free cash is by design
       const totalContestedClaimsUsd = peerSupplyUsd;
+      const utilization = marketTotalSupplyUsd > 0 ? marketTotalBorrowUsd / marketTotalSupplyUsd : 1;
       const hasSignificantDilution = (marketFreeLiquidityUsd === 0 && supplyUsd > 0) ||
         (canExitUsd > 0 && stressedExitUsd < canExitUsd * 0.70);
       const isCrowded = totalContestedClaimsUsd > 0 &&
+        utilization >= CROWDED_UTILIZATION &&
         (totalContestedClaimsUsd >= marketFreeLiquidityUsd) &&
         hasSignificantDilution;
 
@@ -134,6 +143,7 @@ export function calculateLiquidityMetrics(vault, allocations = []) {
           vaultSupplyUsd: supplyUsd,
           peerSupplyUsd,
           freeLiquidityUsd: marketFreeLiquidityUsd,
+          utilization: Math.round(utilization * 1000) / 1000,
           normalExitUsd: canExitUsd,
           stressedExitUsd: Math.round(stressedExitUsd * 100) / 100,
           topPeers: topPeersList

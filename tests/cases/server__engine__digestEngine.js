@@ -22,6 +22,12 @@ export default {
       assert.deepEqual(diffVaultSamples(null, base), []);
       assert.deepEqual(diffVaultSamples(base, null), []);
     }],
+    ['гістерезис: зміна рівня потрапляє в дайджест, лише якщо новий рівень тримався в усіх останніх знімках', ({ diffVaultSamples }) => {
+      const red = { ...base, verdict_level: 'red' };
+      assert.equal(diffVaultSamples(base, red, null, ['red', 'red', 'red']).length, 1);
+      assert.deepEqual(diffVaultSamples(base, red, null, ['red', 'green', 'red']), []);
+      assert.equal(diffVaultSamples(base, red, null, null).length, 1);
+    }],
     ['вердикт: зміна в обидва боки; null/unknown ігноруються; флап GREEN-RED-GREEN за добу не дає нічого', ({ diffVaultSamples }) => {
       assert.match(diffVaultSamples(base, { ...base, verdict_level: 'red' })[0].text, /^Risk worsened: no risk flags changed to risk flags$/);
       assert.match(diffVaultSamples({ ...base, verdict_level: 'red' }, base)[0].text, /^Risk improved: risk flags changed to no risk flags$/);
