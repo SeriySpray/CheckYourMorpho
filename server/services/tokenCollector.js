@@ -7,7 +7,7 @@ import { CONFIG } from '../config.js';
 import {
   parseJson, parseSourcify, parseAbiFlags, parseBlockscoutToken, parseBlockscoutAddress, parseBlockscoutCounters, parseBlockscoutContract, parseCreationTx,
   parseHolders, parseLlamaPrice, parseLlamaChart, parseGeckoInfo, parseGeckoPools, parseKyber, parseReadContract, controllerAddresses,
-  parseSafe, parsePendleMarket, parseFeeds, parseRwa, parseRpcAddress, parseRpcUint, parseSharePrice, parsePtExpiry
+  parseSafe, parsePendleMarket, parseFeeds, parseRwa, parseRpcAddress, parseRpcUint, parseRpcString, parseRpcBigUint, parseRpcArrayLength, parseSharePrice, parsePtExpiry
 } from './tokenParsers.js';
 
 const HEADERS = { 'user-agent': 'Mozilla/5.0 (compatible; CheckYourMorpho/1.0)', accept: 'text/html,application/json;q=0.9,*/*;q=0.5' };
@@ -26,6 +26,20 @@ const IMPL_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d3
 // Delay of a timelock: getMinDelay() of OpenZeppelin TimelockController, then delay() of the Compound Timelock
 const TIMELOCK_SELECTORS = ['0xf27a0c92', '0x6a42b8f8'];
 const MIN_STATUS_OK_COVERAGE = 0.4;
+// eth_call selectors read on a chain that has a public JSON-RPC but no Blockscout (the explorer pages are not reachable there)
+const SEL = { name: '0x06fdde03', symbol: '0x95d89b41', decimals: '0x313ce567', totalSupply: '0x18160ddd', owner: '0x8da5cb5b', getThreshold: '0xe75235b8', getOwners: '0xa0e67e2b' };
+// EIP-7702 delegation: the account code is 0xef0100 followed by the delegate address
+const EIP7702_PREFIX = '0xef0100';
+
+// Blockscout PRO API (api.blockscout.com/<chainId>/api/v2): the way to a chain whose own Blockscout sits behind a Cloudflare challenge.
+// It needs a free key, read from BLOCKSCOUT_API_KEY; without it such a chain keeps only its JSON-RPC and the other sources.
+const PRO_KEY_RE = /^proapi_[A-Za-z0-9_-]{20,}$/;
+const blockscoutKey = () => (PRO_KEY_RE.test(process.env.BLOCKSCOUT_API_KEY ?? '') ? process.env.BLOCKSCOUT_API_KEY : null);
+const PRO_HOST = 'api.blockscout.com';
+/** Base URL of a chain's Blockscout REST API, or null when it has none the collector may reach. */
+const bsBase = c => (c?.blockscoutPro ? (blockscoutKey() ? `https://${PRO_HOST}/${c.blockscoutPro}/api/v2` : null) : c?.blockscout ? `https://${c.blockscout}.blockscout.com/api/v2` : null);
+/** True when the owner and the proxy admin are read over JSON-RPC: a chain without an explorer, or one that asks for it. */
+const readsOverRpc = c => Boolean(c?.rpc && (c.rpcControl || !bsBase(c)));
 
 // Names the sources use for each supported chain. A missing key means the chain has no such source and that part stays unknown.
 // Chains not listed here get Sourcify only.
@@ -42,7 +56,7 @@ export const CHAINS = {
   143: { llama: 'monad', gecko: 'monad', kyber: 'monad', usdc: '0x754704Bc059F8C67012fEd69BC8A327a5aafb603' },
   999: { llama: 'hyperliquid', gecko: 'hyperevm', kyber: 'hyperevm', usdc: '0xb88339CB7199b77E23DB6E890353E22632Ba630f' },
   747474: { llama: 'katana', gecko: 'katana' },
-  4663: { llama: 'robinhood', gecko: 'robinhood' }, // Robinhood Chain: Blockscout answers only behind a Cloudflare challenge, so no explorer data
+  4663: { llama: 'robinhood', gecko: 'robinhood', rpc: 'rpc.mainnet.chain.robinhood.com', blockscoutPro: 4663, rpcControl: true }, // Robinhood Chain: its own Blockscout is behind a Cloudflare challenge; holders and source come from the PRO API when a key is set, the owner and proxy admin over JSON-RPC
   480: { llama: 'wc', gecko: 'world-chain' },
   988: { llama: 'stable', gecko: 'stable', rpc: 'rpc.stable.xyz' },
   4217: { llama: 'tempo', gecko: 'tempo', rpc: 'tempo-rpc.publicnode.com' },
@@ -80,8 +94,8 @@ export function sourceUrls(chainId, address, { implementation = null, amountIn =
   const out = { sourcify: `https://sourcify.dev/server/v2/contract/${chainId}/${a}?fields=${fields}` };
   if (implementation) out.sourcifyImpl = `https://sourcify.dev/server/v2/contract/${chainId}/${implementation}?fields=${fields}`;
   if (!c) return out;
-  if (c.blockscout) {
-    const bs = `https://${c.blockscout}.blockscout.com/api/v2`;
+  const bs = bsBase(c);
+  if (bs) {
     Object.assign(out, { bsToken: `${bs}/tokens/${a}`, bsAddress: `${bs}/addresses/${a}`, bsHolders: `${bs}/tokens/${a}/holders`, bsCounters: `${bs}/tokens/${a}/counters`,
       bsContract: `${bs}/smart-contracts/${a}` });
     if (implementation) out.bsContractImpl = `${bs}/smart-contracts/${implementation}`;
@@ -102,8 +116,8 @@ export function sourceUrls(chainId, address, { implementation = null, amountIn =
   return out;
 }
 
-const bsAddressUrl = (chainId, a) => `https://${CHAINS[chainId].blockscout}.blockscout.com/api/v2/addresses/${a}`;
-const bsTxUrl = (chainId, h) => `https://${CHAINS[chainId].blockscout}.blockscout.com/api/v2/transactions/${h}`;
+const bsAddressUrl = (chainId, a) => `${bsBase(CHAINS[chainId])}/addresses/${a}`;
+const bsTxUrl = (chainId, h) => `${bsBase(CHAINS[chainId])}/transactions/${h}`;
 // The Safe service refuses an address that is not in EIP-55 form (422), so a controller keeps the spelling the explorer page gave
 const safeUrl = (chainId, a) => `https://api.safe.global/tx-service/${CHAINS[chainId].safe}/api/v1/safes/${a}/`;
 const rwaUrl = symbol => `https://app.rwa.xyz/assets/${encodeURIComponent(symbol)}`;
@@ -138,14 +152,16 @@ export function createFetcher({ fetchImpl = globalThis.fetch, sleep = ms => new 
     const t0 = Date.now();
     if (!isCollectorUrl(url)) return { status: 0, text: '', ms: 0, error: 'url is not allowed' };
     const host = new URL(url).hostname;
+    // The PRO key is added here, at the last moment, so it never reaches a stored source URL or a log line
+    const reqUrl = host === PRO_HOST && blockscoutKey() ? `${url}${url.includes('?') ? '&' : '?'}apikey=${blockscoutKey()}` : url;
     const prev = tails.get(host) ?? Promise.resolve();
     let release;
     tails.set(host, new Promise(r => { release = r; }));
     await prev;
     try {
-      let r = await once(url, maxBytes, body);
-      if (r.status === 429) { await sleep(10000); r = await once(url, maxBytes, body); }
-      else if ([502, 503, 504].includes(r.status)) { await sleep(3000); r = await once(url, maxBytes, body); }
+      let r = await once(reqUrl, maxBytes, body);
+      if (r.status === 429) { await sleep(10000); r = await once(reqUrl, maxBytes, body); }
+      else if ([502, 503, 504].includes(r.status)) { await sleep(3000); r = await once(reqUrl, maxBytes, body); }
       return { ...r, ms: Date.now() - t0, ...(r.status === 429 ? { error: 'rate limited' } : {}) };
     } catch (err) {
       return { status: 0, text: '', ms: Date.now() - t0, error: String(err?.message ?? err).slice(0, 120) };
@@ -197,6 +213,8 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const address = String(token.address ?? '').toLowerCase();
   if (!ADDR_RE.test(address)) throw new Error('invalid token address');
   const c = CHAINS[chainId];
+  const bs = bsBase(c);
+  const rpcRead = readsOverRpc(c);
   const urls = sourceUrls(chainId, address);
   const sources = [];
   const fetchSource = async (key, url, opts) => {
@@ -218,10 +236,16 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
       if (!c?.rpc) return;
       p1.slotAdmin = await rpc('rpc_admin_slot', 'eth_getStorageAt', [address, ADMIN_SLOT, 'latest']);
       p1.slotImpl = await rpc('rpc_impl_slot', 'eth_getStorageAt', [address, IMPL_SLOT, 'latest']);
+      if (!rpcRead) return;
+      const call = (key, data) => rpc(key, 'eth_call', [{ to: address, data }, 'latest']);
+      p1.rpcOwner = await call('rpc_owner', SEL.owner);
+      p1.rpcName = await call('rpc_name', SEL.name);
+      p1.rpcDecimals = await call('rpc_decimals', SEL.decimals);
+      p1.rpcSupply = await call('rpc_total_supply', SEL.totalSupply);
     },
     sourcify: async () => { if (!reuse) p1.sourcify = await fetchSource('sourcify', urls.sourcify); },
     blockscout: async () => {
-      if (!c?.blockscout) return;
+      if (!bs) return;
       p1.bsToken = await fetchSource('blockscout_token', urls.bsToken);
       if (!reuse) p1.bsAddress = await fetchSource('blockscout_address', urls.bsAddress);
       p1.bsHolders = await fetchSource('blockscout_holders', urls.bsHolders);
@@ -241,7 +265,8 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   };
   const fingerprint = () => {
     const rv = parseReadContract(p1.explorer?.status === 200 ? p1.explorer.text : '') ?? {};
-    return JSON.stringify([parseRpcAddress(json(p1.slotAdmin)), parseRpcAddress(json(p1.slotImpl)), rv.implementation ?? null, controllerAddresses(rv).map(x => `${x.role}:${x.address}`)]);
+    const key = [parseRpcAddress(json(p1.slotAdmin)), parseRpcAddress(json(p1.slotImpl)), rv.implementation ?? null, controllerAddresses(rv).map(x => `${x.role}:${x.address}`)];
+    return JSON.stringify(rpcRead ? [...key, parseRpcAddress(json(p1.rpcOwner))] : key);
   };
   const cheap = ['rpc', 'explorer'];
   if (prev) {
@@ -266,12 +291,13 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const slotImpl = parseRpcAddress(json(p1.slotImpl));
   const impl = (reuse ? prev.contract.implementations?.[0]?.address ?? slotImpl : sourcify?.implementations?.[0]?.address ?? bsAddress?.implementations?.[0]?.address ?? slotImpl) || null;
   const symbol = token.symbol || bsToken?.symbol || price?.symbol || null;
-  const decimals = bsToken?.decimals ?? price?.decimals ?? null;
+  const rpcDecimals = parseRpcUint(json(p1.rpcDecimals));
+  const decimals = bsToken?.decimals ?? (rpcDecimals !== null && rpcDecimals <= 36 ? rpcDecimals : null) ?? price?.decimals ?? null;
 
   // A contract Sourcify does not know: take the name and ABI from Blockscout, which verifies on its own
   let contractName = reuse ? prev.identity?.contract_name ?? null : sourcify?.contract_name ?? null;
   let abi = sourcify?.abi ?? null;
-  if (!reuse && !abi && c?.blockscout) {
+  if (!reuse && !abi && bs) {
     const bc = parseBlockscoutContract(json(await fetchSource('blockscout_contract', urls.bsContract, { maxBytes: CONTRACT_MAX_BYTES })));
     contractName ??= bc?.contract_name ?? null;
     abi = bc?.abi ?? null;
@@ -286,7 +312,7 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
     if (!reuse) tasks.push(async () => { p2.sourcifyImpl = await fetchSource('sourcify_impl', implUrls.sourcifyImpl); });
     if (c?.explorer) tasks.push(async () => { p2.explorerImpl = await fetchSource('explorer_read_impl', implUrls.explorerImpl); });
   }
-  if (!reuse && c?.blockscout && bsAddress?.creation_tx) tasks.push(async () => { p2.creationTx = await fetchSource('blockscout_creation_tx', bsTxUrl(chainId, bsAddress.creation_tx)); });
+  if (!reuse && bs && bsAddress?.creation_tx) tasks.push(async () => { p2.creationTx = await fetchSource('blockscout_creation_tx', bsTxUrl(chainId, bsAddress.creation_tx)); });
   if (c?.kyber && c.usdc) {
     tasks.push(async () => {
       const skip = (status, reason) => ({ status, price_impact_pct: null, out_usd: null, kyber_in_usd: null, gas_usd: null, dexes: [], reason });
@@ -316,7 +342,36 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   // and the delay of a timelock. The Safe service is asked only where it exists (`safe_checked`).
   const controllers = [];
   if (reuse) controllers.push(...prev.control.controllers);
-  else if (c?.blockscout) {
+  else if (rpcRead) {
+    // No explorer: the owner() and the EIP-1967 proxy admin, each read over JSON-RPC (kind of account, Safe threshold, timelock delay)
+    const owner = parseRpcAddress(json(p1.rpcOwner));
+    const list = owner ? [{ address: owner, role: 'owner' }] : [];
+    if (slotAdmin) {
+      const same = list.find(x => x.address === slotAdmin);
+      if (same) same.role += ',proxy_admin'; else list.push({ address: slotAdmin, role: 'proxy_admin' });
+    }
+    for (const ctl of list) {
+      const n = controllers.length;
+      const call = (key, data) => rpc(`${key}_${n}`, 'eth_call', [{ to: ctl.address, data }, 'latest']);
+      const codeRes = json(await rpc(`rpc_code_${n}`, 'eth_getCode', [ctl.address, 'latest']));
+      const code = typeof codeRes?.result === 'string' ? codeRes.result : null;
+      const delegated = code?.startsWith(EIP7702_PREFIX) ?? false;
+      const isContract = code === null ? null : code !== '0x' && !delegated;
+      let name = null, safe = null, delay = null;
+      if (isContract) {
+        name = parseRpcString(json(await call('rpc_account_name', SEL.name)));
+        const threshold = parseRpcUint(json(await call('rpc_threshold', SEL.getThreshold)));
+        const owners = threshold ? parseRpcArrayLength(json(await call('rpc_owners', SEL.getOwners))) : null;
+        safe = threshold && owners ? { threshold, owner_count: owners } : null;
+        if (!safe) for (const [i, data] of TIMELOCK_SELECTORS.entries()) {
+          delay = parseRpcUint(json(await call(`rpc_timelock_${i}`, data)));
+          if (delay !== null) break;
+        }
+      }
+      controllers.push({ address: ctl.address, role: ctl.role, name, is_contract: isContract, implementation_names: [], safe, safe_checked: isContract !== null,
+        is_multisig: Boolean(safe), is_eoa_delegated: delegated, timelock_delay_sec: delay });
+    }
+  } else if (bs) {
     const list = controllerAddresses(readValues);
     if (slotAdmin) {
       const same = list.find(x => x.address.toLowerCase() === slotAdmin);
@@ -353,7 +408,7 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const isPt = contractName === 'PendlePrincipalToken';
   const ptMarket = isPt ? parsePendleMarket(p2.pendle?.status === 200 ? parseJson(p2.pendle.text) : null, address, now()) : null;
   const data = {
-    identity: { name: bsToken?.name ?? null, symbol, decimals, total_supply: bsToken?.total_supply ?? null,
+    identity: { name: bsToken?.name ?? parseRpcString(json(p1.rpcName)) ?? null, symbol, decimals, total_supply: bsToken?.total_supply ?? parseRpcBigUint(json(p1.rpcSupply)),
       token_type: bsToken?.token_type ?? null, contract_name: contractName },
     contract: reuse ? prev.contract : {
       sourcify_match: sourcify?.sourcify_match ?? null, blockscout_verified: bsAddress?.verified ?? null, is_proxy: anyProxy ? true : sourcify?.is_proxy ?? null,

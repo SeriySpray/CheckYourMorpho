@@ -213,6 +213,21 @@ export default {
     assert.equal(f({ result: '0x000000000000000000000000000000000000000000000000000000000002a300' }), 172800);
     for (const j of [{ result: '0x' }, { error: { code: 3 } }, { result: '0x' + 'f'.repeat(64) }, null]) assert.equal(f(j), null);
   }]],
+  parseRpcString: [['a name from an ABI string or a bytes32; errors, "0x" and junk are null', ({ parseRpcString: f }) => {
+    const abi = text => '0x' + '20'.padStart(64, '0') + text.length.toString(16).padStart(64, '0') + Buffer.from(text).toString('hex').padEnd(64, '0');
+    assert.equal(f({ result: abi('Spark Savings USDG') }), 'Spark Savings USDG');
+    assert.equal(f({ result: '0x' + Buffer.from('MKR').toString('hex').padEnd(64, '0') }), 'MKR');
+    for (const j of [{ result: '0x' }, { error: { code: 3 } }, { result: '0x' + '0'.repeat(128) }, { result: '0x1234' }, null]) assert.equal(f(j), null);
+  }]],
+  parseRpcBigUint: [['a total supply as a decimal string without losing digits; errors are null', ({ parseRpcBigUint: f }) => {
+    assert.equal(f({ result: '0x' + (41511432704122776916612747n).toString(16).padStart(64, '0') }), '41511432704122776916612747');
+    for (const j of [{ result: '0x' }, { error: { code: 3 } }, null]) assert.equal(f(j), null);
+  }]],
+  parseRpcArrayLength: [['the length of an address array (Safe getOwners); junk is null', ({ parseRpcArrayLength: f }) => {
+    const arr = n => '0x' + '20'.padStart(64, '0') + n.toString(16).padStart(64, '0') + '0'.repeat(64 * n);
+    assert.equal(f({ result: arr(3) }), 3);
+    for (const j of [{ result: '0x' }, { error: { code: 3 } }, { result: '0x' + '0'.repeat(64) }, null]) assert.equal(f(j), null);
+  }]],
   parseSharePrice: [['assets per share from the vault\'s own values; an 18-decimal share of a 6-decimal asset is scaled by the offset', ({ parseSharePrice: f }) => {
     const susde = f({ totalAssets: '1190889257600593627486331890', totalSupply: '949468438374510151496210215', asset: '0x4c9EDD5852cd905f086C759E8383e09bff1E68B3' });
     assert.ok(Math.abs(susde - 1.25427) < 1e-4, String(susde));

@@ -24,14 +24,14 @@ function mockFetch(over = [], rpc = {}) {
   const calls = [];
   const answer = (url, init) => {
     for (const [re, r] of over) if (re.test(url)) return r;
-    if (url.includes('publicnode.com')) return rpcAnswer(init.body, rpc);
+    if (url.includes('publicnode.com') || url.includes('chain.robinhood.com')) return rpcAnswer(init.body, rpc);
     const body = (name, status = 200) => ({ status, body: name === null ? '' : text(name) });
     if (url.includes('sourcify.dev')) return body('sourcify_susde.json');
-    if (/blockscout\.com\/api\/v2\/tokens\/0x\w+\/holders/.test(url)) return body('blockscout_holders_susde.json');
-    if (/blockscout\.com\/api\/v2\/tokens\/0x\w+\/counters/.test(url)) return body('blockscout_counters_susde.json');
-    if (/blockscout\.com\/api\/v2\/tokens\/0x\w+$/.test(url)) return body('blockscout_token_susde.json');
-    if (/blockscout\.com\/api\/v2\/addresses\//.test(url)) return body('blockscout_address_susde.json');
-    if (/blockscout\.com\/api\/v2\/transactions\//.test(url)) return body('blockscout_tx_creation.json');
+    if (/blockscout\.com\/(?:\d+\/)?api\/v2\/tokens\/0x\w+\/holders/.test(url)) return body('blockscout_holders_susde.json');
+    if (/blockscout\.com\/(?:\d+\/)?api\/v2\/tokens\/0x\w+\/counters/.test(url)) return body('blockscout_counters_susde.json');
+    if (/blockscout\.com\/(?:\d+\/)?api\/v2\/tokens\/0x\w+(?:\?.*)?$/.test(url)) return body('blockscout_token_susde.json');
+    if (/blockscout\.com\/(?:\d+\/)?api\/v2\/addresses\//.test(url)) return body('blockscout_address_susde.json');
+    if (/blockscout\.com\/(?:\d+\/)?api\/v2\/transactions\//.test(url)) return body('blockscout_tx_creation.json');
     if (url.includes('prices/current')) return body('llama_price_susde.json');
     if (url.includes('llama.fi/chart')) return body('llama_chart_susde.json');
     if (url.endsWith('/info')) return body('gecko_info_susde.json');
@@ -79,7 +79,7 @@ export default {
     for (const v of Object.values(c)) assert.ok(v.llama, 'every listed chain has a price source');
     assert.equal(c[42161].safe, 'arb1');
     assert.ok(!c[143].blockscout && !c[143].explorer && !c[747474].kyber);
-    assert.deepEqual(Object.keys(c).filter(id => c[id].rpc).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 988, 4217, 5042, 8453, 42161], 'public JSON-RPC for the EIP-1967 slots');
+    assert.deepEqual(Object.keys(c).filter(id => c[id].rpc).map(Number).sort((a, b) => a - b), [1, 10, 130, 137, 988, 4217, 4663, 5042, 8453, 42161], 'public JSON-RPC for the EIP-1967 slots');
   }]],
   isCollectorUrl: [['https on the listed hosts and Blockscout instances only', ({ isCollectorUrl: f }) => {
     for (const u of ['https://sourcify.dev/x', 'https://base.blockscout.com/api/v2/tokens/0x1', 'https://etherscan.io/readContract', 'https://api.geckoterminal.com/a', 'https://ethereum-rpc.publicnode.com/']) assert.ok(f(u), u);
@@ -159,6 +159,58 @@ export default {
   }]],
 
   collectTokenData: [
+    ['Robinhood Chain (no Blockscout): name, decimals and supply, the owner and the proxy admin are read over JSON-RPC', async mod => {
+      const text = t => '0x' + '20'.padStart(64, '0') + t.length.toString(16).padStart(64, '0') + Buffer.from(t).toString('hex').padEnd(64, '0');
+      const SAFE = '0x' + 'a'.repeat(40), PROXY_ADMIN = '0x' + 'b'.repeat(40);
+      const rpc = { '0x06fdde03': text('Spark Savings USDG'), '0x313ce567': word('6'), '0x18160ddd': word((13514517459885n).toString(16)), '0x8da5cb5b': word(SAFE),
+        '0xe75235b8': word('2'), '0xa0e67e2b': '0x' + '20'.padStart(64, '0') + '3'.padStart(64, '0') + '0'.repeat(192), undefined: '0x6080604052' };
+      const r = await run(mod, { chainId: 4663, address: '0x' + 'c'.repeat(40), symbol: 'spUSDG' }, [], { ...rpc });
+      const d = r.data;
+      assert.deepEqual([d.identity.name, d.identity.decimals, d.identity.total_supply], ['Spark Savings USDG', 6, '13514517459885']);
+      assert.equal(d.control.controllers.length, 1);
+      assert.deepEqual([d.control.controllers[0].role, d.control.controllers[0].is_contract, d.control.controllers[0].safe, d.control.controllers[0].is_multisig], ['owner', true, { threshold: 2, owner_count: 3 }, true]);
+      assert.ok(r.net.calls.every(u => !u.includes('blockscout.com')), 'no Blockscout request for this chain');
+      const withAdmin = await run(mod, { chainId: 4663, address: '0x' + 'c'.repeat(40), symbol: 'x' }, [], { '0x8da5cb5b': '0x', undefined: '0x' });
+      assert.deepEqual(withAdmin.data.control.controllers, [], 'no owner and no proxy slot: nothing to read');
+      assert.equal(withAdmin.data.identity.name, null);
+    }],
+    ['Robinhood Chain with a PRO key: Blockscout holders and source come from api.blockscout.com/4663, the key is sent but never stored; the owner is still read over JSON-RPC', async mod => {
+      const KEY = 'proapi_' + 'A1b2C3d4E5'.repeat(4), saved = process.env.BLOCKSCOUT_API_KEY;
+      process.env.BLOCKSCOUT_API_KEY = KEY;
+      try {
+        const OWNER_EOA = '0x' + 'd'.repeat(40);
+        const r = await run(mod, { chainId: 4663, address: '0x' + 'c'.repeat(40), symbol: 'x' }, [], { '0x8da5cb5b': word(OWNER_EOA), undefined: '0x' });
+        const pro = r.net.calls.filter(u => u.includes('api.blockscout.com'));
+        assert.ok(pro.length >= 3 && pro.every(u => u.includes('/4663/api/v2/') && u.includes(`apikey=${KEY}`)), 'every PRO request carries the key');
+        assert.ok(pro.some(u => u.includes('/holders')) && !r.net.calls.some(u => u.includes('robinhoodchain.blockscout.com')));
+        assert.ok(r.data.holders.count > 0, 'holders come from the PRO API');
+        assert.equal(JSON.stringify(r.data).includes(KEY), false, 'the key is not part of the stored record');
+        assert.ok(r.data.meta.sources.every(x => !x.url.includes('apikey')));
+        assert.deepEqual([r.data.control.controllers[0].address, r.data.control.controllers[0].role], [OWNER_EOA, 'owner']);
+      } finally {
+        if (saved === undefined) delete process.env.BLOCKSCOUT_API_KEY; else process.env.BLOCKSCOUT_API_KEY = saved;
+      }
+    }],
+    ['a missing or malformed key means no PRO request at all', async mod => {
+      const saved = process.env.BLOCKSCOUT_API_KEY;
+      try {
+        for (const v of [undefined, '', 'not-a-key']) {
+          if (v === undefined) delete process.env.BLOCKSCOUT_API_KEY; else process.env.BLOCKSCOUT_API_KEY = v;
+          const r = await run(mod, { chainId: 4663, address: '0x' + 'c'.repeat(40), symbol: 'x' }, [], { undefined: '0x' });
+          assert.ok(r.net.calls.every(u => !u.includes('blockscout.com')), String(v));
+        }
+      } finally {
+        if (saved === undefined) delete process.env.BLOCKSCOUT_API_KEY; else process.env.BLOCKSCOUT_API_KEY = saved;
+      }
+    }],
+    ['a plain address owner on a JSON-RPC-only chain is a single account, not a contract', async mod => {
+      const OWNER_EOA = '0x' + 'd'.repeat(40);
+      const r = await run(mod, { chainId: 4663, address: '0x' + 'c'.repeat(40), symbol: 'x' }, [], { '0x8da5cb5b': word(OWNER_EOA), undefined: '0x' });
+      const c = r.data.control.controllers[0];
+      assert.deepEqual([c.address, c.is_contract, c.safe, c.safe_checked, c.is_eoa_delegated], [OWNER_EOA, false, null, true, false]);
+      const delegated = await run(mod, { chainId: 4663, address: '0x' + 'c'.repeat(40), symbol: 'x' }, [], { '0x8da5cb5b': word(OWNER_EOA), undefined: '0xef0100' + 'e'.repeat(40) });
+      assert.deepEqual([delegated.data.control.controllers[0].is_contract, delegated.data.control.controllers[0].is_eoa_delegated], [false, true]);
+    }],
     ['sUSDe: every group is filled from the sources and the status is ok', async mod => {
       const r = await run(mod, { chainId: 1, address: SUSDE.toUpperCase().replace('0X', '0x'), symbol: 'sUSDe' });
       const d = r.data;

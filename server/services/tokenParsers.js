@@ -327,6 +327,34 @@ export function parseRpcUint(j) {
   return v <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : null;
 }
 
+/** Text of a name()/symbol() call result: an ABI string, or a bytes32 for old tokens; null for an error, "0x" or junk. */
+export function parseRpcString(j) {
+  const r = obj(j).result;
+  if (typeof r !== 'string' || !/^0x([0-9a-fA-F]{2})+$/.test(r)) return null;
+  const b = Buffer.from(r.slice(2), 'hex');
+  let raw = null;
+  if (b.length === 32) raw = b.toString('utf8');
+  else if (b.length >= 64 && BigInt('0x' + b.subarray(0, 32).toString('hex')) === 32n) {
+    const len = Number(BigInt('0x' + b.subarray(32, 64).toString('hex')));
+    if (len > 0 && len <= 200 && b.length >= 64 + len) raw = b.subarray(64, 64 + len).toString('utf8');
+  }
+  return raw === null ? null : cleanText(raw.replace(/\0/g, ''), 100);
+}
+
+/** Unsigned integer of a call result as a decimal string (a total supply does not fit a number); null for an error, "0x" or junk. */
+export function parseRpcBigUint(j) {
+  const w = rpcWord(j);
+  return w ? BigInt(w).toString() : null;
+}
+
+/** Length of a dynamic array in a call result (getOwners of a Safe); null for an error or junk. */
+export function parseRpcArrayLength(j) {
+  const r = obj(j).result;
+  if (typeof r !== 'string' || !/^0x[0-9a-fA-F]{128,}$/.test(r)) return null;
+  const n = BigInt('0x' + r.slice(66, 130));
+  return n <= 1000n ? Number(n) : null;
+}
+
 // --- ERC-4626 share price ---------------------------------------------------------------------------------------
 
 /**

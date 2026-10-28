@@ -7,8 +7,8 @@
   <meta name="description" content="Where the data on CheckYourMorpho comes from, how each number is calculated and what the audit does not check.">
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk15">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk15">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk16">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk16">
 </head>
 <body class="about-body">
   <div class="about-shell">
@@ -44,7 +44,7 @@
       <ul class="about-list">
         <li>Sourcify and Blockscout for contract verification, proxy type, deployer and functions in the ABI.</li>
         <li>Etherscan, Basescan and Arbiscan "Read contract" pages for owner and admin addresses, plus Safe Transaction Service to see whether an admin is a multisig.</li>
-        <li>Public JSON-RPC nodes for the EIP-1967 proxy admin slot and timelock delays.</li>
+        <li>Public JSON-RPC nodes for the EIP-1967 proxy admin slot and timelock delays. On chains without a reachable explorer (Robinhood Chain) they also give the token's name, supply, owner and whether the owner is a Safe.</li>
         <li>DefiLlama and GeckoTerminal for prices, holders and DEX pools; KyberSwap for swap quotes of $100K and $1M.</li>
         <li>Pendle for principal tokens, app.rwa.xyz for tokenised real-world assets and the Chainlink reference directory for price feeds.</li>
       </ul>
@@ -135,6 +135,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk15"></script>
+  <script src="js/about.js?v=20261028_risk16"></script>
 </body>
 </html>
