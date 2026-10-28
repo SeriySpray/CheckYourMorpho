@@ -49,6 +49,9 @@ const DOM = {
   // Master Vault Explorer Terminal (Right-side 440px)
   vaultExplorerWidget: document.getElementById('vault-explorer-widget'),
   explorerCount: document.getElementById('explorer-count'),
+  explorerSync: document.getElementById('explorer-sync'),
+  collateralFacts: document.getElementById('collateral-facts'),
+  collateralFactsGrid: document.getElementById('collateral-facts-grid'),
   explorerTinyToggle: document.getElementById('explorer-tiny-toggle'),
   explorerTinyCount: document.getElementById('explorer-tiny-count'),
   modalVerdictSummary: document.getElementById('modal-verdict-summary'),
@@ -245,6 +248,8 @@ function renderHeaderStatus() {
   DOM.headerStatusText.textContent = Number.isFinite(ms)
     ? `Synced ${ms < 60000 ? 'just now' : formatDataAge(lastSyncIso)}`
     : `Live: ${allVaults.length} Vaults`;
+  // Phones hide the header label: the same text sits beside the vault count
+  if (DOM.explorerSync) DOM.explorerSync.textContent = Number.isFinite(ms) ? DOM.headerStatusText.textContent : '';
 }
 
 /** "5m ago" style age of an ISO timestamp, or '' when it cannot be parsed. */
@@ -1998,41 +2003,135 @@ function tokenFactsPlaceholder(chainId, address) {
   return `<div class="token-facts" data-chain="${escapeHtml(chainId)}" data-address="${escapeHtml(address)}">token data loading</div>`;
 }
 
+const joinList = items => (items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}` : items[0] ?? '');
+const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+const formatWait = sec => (sec >= 86400 && sec % 86400 === 0 ? plural(sec / 86400, 'day') : sec >= 3600 ? plural(Math.round(sec / 3600), 'hour') : plural(Math.max(1, Math.round(sec / 60)), 'minute'));
+const roleLabel = r => (r === 'proxy_admin' ? 'proxy admin (it can change the code)' : String(r).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/,/g, ' and ').toLowerCase());
+/** Pools holding less than this are not a place to sell in size. */
+const THIN_POOLS_USD = 10000;
+/** Where the pool list is cut off by the data source: the count and the sum are then a lower bound. */
+const POOLS_LISTED_MAX = 20;
+
 /**
- * Compact facts of one token: what the sources state, no rating. Each line is skipped when its values are unknown (null).
+ * What the collected data says about one token, as plain sentences grouped under headings, plus a one-line summary.
+ * A fact that is missing is named as missing instead of skipped, so silence is never read as "fine". Nothing is rated.
  * @param {object|null} t Response of the token API; null when nothing has been collected yet
+ * @returns {{summary: string, html: string, hasData: boolean}}
  */
-function tokenFactsHtml(t) {
-  if (!t || !t.data) return 'no token data collected yet';
+function describeTokenFacts(t) {
+  if (!t || !t.data) return { summary: 'No data collected yet', html: '<p>No facts have been collected for this token yet.</p>', hasData: false };
   const d = t.data;
   const fn = d.contract?.fn || {};
-  const can = [['mint', 'mint'], ['blacklist', 'blacklist'], ['freeze', 'freeze'], ['pause', 'pause'], ['upgrade', 'upgrade']].filter(([k]) => fn[k] === true).map(([, l]) => l);
-  const ctrl = d.control?.controllers?.[0];
-  const owner = ctrl && `${ctrl.role}: ${ctrl.safe ? `Safe ${ctrl.safe.threshold} of ${ctrl.safe.owner_count}` : ctrl.is_contract ? 'contract' : 'single key'}`;
+  const can = [['mint', 'create new tokens'], ['burn', 'destroy tokens'], ['blacklist', 'block addresses'], ['freeze', 'freeze balances'], ['pause', 'pause all transfers'], ['upgrade', 'change the code']].filter(([k]) => fn[k] === true).map(([, l]) => l);
+  const hasContract = d.contract != null;
+  const verified = !!(d.contract?.sourcify_match || d.contract?.blockscout_verified);
+  const proxy = d.contract?.is_proxy;
+  const contract = [
+    verified ? 'The contract code is public and has been checked against its source.' : hasContract ? 'The source code is not verified, so what the contract can do has not been confirmed.' : null,
+    proxy === true ? 'Its code can be swapped out later.' : proxy === false && verified ? 'Its code cannot be swapped out.' : null,
+    can.length ? `Whoever holds the right keys can ${joinList(can)}.` : null
+  ].filter(Boolean);
+  const ctrls = d.control?.controllers || [];
+  const controllers = ctrls.slice(0, 3).map(c => {
+    const named = c.name && !c.safe ? (/proxy/i.test(c.name) ? c.implementation_names?.[0] : c.name) : null;
+    const kind = c.safe ? `a shared wallet where ${c.safe.threshold} of ${c.safe.owner_count} people must approve`
+      : c.is_multisig ? 'a multisig wallet'
+        : c.is_contract ? `a smart contract${c.timelock_delay_sec ? ` that makes every change wait ${formatWait(c.timelock_delay_sec)} first` : ''}`
+          : 'a single address (not a contract or a multisig), and who holds this key is not known';
+    return `The ${roleLabel(c.role)} is ${named ? `${named}, ` : ''}${kind}.`;
+  });
+  if (!ctrls.length && (can.length || proxy === true)) controllers.push('Who holds these rights was not found.');
+  const h = d.holders || {};
+  const fewHolders = h.count != null && h.count < 10;
+  const allInProtocols = h.top10_pct >= 99.95 && h.top10_nonprotocol_pct != null && h.top10_nonprotocol_pct < 0.05;
+  const holders = [
+    h.count != null ? (fewHolders ? `Only ${plural(h.count, 'wallet')} hold it.` : `${Number(h.count).toLocaleString('en-US')} wallets hold it.`) : null,
+    fewHolders || h.top10_pct == null ? null
+      : allInProtocols ? 'Almost the whole supply sits in protocol contracts, such as lending pools.'
+        : `The 10 biggest holders own ${h.top10_pct.toFixed(1)}% of the supply${h.top10_contracts ? `, but ${h.top10_contracts} of them ${h.top10_contracts === 1 ? 'is a protocol contract' : 'are protocol contracts'}` : ''}.`,
+    fewHolders || allInProtocols || h.top10_nonprotocol_pct == null ? null : `Leaving out protocol contracts, the 10 biggest remaining holders own ${h.top10_nonprotocol_pct.toFixed(1)}%.`,
+    h.morpho_blue_pct != null ? `${h.morpho_blue_pct.toFixed(1)}% of the supply is deposited in Morpho Blue.` : null
+  ].filter(Boolean);
   const swapM = d.liquidity?.kyber?.['1000000'];
   // Kyber refuses some $1M quotes outright (4009 "amountIn is greater than max allowed"); the $100K quote then still tells the depth
   const [swap, size] = swapM?.status === 'ok' || swapM?.status === 'no_route' ? [swapM, '$1M'] : [d.liquidity?.kyber?.['100000'], '$100K'];
-  const lines = [
-    [d.contract?.sourcify_match || d.contract?.blockscout_verified ? 'source verified' : null,
-      d.holders?.top10_pct != null ? `top 10 holders ${d.holders.top10_pct}%` : null,
-      swap?.status === 'ok' && swap.price_impact_pct != null ? `${size} swap impact ${swap.price_impact_pct}%` : swap?.status === 'no_route' ? 'no swap route' : null],
-    [can.length ? `can ${can.join(', ')}` : null, owner],
-    [d.rwa?.issuer ? `issuer ${d.rwa.issuer}` : null, d.pendle?.days_to_expiry != null ? `expires in ${d.pendle.days_to_expiry} days` : null]
-  ].map(parts => parts.filter(Boolean)).filter(parts => parts.length);
-  const stamp = `data ${Math.round((t.coverage ?? 0) * 100)}%, ${new Date((t.collectedAt || 0) * 1000).toISOString().slice(0, 10)}${t.stale ? ', stale' : ''}`;
-  return [...lines.map(parts => escapeHtml(parts.join(' · '))), `<span style="opacity:0.7;">${escapeHtml(stamp)}</span>`].join('<br>');
+  const pools = d.liquidity?.pools_count;
+  const poolsUsd = d.liquidity?.total_reserve_usd;
+  const price = Number(d.price?.usd);
+  const impact = swap?.status === 'ok' ? swap.price_impact_pct : null;
+  const market = [
+    d.price?.usd != null ? `It trades at $${price.toLocaleString('en-US', { maximumFractionDigits: price >= 100 ? 2 : 4 })}.` : null,
+    !pools ? null
+      : poolsUsd < THIN_POOLS_USD ? `Almost no trading liquidity: its ${plural(pools, 'pool')} ${pools === 1 ? 'holds' : 'hold'} only ${formatCurrency(poolsUsd)}.`
+        : pools >= POOLS_LISTED_MAX ? `Its ${POOLS_LISTED_MAX} biggest pools hold ${formatCurrency(poolsUsd)}; there may be more.`
+          : `It trades in ${plural(pools, 'pool')} holding ${formatCurrency(poolsUsd)}.`,
+    impact != null ? `Selling ${size} worth would move the price by about ${impact}%${impact >= 5 ? ', so it is hard to sell in size' : ''}.` : null,
+    swap?.status === 'no_route' ? 'KyberSwap found no way to swap it, so it may not be easy to sell on exchanges.' : null,
+    d.rwa?.issuer ? `It is issued by ${d.rwa.issuer}.` : null,
+    d.pendle?.days_to_expiry != null ? `It expires in ${d.pendle.days_to_expiry} days.` : null
+  ].filter(Boolean);
+  const missing = [h.count == null && h.top10_pct == null ? 'holders' : null, d.price?.usd == null ? 'price' : null, !pools ? 'trading liquidity' : null,
+    !ctrls.length && !can.length && proxy == null ? 'who controls it' : null].filter(Boolean);
+  const section = (title, sentences) => (sentences.length ? `<h4>${title}</h4><p>${escapeHtml(sentences.join(' '))}</p>` : '');
+  const date = new Date((t.collectedAt || 0) * 1000).toISOString().slice(0, 10);
+  const pct = Math.round((t.coverage ?? 0) * 100);
+  const stamp = `${pct < 90 ? `Partial data: ${pct}% of the checks returned results. ` : ''}Collected ${date}${t.stale ? ' (out of date)' : ''}`;
+  const ctrl = ctrls[0];
+  const brief = [
+    verified ? 'Public code' : hasContract ? 'Source code not verified' : null,
+    ctrl ? (ctrl.safe ? `${ctrl.safe.threshold} of ${ctrl.safe.owner_count} must approve changes` : ctrl.is_multisig ? 'multisig control' : ctrl.is_contract ? (ctrl.timelock_delay_sec ? 'changes are delayed' : 'run by a contract') : 'a single address controls it')
+      : can.length || proxy === true ? 'who controls it is unknown' : null,
+    can.length ? `can ${can[0]}` : null,
+    fewHolders ? `only ${plural(h.count, 'holder')}` : h.top10_nonprotocol_pct != null && !allInProtocols ? `top holders outside protocols own ${h.top10_nonprotocol_pct.toFixed(0)}%` : h.top10_pct != null && h.top10_nonprotocol_pct == null ? `10 holders own ${h.top10_pct.toFixed(0)}%` : null
+  ].filter(Boolean).slice(0, 3);
+  const body = [section('Contract', contract), section('Who can change it', controllers), section('Holders', holders), section('Market', market), section('Not found', missing.length ? [`${joinList(missing).replace(/^./, c => c.toUpperCase())} could not be found.`] : [])].join('');
+  if (!contract.length && !controllers.length && !holders.length && !market.length) return { summary: t.stale ? 'Old data, almost nothing found' : 'Almost nothing found yet', html: `<p>Too little was found to describe this token.</p><div class="stamp">${escapeHtml(stamp)}</div>`, hasData: false };
+  return { summary: brief.join(', ') || 'See details', html: `${body}<div class="stamp">${escapeHtml(stamp)}</div>`, hasData: true };
 }
 
-/** Fills the token slots found under `root`. A failed request leaves a short note, never an error. */
+/** Fills the token slots found under `root`; resolves when all are filled. A failed request leaves a short note, never an error. */
 function loadTokenFacts(root) {
-  root.querySelectorAll('.token-facts').forEach(el => {
+  return Promise.all([...root.querySelectorAll('.token-facts')].map(el => {
     const key = `${el.dataset.chain}/${el.dataset.address}`;
     if (!tokenFactsCache.has(key)) {
       tokenFactsCache.set(key, apiFetch(`/api/tokens/${key}`)
         .then(r => (r.status === 404 ? null : r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .catch(() => { tokenFactsCache.delete(key); return undefined; }));
     }
-    tokenFactsCache.get(key).then(t => { el.innerHTML = t === undefined ? 'token data unavailable' : tokenFactsHtml(t); });
+    return tokenFactsCache.get(key).then(t => {
+      const facts = t === undefined ? { summary: 'Unavailable right now', html: '<p>The token data could not be loaded.</p>', hasData: false } : describeTokenFacts(t);
+      el.innerHTML = facts.html;
+      const item = el.parentElement;
+      const sum = item?.querySelector?.('.cf-sum');
+      if (sum) sum.textContent = facts.summary;
+      item?.classList?.toggle('cf-empty', !facts.hasData);
+    });
+  }));
+}
+
+let collateralFactsRender = 0;
+
+/** One collapsible row per distinct collateral token under the markets table; loadTokenFacts() fills the rows. */
+function renderCollateralFacts(chainId, marketRows) {
+  if (!DOM.collateralFacts) return;
+  const seen = new Set();
+  const rows = marketRows.filter(a => {
+    const key = String(a.collateralAddress ?? '').toLowerCase();
+    if (!tokenFactsPlaceholder(chainId, key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(a => `<details class="cf-item"><summary><strong>${escapeHtml(a.collateralSymbol || 'Token')}</strong><span class="cf-sum">Loading</span></summary>${tokenFactsPlaceholder(chainId, String(a.collateralAddress).toLowerCase()).replace('class="token-facts"', 'class="token-facts cf-body"')}</details>`);
+  DOM.collateralFacts.hidden = rows.length === 0;
+  DOM.collateralFactsGrid.innerHTML = rows.join('');
+  const grid = DOM.collateralFactsGrid;
+  const id = ++collateralFactsRender;
+  loadTokenFacts(grid).then(() => {
+    if (id !== collateralFactsRender) return;
+    // Tokens with facts first, in table order; the first one is open
+    const items = Array.from(grid.children ?? []);
+    items.filter(i => i.classList?.contains('cf-empty')).forEach(i => grid.appendChild(i));
+    const first = items.find(i => !i.classList?.contains('cf-empty'));
+    if (first) first.open = true;
   });
 }
 
@@ -2064,7 +2163,8 @@ function populateAuditModal(data, isQuietRefresh = false) {
   const mqiVal = verdict.mqi?.mqiPercent ?? 100;
   setRiskPill(summarizeFlags(verdict.redFlags));
   if (DOM.modalVerdictSummary) {
-    DOM.modalVerdictSummary.textContent = verdict.summary || '';
+    // "Exit Liquidity" always starts its own line instead of splitting between "Exit" and "Liquidity"
+    DOM.modalVerdictSummary.textContent = (verdict.summary || '').replace(/\.\s+(Exit Liquidity)/, '.\n$1');
     DOM.modalVerdictSummary.hidden = !verdict.summary;
   }
 
@@ -2197,7 +2297,9 @@ function populateAuditModal(data, isQuietRefresh = false) {
   }
   if (marketRows.length === 0) {
     DOM.allocationsTbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">${idleRows.length ? 'No collateral markets: the capital is held in the idle reserve.' : 'No active market allocations recorded.'}</td></tr>`;
-  } else {
+  }
+  renderCollateralFacts(v.chainId, marketRows);
+  if (marketRows.length) {
     marketRows.forEach(a => {
       const isMarketFlagged = a.isFlagged === true || (a.isFlagged === undefined && !a.isClean && ((a.supplyAssetsUsd || 0) > ((v.totalAssetsUsd || 0) * 0.01)));
       const statusBadge = isMarketFlagged
@@ -2218,7 +2320,6 @@ function populateAuditModal(data, isQuietRefresh = false) {
       `;
       DOM.allocationsTbody.appendChild(tr);
     });
-    loadTokenFacts(DOM.allocationsTbody);
   }
 }
 

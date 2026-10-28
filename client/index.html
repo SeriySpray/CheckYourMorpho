@@ -6,8 +6,8 @@
   <title>CheckYourMorpho — MetaMorpho Vault Risk Auditor</title>
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk11">
-  <link rel="stylesheet" href="css/components.css?v=20261028_risk11">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk15">
+  <link rel="stylesheet" href="css/components.css?v=20261028_risk15">
 </head>
 <body>
   <a class="about-pill" href="about.html" aria-label="About this site: data sources and how each number is calculated"><span class="about-pill-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 7.2v4.3M8 4.6v.1"></path></svg></span><span>About</span></a>
@@ -50,7 +50,7 @@
 
     <div class="explorer-header">
       <h1 class="explorer-heading">Vaults Explorer</h1>
-      <span id="explorer-count" class="explorer-count"><span class="sk sk-count" aria-hidden="true"></span> Vaults</span>
+      <div class="explorer-countline"><span id="explorer-count" class="explorer-count"><span class="sk sk-count" aria-hidden="true"></span> Vaults</span><span id="explorer-sync" class="explorer-sync" role="status"></span></div>
       <button type="button" id="explorer-tiny-toggle" class="tiny-switch hidden" role="switch" aria-checked="false" title="Include vaults with less than $1K in deposits">
         <span class="tiny-switch-track" aria-hidden="true"></span>
         <span class="tiny-switch-label">Under $1K</span>
@@ -414,6 +414,10 @@
               <tbody id="allocations-tbody"></tbody>
             </table>
           </div>
+          <div class="collateral-facts" id="collateral-facts" hidden>
+            <div class="collateral-facts-title">Collateral facts</div>
+            <div class="collateral-facts-grid" id="collateral-facts-grid"></div>
+          </div>
           <div class="idle-reserve" id="idle-reserve" hidden>
             <span class="idle-reserve-label">Idle reserve</span>
             <span class="info-circle-wrap">
@@ -495,6 +499,6 @@
   </aside>
 
   <!-- JavaScript Modules -->
-  <script type="module" src="js/app.js?v=20261028_risk11"></script>
+  <script type="module" src="js/app.js?v=20261028_risk15"></script>
 </body>
 </html>

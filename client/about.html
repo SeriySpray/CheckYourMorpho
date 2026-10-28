@@ -7,8 +7,8 @@
   <meta name="description" content="Where the data on CheckYourMorpho comes from, how each number is calculated and what the audit does not check.">
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk11">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk11">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk15">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk15">
 </head>
 <body class="about-body">
   <div class="about-shell">
@@ -38,7 +38,7 @@
       <h2>Where the data comes from</h2>
       <p>Vaults, markets and allocations come from the public Morpho GraphQL API at api.morpho.org. The server calls it 5 seconds after start and then every 3 minutes. It reads every vault that Morpho marks as listed, on every chain the API returns, for both MetaMorpho (V1) and Morpho Vaults V2.</p>
       <p>A V2 vault that holds a V1 vault through a MetaMorpho adapter is expanded into that V1 vault's markets, pro rata, so the audit sees the real markets behind it. Adapters of other kinds are not expanded and are reported as unresolved.</p>
-      <p>Every number on a vault page is calculated from the stored rows when you open it. Nothing is rated by hand. The vault list refreshes every 60 seconds, and the line under the vault count shows how old the last sync is.</p>
+      <p>Every number on a vault page is calculated from the stored rows when you open it. Nothing is rated by hand. The vault list refreshes every 60 seconds, and the age of the last sync is shown at the top right, and beside the vault count on a phone.</p>
       <h3>Collateral token facts</h3>
       <p>A separate background job collects public facts about each collateral token and keeps one record per token. It never judges them: a value it could not find stays empty and is not read as "fine". The sources are:</p>
       <ul class="about-list">
@@ -48,7 +48,7 @@
         <li>DefiLlama and GeckoTerminal for prices, holders and DEX pools; KyberSwap for swap quotes of $100K and $1M.</li>
         <li>Pendle for principal tokens, app.rwa.xyz for tokenised real-world assets and the Chainlink reference directory for price feeds.</li>
       </ul>
-      <p>These pages can be wrong, a day old or temporarily unavailable. The token facts are shown next to each collateral for context. They do not change any flag or score.</p>
+      <p>These pages can be wrong, a day old or temporarily unavailable. The token facts are shown in the Collateral facts block under the markets table, for context. They do not change any flag or score.</p>
     </section>
 
     <section id="list">
@@ -135,6 +135,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk11"></script>
+  <script src="js/about.js?v=20261028_risk15"></script>
 </body>
 </html>

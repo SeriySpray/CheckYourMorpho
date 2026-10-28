@@ -1632,7 +1632,7 @@ const base = {
       assert.equal(D.modalGrade.textContent, '2'); assert.equal(D.modalScore.textContent, 'Worst: Critical');
       assert.equal(D.modalVerdictSummary.hidden, true);
       f({ ...audit(), verdict: { ...audit().verdict, summary: 'MQI: 100%. Exit Liquidity: 40%.' } });
-      assert.equal(D.modalVerdictSummary.textContent, 'MQI: 100%. Exit Liquidity: 40%.'); assert.equal(D.modalVerdictSummary.hidden, false);
+      assert.equal(D.modalVerdictSummary.textContent, 'MQI: 100%.\nExit Liquidity: 40%.'); assert.equal(D.modalVerdictSummary.hidden, false);
     }),
     T('лише неперевірений капітал: сума поза оцінкою', ({ populateAuditModal: f, __state: s }) => {
       f(audit({}, { mqi: { mqiPercent: 100, isAllClean: false, unverifiedPercent: 3, unverifiedAssetsUsd: 300000 } }));
@@ -1706,6 +1706,21 @@ const base = {
       assert.equal(s.DOM.modalAssetsHuman.textContent, '0.00 ');
     }),
   ],
+  renderCollateralFacts: [
+    T('одна картка на токен без повторів, без картки для некоректної адреси, блок ховається без карток', ({ renderCollateralFacts: f, __state: s }) => {
+      s.DOM.collateralFacts = makeElement();
+      s.DOM.collateralFactsGrid = makeElement();
+      s.DOM.collateralFactsGrid.querySelectorAll = () => [];
+      const a = '0x' + 'A'.repeat(40);
+      f(1, [{ collateralSymbol: 'USDe', collateralAddress: a }, { collateralSymbol: 'USDe', collateralAddress: a.toLowerCase() }, { collateralSymbol: 'X', collateralAddress: null }]);
+      assert.equal(s.DOM.collateralFacts.hidden, false);
+      assert.equal(s.DOM.collateralFactsGrid.innerHTML.match(/cf-item\"/g).length, 1);
+      assert.ok(s.DOM.collateralFactsGrid.innerHTML.includes('USDe'));
+      f(1, [{ collateralSymbol: 'X', collateralAddress: null }]);
+      assert.equal(s.DOM.collateralFacts.hidden, true);
+      assert.equal(s.DOM.collateralFactsGrid.innerHTML, '');
+    }),
+  ],
   tokenFactsPlaceholder: [
     T('слот лише для коректної адреси токена, значення екрануються', ({ tokenFactsPlaceholder: f }) => {
       const a = '0x' + 'b'.repeat(40);
@@ -1714,38 +1729,63 @@ const base = {
       assert.ok(f('<b>', a).includes('data-chain="&lt;b&gt;"'));
     }),
   ],
-  tokenFactsHtml: [
-    T('без запису: коротка примітка', ({ tokenFactsHtml: f }) => {
-      assert.equal(f(null), 'no token data collected yet'); assert.equal(f({}), 'no token data collected yet');
+  describeTokenFacts: [
+    T('без запису: примітка і hasData false', ({ describeTokenFacts: f }) => {
+      for (const v of [null, {}]) { const r = f(v); assert.equal(r.summary, 'No data collected yet'); assert.equal(r.hasData, false); }
     }),
-    T('факти з джерел: верифікація, holders, swap, можливості контракту, власник, дата і покриття', ({ tokenFactsHtml: f }) => {
-      const html = f({ coverage: 0.874, collectedAt: 1792660000, stale: false, data: {
-        contract: { sourcify_match: 'exact_match', fn: { mint: true, blacklist: true, freeze: false, pause: null, upgrade: true } },
-        holders: { top10_pct: 72.97 }, liquidity: { kyber: { 1000000: { status: 'ok', price_impact_pct: 0.031 } } },
-        control: { controllers: [{ role: 'owner', is_contract: true, safe: { threshold: 6, owner_count: 10 } }] },
-        rwa: { issuer: 'Midas' }, pendle: { days_to_expiry: 433 } } });
-      assert.ok(html.includes('source verified · top 10 holders 72.97%'));
-      assert.ok(html.includes('$1M swap impact 0.031%')); assert.ok(html.includes('can mint, blacklist, upgrade')); assert.ok(html.includes('owner: Safe 6 of 10'));
-      assert.ok(html.includes('issuer Midas · expires in 433 days')); assert.ok(html.includes('data 87%, 2026-10-22')); assert.doesNotMatch(html, /stale/);
+    T('факти складаються в речення за розділами, коротка фраза і штамп даних', ({ describeTokenFacts: f }) => {
+      const r = f({ coverage: 0.95, collectedAt: 1792660000, stale: false, data: {
+        contract: { sourcify_match: 'exact_match', is_proxy: false, fn: { mint: true, burn: true, blacklist: false, freeze: false, pause: null, upgrade: true } },
+        holders: { count: 47161, top10_pct: 94.499, top10_contracts: 4, top10_nonprotocol_pct: 17.541, morpho_blue_pct: 1.138 },
+        liquidity: { pools_count: 8, total_reserve_usd: 46366753, kyber: { 1000000: { status: 'ok', price_impact_pct: 0.031 } } },
+        control: { controllers: [{ role: 'owner', name: 'Timelock', is_contract: true, timelock_delay_sec: 86400 }, { role: 'admin', is_contract: true, safe: { threshold: 6, owner_count: 10 } }] },
+        price: { usd: 80392.589, market_cap_usd: 4540557194 }, rwa: { issuer: 'Midas' }, pendle: { days_to_expiry: 433 } } });
+      assert.equal(r.hasData, true);
+      for (const x of ['The contract code is public', 'Its code cannot be swapped out', 'can create new tokens, destroy tokens and change the code', 'The owner is Timelock, a smart contract that makes every change wait 1 day first',
+        'The admin is a shared wallet where 6 of 10 people must approve', '47,161 wallets hold it', 'The 10 biggest holders own 94.5% of the supply, but 4 of them are protocol contracts',
+        'Leaving out protocol contracts, the 10 biggest remaining holders own 17.5%', '1.1% of the supply is deposited in Morpho Blue', 'It trades at $80,392.59', 'It trades in 8 pools holding',
+        'Selling $1M worth would move the price by about 0.031%.', 'It is issued by Midas', 'It expires in 433 days', 'Collected 2026-10-22']) assert.ok(r.html.includes(x), x);
+      assert.doesNotMatch(r.html, /out of date|Partial|Not found|market cap/);
+      assert.equal(r.summary, 'Public code, changes are delayed, can create new tokens');
     }),
-    T('невідомі значення пропускаються, no_route і single key читаються прямо, stale і чужий HTML екранується', ({ tokenFactsHtml: f }) => {
-      const html = f({ coverage: 0.1, collectedAt: 0, stale: true, data: { contract: { fn: {} }, holders: {}, liquidity: { kyber: { 1000000: { status: 'no_route' } } },
-        control: { controllers: [{ role: '<b>', is_contract: false, safe: null }] } } });
-      assert.ok(html.includes('no swap route')); assert.ok(html.includes('&lt;b&gt;: single key')); assert.doesNotMatch(html, /top 10|source verified|can /);
-      assert.ok(html.includes('data 10%, 1970-01-01, stale'));
-      assert.ok(f({ data: { contract: {}, control: { controllers: [{ role: 'admin', is_contract: true }] } } }).includes('admin: contract'));
+    T('чого нема, про те сказано прямо: не перевірено, невідомий власник адреси, немає даних, 20 пулів як нижня межа, тонка ліквідність', ({ describeTokenFacts: f }) => {
+      const r = f({ coverage: 0.5, collectedAt: 0, stale: true, data: { contract: { is_proxy: true, fn: { upgrade: true } }, holders: { count: 7, top10_pct: 97.5 },
+        liquidity: { pools_count: 20, total_reserve_usd: 5e6, kyber: { 1000000: { status: 'ok', price_impact_pct: 41.3 } } },
+        control: { controllers: [{ role: 'proxy_admin', is_contract: false, safe: null }] } } });
+      for (const x of ['The source code is not verified', 'Its code can be swapped out later', 'The proxy admin (it can change the code) is a single address (not a contract or a multisig), and who holds this key is not known',
+        'Only 7 wallets hold it', 'Its 20 biggest pools hold $5.00M; there may be more', 'so it is hard to sell in size']) assert.ok(r.html.includes(x), x);
+      assert.doesNotMatch(r.html, /97\.5|The 10 biggest/); assert.ok(r.html.includes('Price could not be found') || r.html.includes('Price and'));
+      assert.ok(r.html.includes('Partial data: 50% of the checks returned results. Collected 1970-01-01 (out of date)'));
+      assert.equal(r.summary, 'Source code not verified, a single address controls it, can change the code');
+      const none = f({ coverage: 1, collectedAt: 0, data: { contract: { sourcify_match: 'match', fn: { mint: true } }, control: { controllers: [] } } });
+      assert.ok(none.html.includes('Who holds these rights was not found')); assert.match(none.summary, /who controls it is unknown/);
+      const thin = f({ data: { liquidity: { pools_count: 1, total_reserve_usd: 0.4 } } });
+      assert.ok(thin.html.includes('Almost no trading liquidity: its 1 pool holds only $0.40'));
     }),
-    T('$1M відхилено Kyber: показується $100K, а без жодного котирування рядка немає', ({ tokenFactsHtml: f }) => {
+    T('невідомі значення пропускаються, no_route, чужий HTML екранується, увесь запас у протоколах', ({ describeTokenFacts: f }) => {
+      const r = f({ coverage: 0.9, collectedAt: 0, data: { contract: { fn: {} }, holders: { count: 50, top10_pct: 100, top10_nonprotocol_pct: 0 }, liquidity: { kyber: { 1000000: { status: 'no_route' } } },
+        control: { controllers: [{ role: '<b>', is_contract: true, name: 'Vault<i>', safe: null }] } } });
+      assert.ok(r.html.includes('KyberSwap found no way to swap it')); assert.ok(r.html.includes('The &lt;b&gt; is Vault&lt;i&gt;, a smart contract.'));
+      assert.ok(r.html.includes('Almost the whole supply sits in protocol contracts')); assert.doesNotMatch(r.html, /100\.0|code is public/);
+      assert.equal(f({ coverage: 1, collectedAt: 0, data: {} }).hasData, false);
+      assert.equal(f({ coverage: 0, collectedAt: 0, stale: true, data: {} }).summary, 'Old data, almost nothing found');
+    }),
+    T('назва проксі замінюється реалізацією, а мультисиг не Safe читається як multisig', ({ describeTokenFacts: f }) => {
+      const r = f({ data: { control: { controllers: [{ role: 'blacklister', name: 'UUPSProxy', implementation_names: ['Blacklister'], is_contract: true }, { role: 'accessControl', is_contract: true, is_multisig: true }] } } });
+      assert.ok(r.html.includes('The blacklister is Blacklister, a smart contract.')); assert.ok(r.html.includes('The access control is a multisig wallet.'));
+    }),
+    T('$1M відхилено Kyber: показується $100K, а без жодного котирування речення немає', ({ describeTokenFacts: f }) => {
       const kyber = big => ({ data: { liquidity: { kyber: { 1000000: big, 100000: { status: 'ok', price_impact_pct: 77.5 } } } } });
-      assert.ok(f(kyber({ status: 'error', reason: '4009 amountIn is greater than max allowed' })).includes('$100K swap impact 77.5%'));
-      assert.doesNotMatch(f(kyber({ status: 'ok', price_impact_pct: 0.2 })), /\$100K/);
-      assert.doesNotMatch(f({ data: { liquidity: { kyber: { 1000000: { status: 'error' }, 100000: { status: 'error' } } } } }), /swap/);
+      assert.ok(f(kyber({ status: 'error', reason: '4009 amountIn is greater than max allowed' })).html.includes('Selling $100K worth would move the price by about 77.5%, so it is hard to sell in size'));
+      assert.doesNotMatch(f(kyber({ status: 'ok', price_impact_pct: 0.2 })).html, /\$100K/);
+      assert.doesNotMatch(f({ data: { liquidity: { kyber: { 1000000: { status: 'error' }, 100000: { status: 'error' } } } } }).html, /Selling/);
     }),
   ],
   loadTokenFacts: [
-    T('заповнює слоти, один запит на токен, 404 - примітка, помилка - unavailable без кешу', async ({ loadTokenFacts: f }, env) => {
+    T('заповнює слоти й короткі фрази, один запит на токен, 404 і помилка читаються, помилка не кешується', async ({ loadTokenFacts: f }, env) => {
       env.quiet();
-      const slot = (chain, address) => Object.assign(fakeNode(), { dataset: { chain, address } });
+      const slot = (chain, address) => { const sum = { textContent: '' }; const cls = new Set(); return Object.assign(fakeNode(), { dataset: { chain, address }, sum, cls,
+        parentElement: { querySelector: () => sum, classList: { toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)) } } }); };
       const A = '0x' + 'a'.repeat(40), B = '0x' + 'b'.repeat(40), C = '0x' + 'c'.repeat(40);
       const [s1, s2, s3, s4] = [slot('1', A), slot('1', A), slot('1', B), slot('1', C)];
       let failC = true;
@@ -1754,14 +1794,13 @@ const base = {
         if (url.endsWith(C) && failC) return { status: 500, ok: false };
         return { status: 200, ok: true, json: async () => ({ coverage: 0.5, collectedAt: 1792660000, stale: false, data: { holders: { top10_pct: 10 } } }) };
       });
-      f(fakeNode({ '.token-facts': [s1, s2, s3, s4] }));
-      await new Promise(r => setImmediate(r));
+      await f(fakeNode({ '.token-facts': [s1, s2, s3, s4] }));
       assert.deepEqual([...env.fetched].sort(), [`/api/tokens/1/${A}`, `/api/tokens/1/${B}`, `/api/tokens/1/${C}`]);
-      assert.ok(s1.innerHTML.includes('top 10 holders 10%') && s2.innerHTML === s1.innerHTML);
-      assert.equal(s3.innerHTML, 'no token data collected yet'); assert.equal(s4.innerHTML, 'token data unavailable');
-      failC = false; const s5 = slot('1', C); f(fakeNode({ '.token-facts': [s5] }));
-      await new Promise(r => setImmediate(r));
-      assert.ok(s5.innerHTML.includes('top 10 holders 10%'), 'a failed request is not cached');
+      assert.ok(s1.innerHTML.includes('own 10.0% of the supply') && s2.innerHTML === s1.innerHTML); assert.equal(s1.sum.textContent, '10 holders own 10%'); assert.equal(s1.cls.has('cf-empty'), false);
+      assert.ok(s3.innerHTML.includes('No facts have been collected')); assert.equal(s3.sum.textContent, 'No data collected yet'); assert.equal(s3.cls.has('cf-empty'), true);
+      assert.equal(s4.sum.textContent, 'Unavailable right now');
+      failC = false; const s5 = slot('1', C); await f(fakeNode({ '.token-facts': [s5] }));
+      assert.ok(s5.innerHTML.includes('own 10.0% of the supply'), 'a failed request is not cached');
     }),
   ],
   setupModalEvents: [
