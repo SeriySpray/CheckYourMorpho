@@ -683,6 +683,7 @@ export function handleGetVaultByAddress(req, res, address, chainId = null) {
         apy: vault.apy,
         netApy: vault.net_apy,
         fee: vault.fee,
+        description: vault.description || '',
         updatedAt: vault.metadata_updated_at
       },
       verdict,

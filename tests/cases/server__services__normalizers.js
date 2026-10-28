@@ -108,7 +108,18 @@ export default {
     ['від\'ємний штраф обмежується знизу 0', ({ maxForceDeallocatePenalty: f }) =>
       assert.equal(f({ adapters: { items: [{ forceDeallocatePenalty: '-1000000000000000000' }] } }), 0)],
   ],
+  cleanDescription: [
+    ['звичайний текст куратора: пробіли й переноси зводяться до одного абзацу, керівні символи прибрано', ({ cleanDescription: f }) => {
+      assert.equal(f('  The vault\n\nlends   USDC.\u0000 '), 'The vault lends USDC.');
+      assert.equal(f('x'.repeat(2000)).length, 700);
+    }],
+    ['відсутнє або не текст -> порожній рядок', ({ cleanDescription: f }) => { for (const v of [undefined, null, 5, {}, '']) assert.equal(f(v), ''); }],
+  ],
   normalizeVaultV2: [
+    ['опис V2 і V1 береться з metadata.description', ({ normalizeVaultV2: f, normalizeVault: g }) => {
+      assert.equal(f({ metadata: { description: ' Lends USDC. ' } }).description, 'Lends USDC.'); assert.equal(f({}).description, '');
+      assert.equal(g({ metadata: { description: 'V1 text' }, state: {} }).description, 'V1 text');
+    }],
     ['version = v2', ({ normalizeVaultV2: f }) => assert.equal(f({ address: '0xA' }).version, 'v2')],
     ['ім\'я куратора з curators.items', ({ normalizeVaultV2: f }) =>
       assert.equal(f({ curators: { items: [{ name: 'Steakhouse' }] } }).curator_name, 'Steakhouse')],

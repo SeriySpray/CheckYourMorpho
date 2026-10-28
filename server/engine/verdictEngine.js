@@ -92,11 +92,17 @@ export function generateVaultVerdict(vault, allocations = []) {
   // 5. Negative Net APY (Capital Decay / Yield Deficit)
   const netApy = Number(vault.net_apy) || 0;
   if (netApy < 0) {
-    const netApyPct = (netApy * 100).toFixed(2);
+    const pct = x => `${(x * 100).toFixed(2)}%`;
+    const grossApy = Number(vault.apy) || 0;
+    const managementFee = Number(vault.management_fee) || 0;
+    // A non-negative gross yield with a negative net one means the fees eat it: small and not a loss of principal. A negative gross yield can come from realized losses.
+    const feeDriven = grossApy >= 0;
     redFlags.push({
-      level: netApy < -0.05 ? 'CRITICAL' : 'HIGH',
+      level: feeDriven ? (netApy < -0.01 ? 'HIGH' : 'MEDIUM') : (netApy < -0.05 ? 'CRITICAL' : 'HIGH'),
       title: 'Negative Net APY (Capital Decay)',
-      message: `Vault has a negative net yield of ${netApyPct}%, indicating active loss of depositor principal due to realized bad debt or excessive curator fees.`
+      message: feeDriven
+        ? `Net yield is ${pct(netApy)}: the gross yield of ${pct(grossApy)} is below ${managementFee > 0 ? `the ${pct(managementFee)} management fee` : 'the fees charged'}.`
+        : `Net yield is ${pct(netApy)} and the gross yield itself is negative (${pct(grossApy)}), which can come from realized losses.`
     });
   }
 

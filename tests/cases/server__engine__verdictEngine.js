@@ -97,13 +97,18 @@ export default {
       assert.ok(!titles(f(vault(), [mkt(0, 100e6, 15e6)])).includes('Restricted Exit Liquidity'));
       assert.ok(!titles(f(vault({ total_assets_usd: 5e3 }), [mkt(0, 5e3, 0)])).includes('Restricted Exit Liquidity'));
     }],
-    ['net APY нижче -5% -> CRITICAL', ({ generateVaultVerdict: f }) =>
-      assert.equal(apyFlag(f(vault({ net_apy: -0.1 }), diversified())).level, 'CRITICAL')],
+    ['net APY нижче -5% при негативному валовому -> CRITICAL', ({ generateVaultVerdict: f }) =>
+      assert.equal(apyFlag(f(vault({ net_apy: -0.1, apy: -0.08 }), diversified())).level, 'CRITICAL')],
     ['net APY рівно -5% -> HIGH (межа не включно)', ({ generateVaultVerdict: f }) =>
-      assert.equal(apyFlag(f(vault({ net_apy: -0.05 }), diversified())).level, 'HIGH')],
-    ['net APY -1% -> HIGH з "-1.00%" у повідомленні', ({ generateVaultVerdict: f }) => {
-      const x = apyFlag(f(vault({ net_apy: -0.01 }), diversified()));
-      assert.equal(x.level, 'HIGH'); assert.match(x.message, /-1\.00%/);
+      assert.equal(apyFlag(f(vault({ net_apy: -0.05, apy: -0.04 }), diversified())).level, 'HIGH')],
+    ['net APY -1% при негативному валовому -> HIGH з "-1.00%" і словами про збитки', ({ generateVaultVerdict: f }) => {
+      const x = apyFlag(f(vault({ net_apy: -0.01, apy: -0.005 }), diversified()));
+      assert.equal(x.level, 'HIGH'); assert.match(x.message, /-1\.00%/); assert.match(x.message, /gross yield itself is negative/);
+    }],
+    ['мінус через плату за управління (валовий дохід вище нуля): MEDIUM, причина названа, без слів про bad debt і втрату капіталу', ({ generateVaultVerdict: f }) => {
+      const x = apyFlag(f(vault({ apy: 0.00036645, net_apy: -0.00013360, management_fee: 0.0005 }), diversified()));
+      assert.equal(x.level, 'MEDIUM'); assert.match(x.message, /gross yield of 0\.04% is below the 0\.05% management fee/); assert.doesNotMatch(x.message, /bad debt|principal|decay/i);
+      assert.equal(apyFlag(f(vault({ apy: 0.01, net_apy: -0.02, management_fee: 0.03 }), diversified())).level, 'HIGH', 'fees above 1% of the yield stay HIGH');
     }],
     ['net APY рівно 0 або нечисловий -> без прапорця APY', ({ generateVaultVerdict: f }) => {
       assert.equal(apyFlag(f(vault({ net_apy: 0 }), diversified())), undefined);

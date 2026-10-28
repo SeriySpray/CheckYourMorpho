@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS vaults (
   apy REAL,
   net_apy REAL,
   fee REAL,
+  management_fee REAL DEFAULT 0,
+  description TEXT DEFAULT '',
   owner TEXT,
   pending_owner TEXT,
   version TEXT DEFAULT 'v1',

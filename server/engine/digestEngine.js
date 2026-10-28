@@ -9,7 +9,7 @@ const pct = (fraction, digits = 2) => `${(Math.round(fraction * 100 * 10 ** digi
 // Plain-language names for the verdict flags: a short label for the state and the sentence that explains it
 const RISK_FLAGS = {
   'Restricted Exit Liquidity': ['low exit liquidity', 'Less than 5% of the deposits can be withdrawn immediately'],
-  'Negative Net APY (Capital Decay)': ['negative yield', 'The vault is losing depositor principal'],
+  'Negative Net APY (Capital Decay)': ['negative yield', 'The net yield after fees is below zero'],
   'Compromised Market Exposure': ['market risk', 'Capital sits in markets with bad debt or failed checks'],
   'Unpriced Vault': ['unmeasurable risk', 'No USD price is available, so the risk cannot be measured'],
   'Unresolved Exposure': ['unidentified positions', 'Part of the capital sits in positions that could not be identified'],

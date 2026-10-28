@@ -260,6 +260,7 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
             id
             network
           }
+          metadata { description }
           asset {
             address
             symbol
@@ -399,6 +400,7 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
           netApy
           performanceFee
           managementFee
+          metadata { description }
           curator { address }
           curators {
             items {

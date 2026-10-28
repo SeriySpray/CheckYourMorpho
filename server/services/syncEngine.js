@@ -209,12 +209,12 @@ export async function syncAllVaults(options = {}) {
         address, chain_id, name, symbol, curator_name, asset_address,
         asset_symbol, asset_decimals, asset_price_usd, total_assets,
         total_assets_usd, liquidity_usd, apy, net_apy, fee, owner, pending_owner,
-        version, is_listed, metadata_updated_at, unresolved_exposure_usd
+        version, is_listed, metadata_updated_at, unresolved_exposure_usd, management_fee, description
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?
       )
       ON CONFLICT(address) DO UPDATE SET
         chain_id = excluded.chain_id,
@@ -239,7 +239,9 @@ export async function syncAllVaults(options = {}) {
         version = excluded.version,
         is_listed = excluded.is_listed,
         metadata_updated_at = excluded.metadata_updated_at,
-        unresolved_exposure_usd = excluded.unresolved_exposure_usd
+        unresolved_exposure_usd = excluded.unresolved_exposure_usd,
+        management_fee = excluded.management_fee,
+        description = excluded.description
     `);
 
     const upsertMarket = db.prepare(`
@@ -376,7 +378,7 @@ export async function syncAllVaults(options = {}) {
           v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
           v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
           v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
-          'v1', v.is_listed, v.metadata_updated_at, unresolvedUsd(unresolvedV1Assets(rawV), v)
+          'v1', v.is_listed, v.metadata_updated_at, unresolvedUsd(unresolvedV1Assets(rawV), v), v.management_fee ?? 0, v.description ?? ''
         );
         v1Count++;
         if (v.is_listed) {
@@ -425,7 +427,7 @@ export async function syncAllVaults(options = {}) {
           v.address, v.chain_id, v.name, v.symbol, v.curator_name, v.asset_address,
           v.asset_symbol, v.asset_decimals, v.asset_price_usd, v.total_assets,
           v.total_assets_usd, v.liquidity_usd, v.apy, v.net_apy, v.fee, v.owner, v.pending_owner,
-          'v2', v.is_listed, v.metadata_updated_at, unresolvedUsd(unresolvedAdapterAssets(rawV2, v1ByAddress), v)
+          'v2', v.is_listed, v.metadata_updated_at, unresolvedUsd(unresolvedAdapterAssets(rawV2, v1ByAddress), v), v.management_fee ?? 0, v.description ?? ''
         );
         v2Count++;
         if (v.is_listed) {

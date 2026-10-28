@@ -52,6 +52,11 @@ export function parseLltv(rawLltv) {
 /**
  * Normalizes vault object from GraphQL response (MetaMorpho V1)
  */
+/** The curator's own text from Morpho vault metadata: plain text on one paragraph, capped; '' when absent. */
+export function cleanDescription(text) {
+  return typeof text === 'string' ? text.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 700) : '';
+}
+
 export function normalizeVault(raw, curatorMap = null) {
   const asset = raw.asset || {};
   const state = raw.state || {};
@@ -84,6 +89,8 @@ export function normalizeVault(raw, curatorMap = null) {
     apy: state.apy ?? 0,
     net_apy: state.netApy ?? 0,
     fee: state.fee ?? 0,
+    management_fee: 0,
+    description: cleanDescription(raw.metadata?.description),
     owner: (state.owner || '').toLowerCase(),
     pending_owner: (state.pendingOwner || '').toLowerCase(),
     version: 'v1',
@@ -145,6 +152,8 @@ export function normalizeVaultV2(raw, curatorMap = null) {
     apy: raw.apy ?? 0,
     net_apy: raw.netApy ?? raw.apy ?? 0,
     fee: raw.performanceFee ?? 0,
+    management_fee: raw.managementFee ?? 0,
+    description: cleanDescription(raw.metadata?.description),
     owner: (raw.owner?.address || '').toLowerCase(),
     pending_owner: '',
     version: 'v2',
