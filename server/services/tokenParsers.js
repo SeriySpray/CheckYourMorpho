@@ -6,6 +6,14 @@
  */
 
 export const MORPHO_BLUE = '0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb';
+// Morpho Blue sits at its own address on most chains other than Ethereum and Base (from the `morphoBlue` field of the Morpho API markets)
+export const MORPHO_BLUE_BY_CHAIN = {
+  1: MORPHO_BLUE, 8453: MORPHO_BLUE,
+  10: '0xce95afbb8ea029495c66020883f87aae8864af92', 130: '0x8f5ae9cddb9f68de460c77730b018ae7e04a140a', 137: '0x1bf0c2541f820e775182832f06c0b7fc27a25f67',
+  143: '0xd5d960e8c380b724a48ac59e2dff1b2cb4a1eaee', 480: '0xe741bc7c34758b4cae05062794e8ae24978af432', 988: '0xa40103088a899514e3fe474cd3cc5bf811b1102e',
+  999: '0x68e37de8d93d3496ae143f2e900490f6280c57cd', 4217: '0x10ee9aac980a180dd4dcfc96c746d60b0ea88f97', 4663: '0x9d53d5e3bd5e8d4cbfa6db1ca238aea02e651010',
+  5042: '0x34cd04070dd72b14e241112f6d83812df5af7fcd', 42161: '0x6c247b1f6182318877311737bac0844baa518f5e', 747474: '0xd50f2dfffd62f94ee4aed9ca05c61d0753268abc'
+};
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
@@ -139,8 +147,9 @@ export const PROTOCOL_NAME_RE = /pool|vault|morpho|aave|uniswap|curve|balancer|g
  * The `_nonprotocol` shares leave out Morpho Blue and contracts named as a pool or protocol (PROTOCOL_NAME_RE), taken from the same page of 50.
  * @param {*} j /tokens/{a}/holders response
  * @param {string|null} totalSupply Raw supply string
+ * @param {number|string} [chainId] Picks the chain's Morpho Blue address; the Ethereum one when unknown
  */
-export function parseHolders(j, totalSupply) {
+export function parseHolders(j, totalSupply, chainId) {
   const items = Array.isArray(obj(j).items) ? j.items : null;
   if (!items) return null;
   let supply = null;
@@ -155,8 +164,9 @@ export function parseHolders(j, totalSupply) {
     pct: pctOf(h.value)
   })).filter(h => h.address);
   const sum = list => (list.some(r => r.pct === null) || !list.length ? null : Math.min(100, Math.round(list.reduce((a, r) => a + r.pct, 0) * 1000) / 1000));
-  const morpho = rows.find(r => r.address === MORPHO_BLUE);
-  const own = rows.filter(r => r.address !== MORPHO_BLUE && !(r.is_contract && PROTOCOL_NAME_RE.test(r.name ?? '')));
+  const blue = MORPHO_BLUE_BY_CHAIN[chainId] ?? MORPHO_BLUE;
+  const morpho = rows.find(r => r.address === blue);
+  const own = rows.filter(r => r.address !== blue && !(r.is_contract && PROTOCOL_NAME_RE.test(r.name ?? '')));
   return {
     top1_pct: rows[0]?.pct ?? null,
     top10_pct: sum(rows.slice(0, 10)),

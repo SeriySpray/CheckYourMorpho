@@ -285,7 +285,7 @@ export async function collectTokenData(token, { fetcher = createFetcher(), now =
   const chart = parseLlamaChart(json(p1.llamaChart), llamaKey);
   const gInfo = parseGeckoInfo(json(p1.geckoInfo));
   const gPools = parseGeckoPools(json(p1.geckoPools));
-  const holders = parseHolders(json(p1.bsHolders), bsToken?.total_supply ?? null);
+  const holders = parseHolders(json(p1.bsHolders), bsToken?.total_supply ?? null, chainId);
   const readValues = { ...(parseReadContract(p1.explorer?.status === 200 ? p1.explorer.text : '') ?? {}) };
   const slotAdmin = parseRpcAddress(json(p1.slotAdmin));
   const slotImpl = parseRpcAddress(json(p1.slotImpl));

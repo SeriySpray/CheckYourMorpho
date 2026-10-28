@@ -91,6 +91,12 @@ export default {
       assert.equal(r.top1_pct, 26.402); assert.equal(r.top10_pct, 72.97); assert.equal(r.top10_contracts, 7); assert.equal(r.morpho_blue_pct, 9.816);
       assert.equal(r.top.length, 5); assert.equal(r.top[0].name, 'StakedUSDeOFTAdapter');
     }],
+    ['Morpho Blue is found at the address of the token chain (Robinhood Chain), not only at the Ethereum one', ({ parseHolders: f }) => {
+      const blue = '0x9d53d5e3bd5e8d4cbfa6db1ca238aea02e651010';
+      const j = { items: [{ address: { hash: blue, name: 'Morpho', is_contract: true }, value: '99' }, { address: { hash: '0x' + '1'.repeat(40), is_contract: false }, value: '1' }] };
+      assert.equal(f(j, '100', 4663).morpho_blue_pct, 99); assert.equal(f(j, '100', 1).morpho_blue_pct, 0);
+      assert.equal(f(j, '100').morpho_blue_pct, 0, 'unknown chain falls back to the Ethereum address');
+    }],
     ['without a supply the shares are null', ({ parseHolders: f }) => {
       const r = f(fx('blockscout_holders_susde.json'), null);
       assert.deepEqual([r.top1_pct, r.top10_pct, r.morpho_blue_pct], [null, null, null]); assert.ok(r.top10_contracts > 0);
