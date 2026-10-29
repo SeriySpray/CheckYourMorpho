@@ -234,6 +234,14 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       allocations: allocs
     };
 
+    const scoredVault = withEffectiveTotal(vault, allocs);
+    const verdict = generateVaultVerdict(scoredVault, allocs, nowSec);
+    // What can be withdrawn right now, so a message about a pending change says it in numbers
+    const liq = verdict?.liquidity;
+    if (liq && !liq.exitUnknown && Number.isFinite(liq.instantExitCapacityPercent)) {
+      vaultContext.exit = { percent: liq.instantExitCapacityPercent, usd: liq.instantExitCapacityUsd };
+    }
+
     // Only diff adminEvents when rawV1 is present and contains adminEvents.items; never move lastAdminEventTs backwards
     let lastAdminEventTs = prevState?.last_admin_event_ts ?? null;
     if (rawV1 && Array.isArray(rawV1.adminEvents?.items)) {
@@ -257,8 +265,6 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       statusUpdates.push(...pendingDiff.statusUpdates);
     }
 
-    const scoredVault = withEffectiveTotal(vault, allocs);
-    const verdict = generateVaultVerdict(scoredVault, allocs, nowSec);
     const nextState = buildWatchState(vault, allocs, verdict, {
       fee: vault.fee,
       timelock: vaultContext.timelock,

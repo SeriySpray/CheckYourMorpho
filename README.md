@@ -9,8 +9,8 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 ## What it does
 
 - Lists every vault that Morpho marks as listed, on all chains the Morpho API returns, with search by name, symbol, curator or address and filters by network, asset and curator.
-- Sorts vaults by TVL, APY, liquidity, MQI or low-risk share of collateral.
-- Opens an audit panel for a vault: its allocations by market, MQI, collateral facts collected about each token, instant exit capacity, and a list of red flags.
+- Sorts vaults by TVL, Net APY or free liquidity (the API also sorts by APY and name).
+- Opens an audit panel for a vault: the curator's own description from Morpho, its allocations by market, MQI, collateral facts collected about each token, instant exit capacity, and a list of red flags. On a phone the bar with the pin and close buttons and the tabs stay at the top while the panel scrolls.
 - Lets you pin vaults in the browser (stored in `localStorage`).
 - Shows the vaults as a WebGL 2 particle sphere next to the list. Phones get the list only.
 - Sends alerts about starred vaults to a Telegram bot, and shows the same events in an activity panel (see Alerts below).
@@ -21,7 +21,7 @@ CheckYourMorpho is a risk dashboard for Morpho vaults (MetaMorpho V1 and Morpho 
 2. The server syncs 5 seconds after start-up and then every 180 seconds. A sync writes vaults, markets and allocations in one SQLite transaction. Unlisted vaults are deleted, and a vault that is missing from 3 syncs in a row is deleted too. A V2 vault that holds a V1 vault through a MetaMorpho adapter is expanded into that V1 vault's markets pro rata.
 3. Everything is stored in `data/morpho.db` (SQLite in WAL mode). The metrics are not stored: they are computed on each request from the current rows.
 4. A small REST API serves the vault list and the per-vault audit, and keeps the computed results in memory until the next finished sync or a short timeout.
-5. Each sync also compares every vault with its previous state and writes events (pending cap, market and guardian changes, bad debt, TVL outflow) to `vault_events`, and stores an hourly sample of the vault (TVL, verdict, MQI, Net APY, fee) in `vault_samples` for the daily digest (see Alerts below).
+5. Each sync also compares every vault with its previous state and writes events (pending timelock changes of V1 and V2, admin changes, bad debt, TVL outflow, a fall of the instant exit under 5%, verdict and MQI changes, delisting) to `vault_events`, and stores an hourly sample of the vault (TVL, verdict, MQI, Net APY, fee) in `vault_samples` for the daily digest (see Alerts below).
 6. Collateral facts do not come from the sync. A background collector in the server downloads public data about each collateral token and stores it in `token_data` (see Token data collector below).
 7. The client in `client/` is plain HTML, CSS and JavaScript. It polls the API every 60 seconds.
 
@@ -38,7 +38,7 @@ A failing market lowers MQI by its exact share of the verified capital. A known 
 
 Missing data does not lower the score. A market is compromised only for a known defect. A market whose bad debt or warnings the API did not return, and capital the sync could not expand (see Limitations), are unverified: they are left out of the MQI denominator and reported separately as `unverifiedPercent`, with the market shown as UNVERIFIED, until the data returns. MQI is `null` when nothing could be verified, and also when the verified capital is smaller than the unverified capital, because a score built on a sliver of the vault says nothing about it. A vault that holds assets but has no USD price also gets MQI `null` (unknown), not 100%; the price is taken from the vault's own markets when the API omits it.
 
-**Collateral token facts.** A background collector downloads public data about every collateral token from fixed sources, parses it with plain code and stores one record per token. The collector does not judge: a value it could not find stays `null` and is never read as "fine". The audit panel shows a compact fact card under each collateral token.
+**Collateral token facts.** A background collector downloads public data about every collateral token from fixed sources, parses it with plain code and stores one record per token. The collector does not judge: a value it could not find stays `null` and is never read as "fine". The audit panel shows a Collateral facts block: one expandable row per token, each fact followed by a plain-words meaning for a depositor. A value the collector could not find is worded as a gap in our data, not as a risk and not as proof of safety.
 
 Each record (table `token_data`, the last 20 versions in `token_data_history`) has these groups:
 
@@ -55,7 +55,7 @@ Each record (table `token_data`, the last 20 versions in `token_data_history`) h
 | `oracle_feeds` | Chainlink data feeds of the token, and whether one of them is a proof-of-reserves feed. A feed named as a pair (`nvPRIME / PRIME`) belongs only to the base of the pair |
 | `meta` | Collection time, every source request with its HTTP status and duration, and the coverage |
 
-Sources: Sourcify, Blockscout (one instance per chain), DefiLlama prices, GeckoTerminal, KyberSwap, the Etherscan-family "Read contract" pages (Etherscan, Basescan, Arbiscan), Safe Transaction Service, Pendle, the Chainlink reference data directory, app.rwa.xyz and public JSON-RPC nodes (publicnode.com: EIP-1967 slots and timelock delays on Ethereum, Base, Arbitrum, Optimism, Polygon and Unichain). The collector builds every URL from a template and an address it has checked, and a host outside its allowlist is refused.
+Sources: Sourcify, Blockscout (one instance per chain), DefiLlama prices, GeckoTerminal, KyberSwap, the Etherscan-family "Read contract" pages (Etherscan, Basescan, Arbiscan), Safe Transaction Service, Pendle, the Chainlink reference data directory, app.rwa.xyz and public JSON-RPC nodes (EIP-1967 slots and timelock delays: publicnode.com for Ethereum, Base, Arbitrum, Optimism, Polygon, Unichain, Tempo and Arc, plus the own nodes of Stable and Robinhood Chain). Robinhood Chain has no usable public explorer, so its holders and verification come from the Blockscout PRO API (needs `BLOCKSCOUT_API_KEY`); chains such as Monad, HyperEVM, Katana and World Chain get only Sourcify, price and DEX data. The collector builds every URL from a template and an address it has checked, and a host outside its allowlist is refused.
 
 `status` is `ok` when the record has a price, at least one source about the token itself (Blockscout or GeckoTerminal) and a coverage of at least 0.4; `partial` when it has a price or at least the identity of the contract; `failed` otherwise. A token on a chain the collector does not support is always `partial`. `coverage` is the share of fields that hold a value, from 0 to 1; `pendle` and `rwa` are left out of the count when they do not apply. Chains with a full set of sources are Ethereum, Base, Arbitrum, Optimism, Polygon and Unichain. Monad, HyperEVM and Katana get a price, pools and, where Kyber supports the chain, a swap quote. Any other chain gets Sourcify only and is marked `chain_supported: false`.
 
@@ -70,7 +70,7 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 | Flag | Level |
 |---|---|
 | Compromised Market Exposure (failing markets hold a material amount) | CRITICAL |
-| Restricted Exit Liquidity (instant exit under 5%, vault of at least $10K; also sends a Telegram event when it falls under) | MEDIUM |
+| Restricted Exit Liquidity (instant exit under 5%, vault of at least $10K; when it falls under, an event appears in the activity panel, but nothing is sent to Telegram) | MEDIUM |
 | Unresolved Exposure (a material amount whose underlying markets could not be resolved) | HIGH |
 | Unverified Markets (a material amount with bad debt or warnings data missing; left out of MQI) | MEDIUM |
 | Unpriced Vault (assets without a USD price) | HIGH |
@@ -83,11 +83,12 @@ The HHI (Herfindahl-Hirschman Index) engine is still in the code and in the audi
 |---|---|---|
 | GET | `/api/status` | Row counts, time of the last full sync, whether a sync is running, last sync result, `stale` (no successful sync for over three sync intervals) and `lastSuccessAt`. |
 | GET | `/api/vaults` | Vault list with MQI, and exit metrics per vault. Query: `limit` (default 500, max 1000), `offset`, `chainId`, `listedOnly`, `search` (up to 64 characters), `sortBy` (`liquidity_usd`, `total_assets_usd`, `net_apy`, `apy`, `name`), `sortOrder` (`asc`/`desc`). |
-| GET | `/api/vaults/:address` | Full audit for one vault: vault data, verdict and allocations. Each allocation carries the Morpho tags of its collateral token (`collateralTags`); the facts come from `/api/tokens`. |
+| GET | `/api/vaults/:address` | Full audit for one vault: vault data (with the curator `description`), verdict and allocations. Optional `?chainId=N`: a vault of another chain answers 404. Each allocation carries the Morpho tags of its collateral token (`collateralTags`); the facts come from `/api/tokens`. |
 | GET | `/api/tokens/:chainId/:address` | The collected facts of one collateral token: `status`, `coverage`, `collectedAt`, `stale` (older than two refresh periods), `data` (the groups above). 404 until the token has been collected. |
 | GET | `/api/events` | Event log, newest first. Query: `address` or `addresses` (comma separated), `kinds`, `severity`, `status`, `since` (unix seconds), `before`, `limit` (default 50, max 200). |
 | GET | `/api/events/pending` | Pending timelock changes that have not taken effect yet, including those whose timelock already elapsed and can be executed now (up to 200, oldest `valid_at` first), same filters. |
 | GET | `/api/tg/config` | Whether the Telegram bot is running and its username. |
+| GET | `/api/tg/subscription` | The favorites that the chat bound to a `sub_id` holds (query `sub_id`), for a browser that has just been connected to the bot. |
 | PUT | `/api/tg/subscription` | Stores the starred vaults (up to 100 addresses) of a browser-generated `sub_id`. Body: `{ "sub_id": "...", "vaults": ["0x..."] }`. |
 | POST | `/api/sync` | Starts a sync. Needs `Authorization: Bearer <SYNC_TOKEN>`. Returns 202, or waits and returns 200 with `?await=1`. Returns 403 if `SYNC_TOKEN` is not set, 401 for a wrong token, 409 while a sync is running and 413 for a body over 1 KB. |
 
@@ -114,13 +115,14 @@ Environment variables:
 | `SYNC_TOKEN` | not set | Enables `POST /api/sync`. When it is not set, manual sync is disabled. |
 | `TOKEN_DATA_DISABLED` | not set | Set to `1` to turn off the background token collector. |
 | `TELEGRAM_BOT_TOKEN` | not set | Token of a bot made in BotFather. Without it the bot and the alerts are off. |
+| `BLOCKSCOUT_API_KEY` | not set | Key of the Blockscout PRO API, used only for Robinhood Chain. Without it that chain gets no holder and verification data. |
 | `SITE_URL` | `https://checkyourmorpho.duckdns.org` | Address the bot links to when it sends someone to the site. |
 
 The sync interval, database path and Morpho API URL are fixed in `server/config.js`.
 
 ## Token data collector
 
-The server collects the token facts itself, in the background. One tick runs every 10 minutes, 60 seconds after start-up for the first time, and collects tokens one after another for at most 8 minutes. The queue takes every collateral token in the `markets` table: tokens never collected first, biggest vault capital first, then the oldest. A good record is collected again after a day, a `partial` or `failed` one after an hour.
+The server collects the token facts itself, in the background. One tick runs every 10 minutes, 60 seconds after start-up for the first time, and collects tokens one after another for at most 8 minutes. The queue takes every collateral token in the `markets` table: tokens never collected first, biggest vault capital first, then the oldest. A good record is collected again after a day (identity, contract, controllers and RWA facts of a good record only after a week), a `partial` or `failed` one after an hour.
 
 Requests to one host run in order with a pause (6 s for GeckoTerminal, 1.5 s for Safe, 1 s for Kyber, 0.3 s for the rest), a request times out after 30 seconds, a body is cut at 1 MB (6 MB for the Chainlink catalog, which is cached for 6 hours), and a 429 or a 502/503/504 answer is retried once. A token takes about 20 to 25 seconds, so a tick handles roughly 20 tokens.
 
@@ -137,10 +139,13 @@ Sent immediately:
 - a cap increase that adds 5% or more of the vault's assets, or opens a new cap;
 - a market added or removed;
 - a guardian change or a shorter timelock;
+- on V2 vaults, a pending gate change, adapter change, abdication or force-deallocate penalty change, and a fee raised by more than 5 points;
 - bad debt appearing in a market. If the market had no bad debt data at the previous sync, the alert still goes out once, marked as first seen after a gap in data;
 - a sharp TVL outflow (15% or more in 24 hours and at least $500K).
 
-Sent in the daily digest at 09:00 Kyiv time: verdict and MQI changes, a Net APY drop against the vault's 7-day average, fee changes, delisting and a summary of reallocations. Instant control changes, a RED verdict on its own, low exit capacity and single reallocations are not sent.
+Each alert about a pending change carries the time it takes effect and the instant exit figure at detection (`exitPercent`, `exitUsd` in the event details): "Withdrawable right now: 11.5% of the vault ($61.5M)". A vault whose exit is unknown gets no such line.
+
+Sent in the daily digest at 09:00 Kyiv time: verdict and MQI changes, a Net APY drop against the vault's 7-day average, fee changes, delisting and a summary of reallocations. Instant control changes, a RED verdict on its own, low exit capacity (it only appears in the activity panel) and single reallocations are not sent.
 
 Events are kept for 180 days (pending ones until they take effect) and vault samples for 8 days. The activity panel in the client (bell button) shows the same event log for the starred vaults.
 

@@ -1658,7 +1658,7 @@ function populateBasicVaultInfo(v) {
   if (DOM.modalExitCapPct && v.exitCapPercent !== undefined) {
     DOM.modalExitCapPct.textContent = formatExitCap(exitMetric(v.exitCapPercent));
   }
-  if (DOM.modalNetApy) DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
+  if (DOM.modalNetApy) setNetApy(v.netApy);
   if (DOM.modalFee) DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
   if (DOM.modalGrade && v.flagCount !== undefined) setRiskPill(vaultRisk(v));
 }
@@ -2098,7 +2098,7 @@ function describeTokenFacts(t) {
   const np = h.top10_nonprotocol_pct;
   const holders = [
     h.count != null && !countClash ? (fewHolders ? [`When collected, only ${plural(h.count, 'wallet')} held it.`, 'A few holders decide what reaches the market: the price can jump.']
-      : [`When collected, ${Number(h.count).toLocaleString('en-US')} wallets held it.`, h.count >= 1000 ? 'Many holders: none can easily disrupt the market.' : 'A small circle: one seller can move the price.']) : null,
+      : [`When collected, ${Number(h.count).toLocaleString('en-US')} wallets held it.`, h.count >= 1000 ? 'The count alone says little: see below how the supply is split.' : 'A small circle: one seller can move the price.']) : null,
     fewHolders || h.top10_pct == null ? null
       : allInProtocols ? ['Almost the whole supply sits in protocol contracts, such as lending pools.', 'Normal for a DeFi token: the real owners sit behind those contracts.']
         : [`The 10 biggest holders own ${h.top10_pct.toFixed(1)}% of the supply${h.top10_contracts ? `, but ${h.top10_contracts} of them ${h.top10_contracts === 1 ? 'is a protocol contract' : 'are protocol contracts'}` : ''}.`,
@@ -2199,6 +2199,14 @@ function renderCollateralFacts(chainId, marketRows) {
 /**
  * Populates all fields across Panel 1, Panel 2, and Panel 3.
  */
+/** The Net APY of the audit header: green only when it is not negative. */
+function setNetApy(netApy) {
+  DOM.modalNetApy.textContent = formatPercent(netApy || 0);
+  const negative = (netApy || 0) < 0;
+  DOM.modalNetApy.classList.toggle('negative', negative);
+  DOM.modalNetApy.classList.toggle('green', !negative);
+}
+
 function populateAuditModal(data, isQuietRefresh = false) {
   const v = data.vault;
   const verdict = data.verdict;
@@ -2238,7 +2246,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
   DOM.modalAssetsHuman.textContent = `${formatNumber(humanAssets)} ${v.asset?.symbol || ''}`;
   DOM.modalLiq.textContent = formatCurrency(v.liquidityUsd);
   DOM.modalExitCapPct.textContent = formatExitCap(pickExitMetric(verdict.liquidity?.instantExitCapacityPercent, 0));
-  DOM.modalNetApy.textContent = formatPercent(v.netApy || 0);
+  setNetApy(v.netApy);
   DOM.modalFee.textContent = `Fee: ${((v.fee || 0) * 100).toFixed(1)}%`;
 
   // Underlying Markets Count Pill
@@ -2371,7 +2379,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
         ? '<span class="badge badge-status badge-flagged">FLAGGED</span>'
         : a.isUnverified
           ? '<span class="badge badge-status badge-unverified">UNVERIFIED</span>'
-          : '<span class="badge badge-listed badge-status badge-clean">NO ISSUES</span>';
+          : '<span class="badge badge-listed badge-status badge-clean">NO FLAGS</span>';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `

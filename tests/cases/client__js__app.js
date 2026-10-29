@@ -1662,7 +1662,7 @@ const base = {
       assert.equal(D.riskExitPct.textContent, 'N/A');
       assert.equal(D.riskExitBar.style.width, '0%');
     }),
-    T('таблиця ринків: FLAGGED, UNVERIFIED, NO ISSUES, неявний прапорець і n/a для LLTV', ({ populateAuditModal: f, __state: s }) => {
+    T('таблиця ринків: FLAGGED, UNVERIFIED, NO FLAGS, неявний прапорець і n/a для LLTV', ({ populateAuditModal: f, __state: s }) => {
       const rows = collect(s.DOM.allocationsTbody);
       const created = [];
       const origCreate = document.createElement;
@@ -1677,7 +1677,7 @@ const base = {
       assert.equal(s.DOM.overviewMarketsCount.textContent, '5 MARKETS');
       assert.equal(rows.length, 5);
       const status = r => r.innerHTML.match(/badge-status[^>]*>([\w ]+)</)[1];
-      assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'NO ISSUES', 'FLAGGED', 'NO ISSUES']);
+      assert.deepEqual(rows.map(status), ['FLAGGED', 'UNVERIFIED', 'NO FLAGS', 'FLAGGED', 'NO FLAGS']);
       assert.match(rows[0].innerHTML, /<td>86%<\/td>[\s\S]*<td>50\.0%<\/td>[\s\S]*\$500\.0K[\s\S]*\$100\.0K[\s\S]*4\.12%/);
       assert.doesNotMatch(rows[0].innerHTML, /eth, lst|no tags|token-facts/); assert.doesNotMatch(rows[1].innerHTML, /no tags|token-facts/);
       assert.match(rows[1].innerHTML, /<td>n\/a<\/td>/);
@@ -1797,7 +1797,7 @@ const base = {
       for (const x of ['change how it works', 'new tokens can dilute it', 'any sale by the vault', 'A few holders decide', 'Even a small sale']) assert.ok(risky.includes(x) || risky.includes(x.toLowerCase()), x);
       const calm = mean(f({ data: { contract: { sourcify_match: 'x', is_proxy: false, fn: {} }, holders: { count: 9000, top10_pct: 30, top10_nonprotocol_pct: 10 }, liquidity: { pools_count: 5, total_reserve_usd: 5e7, kyber: { 1000000: { status: 'ok', price_impact_pct: 0.1 } } },
         control: { controllers: [{ role: 'owner', is_contract: true, timelock_delay_sec: 86400 }] } } }).html).join('|');
-      for (const x of ['fewer hidden surprises', 'Its rules are fixed', 'Many holders', 'Well spread', 'Deep pools: large sales are possible', 'A $1M forced sale was cheap']) assert.ok(calm.includes(x), x);
+      for (const x of ['fewer hidden surprises', 'Its rules are fixed', 'The count alone says little', 'Well spread', 'Deep pools: large sales are possible', 'A $1M forced sale was cheap']) assert.ok(calm.includes(x), x);
       assert.doesNotMatch(calm, /One key|few holders decide|hit the price hard/);
     }),
     T('калібрування: «контракти завищують концентрацію» лише коли протоколи справді тримають багато; глибина пулів і розмір продажу названі', ({ describeTokenFacts: f }) => {

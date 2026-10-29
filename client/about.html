@@ -8,8 +8,8 @@
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%277%27 fill=%27%23fff%27/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk42">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk42">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk43">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk43">
 </head>
 <body class="about-body">
   <div class="about-shell">
@@ -81,7 +81,7 @@
       <h3>Instant exit capacity</h3>
       <p>The share of verified capital a depositor could withdraw right now: idle cash plus, for each market, the smaller of the vault's supply and the market's free liquidity (supply minus borrow). The result never exceeds the liquidity Morpho reports for the vault.</p>
       <h3>Collateral and markets</h3>
-      <p>The collateral section groups what backs the loans by token class and lists each token with its USD amount and share. Shares under 0.1% show as &lt;0.1%. The markets table has one row per market with LLTV, the vault's weight, supplied amount, free liquidity, status and supply APY. Status is Flagged when the market has a defect, Unverified when its data is missing and No issues otherwise. "No issues" means no defect was found by the checks above.</p>
+      <p>The collateral section groups what backs the loans by token class and lists each token with its USD amount and share. Shares under 0.1% show as &lt;0.1%. The markets table has one row per market with LLTV, the vault's weight, supplied amount, free liquidity, status and supply APY. Status is Flagged when the market has a defect, Unverified when its data is missing and No flags otherwise. "No flags" means no defect was found by the checks above.</p>
     </section>
 
     <section id="flags">
@@ -120,10 +120,12 @@
         <li>a cap increase of 5% of the vault's assets or more, or a new cap;</li>
         <li>a market added or removed;</li>
         <li>a guardian change or a shorter timelock;</li>
+        <li>on V2 vaults: a pending gate or adapter change, an abdication (the curator giving up a power for good), a change of the force-deallocate penalty, and a fee raised by more than 5 points;</li>
         <li>bad debt appearing in a market, or growing at least twofold and by $1K or more;</li>
         <li>a TVL outflow of 15% or more in 24 hours and at least $500K;</li>
         <li>a notice when no sync has succeeded for 24 hours, since alerts are blind during that time.</li>
       </ul>
+      <p>Every message about a pending change gives the time it takes effect and what can be withdrawn right now (a share of the vault and a dollar amount), taken from the same exit figure as the audit panel. When the exit is not known, that line is left out rather than guessed.</p>
       <p>The daily digest at 09:00 Kyiv time covers verdict and MQI changes, a Net APY drop against the 7-day average, fee changes, delistings and reallocations. A changed verdict level is only reported after it has held for 3 hours.</p>
       <p>Events are kept for 180 days. Pending timelock changes stay until they take effect.</p>
     </section>
@@ -139,6 +141,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk42"></script>
+  <script src="js/about.js?v=20261028_risk43"></script>
 </body>
 </html>

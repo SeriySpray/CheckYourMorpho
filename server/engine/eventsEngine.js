@@ -477,7 +477,7 @@ const mapSinglePendingConfig = (vaultContext, item, currentCaps, currentTimelock
   let severity = 'warning';
   let title = '';
   let targetKey = 'default';
-  let details = { functionName: fn, txHash, validAt };
+  let details = { functionName: fn, txHash, validAt, ...(vaultContext.exit ? { exitPercent: vaultContext.exit.percent, exitUsd: vaultContext.exit.usd } : {}) };
 
   if (fn === 'SetCap' || typename === 'VaultSetCapPendingData') {
     kind = 'pending_cap_increase';

@@ -76,7 +76,8 @@ function duration(seconds) {
 /**
  * True when an event is worth an immediate message: a risky change still waiting on its timelock
  * (cap increase that adds >= 5% of vault assets or opens a cap from zero, market added or removed,
- * shorter timelock, guardian change), bad debt, or a 24h TVL outflow.
+ * shorter timelock, guardian change; V2: a gate, adapter, abdication or force-deallocate penalty change, a fee raised by more
+ * than 5 points), bad debt, or a 24h TVL outflow.
  */
 export function isUrgent(event) {
   if (!event) return false;
@@ -88,7 +89,13 @@ export function isUrgent(event) {
       return event.status === 'pending' && (d.capWasZero === true || (isNum(d.tvlShareAdded) && d.tvlShareAdded >= CAP_TVL_SHARE_ALERT));
     case 'pending_market_removal':
     case 'pending_guardian_change':
+    case 'pending_gate_change':
+    case 'pending_adapter_change':
+    case 'pending_abdicate':
+    case 'pending_force_deallocate_penalty':
       return event.status === 'pending';
+    case 'pending_fee_change':
+      return event.status === 'pending' && event.severity === 'critical';
     case 'pending_timelock_change':
       return event.status === 'pending' && event.severity === 'critical';
     case 'bad_debt_appeared':
@@ -105,6 +112,11 @@ const KIND_TITLE = {
   pending_cap_increase: 'Cap increase pending',
   pending_market_removal: 'Market removal pending',
   pending_guardian_change: 'Guardian change pending',
+  pending_gate_change: 'Gate change pending',
+  pending_adapter_change: 'Adapter change pending',
+  pending_abdicate: 'Abdication pending',
+  pending_force_deallocate_penalty: 'Force-deallocate penalty change pending',
+  pending_fee_change: 'Fee change pending',
   pending_timelock_change: 'Timelock change pending',
   bad_debt_appeared: 'Bad debt appeared',
   tvl_drop: 'Large TVL outflow'
@@ -115,6 +127,11 @@ const KIND_MEANING = {
   pending_cap_increase: 'The curator is raising how much the vault may put into this market. Once applied, more deposits can flow there.',
   pending_market_removal: 'The curator wants to remove this market from the vault.',
   pending_guardian_change: 'A different address would get the power to veto pending changes.',
+  pending_gate_change: 'A gate decides who may deposit into or withdraw from the vault. A new gate can shut some addresses out.',
+  pending_adapter_change: 'An adapter is the contract that moves the vault money into a market or another vault. Adding or removing one changes where the money can go.',
+  pending_abdicate: 'The curator would give up the right to make this kind of change for good. It cannot be undone.',
+  pending_force_deallocate_penalty: 'The penalty is what it costs to pull money out of a market by force. A higher penalty makes a forced exit more expensive.',
+  pending_fee_change: 'The fee taken from the yield of the vault would rise.',
   pending_timelock_change: 'A shorter timelock leaves depositors less time to react to future changes.',
   bad_debt_appeared: 'Borrowers owe more than their collateral covers in this market, so lenders, including this vault, can lose part of it.',
   tvl_drop: 'Depositors withdrew a large part of the vault in 24 hours.'
@@ -129,15 +146,27 @@ function detailLine(event, d) {
     return `Cap: from ${fmt(d.oldCap)} to ${fmt(d.newCap)}${rel ? ' of vault assets' : isNum(d.tvlShareAdded) ? `, adds ${shareText(d.tvlShareAdded)} of vault assets` : ''}`;
   }
   if (event.kind === 'pending_timelock_change') return `Timelock: ${duration(d.oldTimelock)} to ${duration(d.newTimelock)}`;
+  if (event.kind === 'pending_fee_change') return `Fee: ${isNum(d.oldFee) ? percent(d.oldFee) : 'unknown'} to ${isNum(d.newFee) ? percent(d.newFee) : 'unknown'}`;
+  if (event.kind === 'pending_force_deallocate_penalty') return `Penalty: ${isNum(d.penalty) ? percent(d.penalty) : 'unknown'}`;
+  if (event.kind === 'pending_abdicate') return d.targetFunction ? `Gives up: ${d.targetFunction}` : '';
+  if (event.kind === 'pending_gate_change' && d.gate) return `New gate: ${shortAddr(String(d.gate))}`;
+  if (event.kind === 'pending_adapter_change' && d.adapterAddress) return `${String(d.functionName || 'Adapter').replace(/([a-z])([A-Z])/g, '$1 $2')}: ${shortAddr(String(d.adapterAddress))}`;
   if (event.kind === 'bad_debt_appeared') return `Bad debt: $${compact(d.badDebtUsd)} in a market holding $${compact(d.supplyUsd)} of the vault${d.afterDataGap ? ' (first seen after a gap in data, may be older)' : ''}`;
   if (event.kind === 'tvl_drop') return `TVL: $${compact(d.previousTvlUsd)} to $${compact(d.currentTvlUsd)}${isNum(d.dropPercent) ? ` (-${Math.round(d.dropPercent * 10) / 10}%)` : ''}`;
   return '';
 }
 
-function deadlineBlock(validAt, nowSec) {
+/** What can be withdrawn right now, in numbers; nothing when the exit is not known. */
+function exitLine(d) {
+  if (!isNum(d?.exitPercent)) return '';
+  const usd = isNum(d.exitUsd) ? ` ($${compact(d.exitUsd)})` : '';
+  return `Withdrawable right now: ${Math.round(d.exitPercent * 10) / 10}% of the vault${usd}.${d.exitPercent < 20 ? ' Most of it is lent out.' : ''}`;
+}
+
+function deadlineBlock(validAt, nowSec, d = null) {
   const left = validAt - nowSec;
   return left > 0
-    ? `<b>Takes effect</b> ${kyivTime(validAt)} Kyiv time (in ${duration(left)}).\nDepositors can still withdraw until then.`
+    ? [`<b>Takes effect</b> ${kyivTime(validAt)} Kyiv time (in ${duration(left)}).`, exitLine(d)].filter(Boolean).join('\n')
     : '<b>The timelock has passed.</b> The change can be applied at any moment.';
 }
 
@@ -150,7 +179,7 @@ export function formatUrgent(event, vaultName, nowSec = Math.floor(Date.now() / 
     vaultBlock(vaultName, event.chain_id, event.vault_address),
     [detail && escapeHtml(detail), KIND_MEANING[event.kind], severityLine(event)].filter(Boolean).join('\n')
   ];
-  if (event.status === 'pending' && isNum(event.valid_at)) blocks.push(deadlineBlock(event.valid_at, nowSec));
+  if (event.status === 'pending' && isNum(event.valid_at)) blocks.push(deadlineBlock(event.valid_at, nowSec, parseDetails(event)));
   return message(KIND_TITLE[event.kind] || event.title, ...blocks);
 }
 
@@ -173,7 +202,7 @@ export function formatUrgentGroup(events, vaultName, nowSec = Math.floor(Date.no
   if (events.length > GROUP_LINES_SHOWN) items.push(`and ${events.length - GROUP_LINES_SHOWN} more`);
   const blocks = [vaultBlock(vaultName, worst.chain_id, worst.vault_address), items.join('\n\n'), [KIND_MEANING[worst.kind], severityLine(worst)].filter(Boolean).join('\n')];
   const deadlines = events.filter(e => e.status === 'pending' && isNum(e.valid_at)).map(e => e.valid_at);
-  if (deadlines.length > 0) blocks.push(deadlineBlock(Math.min(...deadlines), nowSec));
+  if (deadlines.length > 0) blocks.push(deadlineBlock(Math.min(...deadlines), nowSec, parseDetails(events[0])));
   return message(`${KIND_TITLE[worst.kind] || worst.title} (${events.length} changes)`, ...blocks);
 }
 

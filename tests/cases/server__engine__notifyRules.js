@@ -34,6 +34,14 @@ export default {
         assert.equal(isUrgent(ev(kind, { row: { status: 'final', severity: 'critical' } })), false, kind);
       }
     }],
+    ['V2: gate, adapter, abdicate, penalty - у статусі pending; fee лише critical (підвищення більш ніж на 5 пунктів)', ({ isUrgent }) => {
+      for (const kind of ['pending_gate_change', 'pending_adapter_change', 'pending_abdicate', 'pending_force_deallocate_penalty']) {
+        assert.equal(isUrgent(ev(kind, { row: { status: 'pending' } })), true, kind);
+        assert.equal(isUrgent(ev(kind, { row: { status: 'applied' } })), false, kind);
+      }
+      assert.equal(isUrgent(ev('pending_fee_change', { row: { status: 'pending', severity: 'critical' } })), true);
+      assert.equal(isUrgent(ev('pending_fee_change', { row: { status: 'pending', severity: 'warning' } })), false);
+    }],
     ['приймає розібрані details і не падає на битому JSON або null', ({ isUrgent }) => {
       assert.equal(isUrgent({ kind: 'pending_cap_increase', status: 'pending', details: { capWasZero: true } }), true);
       assert.equal(isUrgent({ kind: 'pending_cap_increase', status: 'pending', details_json: '{broken' }), false);
@@ -58,8 +66,24 @@ export default {
         '<b>Cap increase pending</b>',
         '<b>Alpha USDC</b>  |  Base\n<code>0x1111...1111</code>',
         'Cap: from 10% to 25% of vault assets\nThe curator is raising how much the vault may put into this market. Once applied, more deposits can flow there.\nSeverity: Warning',
-        `<b>Takes effect</b> ${kyivTime(NOW + 7200)} Kyiv time (in 2h).\nDepositors can still withdraw until then.`
+        `<b>Takes effect</b> ${kyivTime(NOW + 7200)} Kyiv time (in 2h).`
       ].join('\n\n'));
+    }],
+    ['час набуття чинності: замість обіцянки "можна вивести" - скільки можна вивести зараз; без даних про вихід рядка немає; нижче 20% додається пояснення', ({ formatUrgent }) => {
+      const withExit = percentValue => formatUrgent(ev('pending_gate_change', { details: { gate: ADDR, exitPercent: percentValue, exitUsd: 61_500_000 } }), 'V', NOW);
+      assert.match(withExit(11.5), /Withdrawable right now: 11\.5% of the vault \(\$61\.5M\)\. Most of it is lent out\./);
+      assert.match(withExit(45), /Withdrawable right now: 45% of the vault \(\$61\.5M\)\.$/);
+      assert.doesNotMatch(formatUrgent(ev('pending_gate_change', { details: { gate: ADDR } }), 'V', NOW), /Withdrawable/);
+      assert.doesNotMatch(withExit(11.5), /can still withdraw/);
+    }],
+    ['V2-зміни: заголовок, зміст і рядок про що саме', ({ formatUrgent }) => {
+      const gate = formatUrgent(ev('pending_gate_change', { details: { gate: ADDR } }), 'V', NOW);
+      assert.match(gate, /^<b>Gate change pending<\/b>/);
+      assert.match(gate, /New gate: 0x1111\.\.\.1111/);
+      assert.match(formatUrgent(ev('pending_abdicate', { details: { targetFunction: 'setCurator' } }), 'V', NOW), /Gives up: setCurator[\s\S]*cannot be undone/);
+      assert.match(formatUrgent(ev('pending_force_deallocate_penalty', { details: { penalty: 0.02 } }), 'V', NOW), /Penalty: 2%/);
+      assert.match(formatUrgent(ev('pending_fee_change', { details: { oldFee: 0.1, newFee: 0.3 } }), 'V', NOW), /Fee: 10% to 30%/);
+      assert.match(formatUrgent(ev('pending_adapter_change', { details: { functionName: 'AddAdapter', adapterAddress: ADDR } }), 'V', NOW), /Add Adapter: 0x1111\.\.\.1111/);
     }],
     ['cap absolute без старого значення: none, компактні числа; cap без ліміту читається як unlimited', ({ formatUrgent }) => {
       const m = formatUrgent(ev('pending_cap_increase', { details: { capKind: 'absolute', oldCap: null, newCap: 2_500_000, tvlShareAdded: 0.2 } }), null, NOW);
@@ -80,7 +104,7 @@ export default {
       assert.match(tvl, /TVL: \$10M to \$7M/);
     }],
     ['невідомий тип лишає заголовок події; timelock уже минув: повідомляє, що змінити можна будь-коли', ({ formatUrgent }) => {
-      assert.match(formatUrgent(ev('pending_abdicate', { row: { title: 'Stored title' } }), 'V', NOW), /^<b>Stored title<\/b>/);
+      assert.match(formatUrgent(ev('pending_unknown_kind', { row: { title: 'Stored title' } }), 'V', NOW), /^<b>Stored title<\/b>/);
       const m = formatUrgent(ev('pending_market_removal', { row: { valid_at: NOW - 5 } }), 'V', NOW);
       assert.match(m, /<b>The timelock has passed\.<\/b> The change can be applied at any moment\./);
     }],

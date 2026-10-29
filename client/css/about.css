@@ -193,3 +193,8 @@
 
 
 @keyframes about-sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+
+/* The next-topic button is for the phone: on a desktop the side list is always in view */
+@media (min-width: 761px) {
+  .about-next { display: none; }
+}
