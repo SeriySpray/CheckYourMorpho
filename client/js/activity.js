@@ -106,6 +106,8 @@ let filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' };
 let sheetOpen = false;
 let animateRows = false; // set by a filter change so the rows that replace the list ease in; plain refreshes stay still
 let searchTimer = null;
+let totalPending = 0; // size of the whole filtered set on the server; the cache holds only the pages loaded so far
+let totalHistory = 0;
 
 /**
  * Formats countdown string for pending timelocked events.
@@ -749,7 +751,7 @@ function countUnseenEvents(events, seenTs, includeReallocation = false) {
 /**
  * Builds URL query for GET /api/events.
  */
-export function buildEventsUrl({ addresses = [], kinds = [], limit = null, before = null } = {}) {
+export function buildEventsUrl({ addresses = [], kinds = [], limit = null, before = null, severities = [], q = '', since = null, history = false } = {}) {
   const params = new URLSearchParams();
   const validAddrs = (Array.isArray(addresses) ? addresses : []).filter(isValidAddress);
   if (validAddrs.length > 0) {
@@ -760,6 +762,10 @@ export function buildEventsUrl({ addresses = [], kinds = [], limit = null, befor
   }
   if (limit) params.set('limit', String(limit));
   if (before) params.set('before', String(before));
+  if (severities.length > 0) params.set('severities', severities.join(','));
+  if (q) params.set('q', q);
+  if (since) params.set('since', String(since));
+  if (history) params.set('history', '1');
   const qs = params.toString();
   return `/api/events${qs ? '?' + qs : ''}`;
 }
@@ -767,7 +773,7 @@ export function buildEventsUrl({ addresses = [], kinds = [], limit = null, befor
 /**
  * Builds URL query for GET /api/events/pending.
  */
-export function buildPendingEventsUrl({ addresses = [], kinds = [], limit = null } = {}) {
+export function buildPendingEventsUrl({ addresses = [], kinds = [], limit = null, severities = [], q = '' } = {}) {
   const params = new URLSearchParams();
   const validAddrs = (Array.isArray(addresses) ? addresses : []).filter(isValidAddress);
   if (validAddrs.length > 0) {
@@ -777,6 +783,8 @@ export function buildPendingEventsUrl({ addresses = [], kinds = [], limit = null
     params.set('kinds', kinds.join(','));
   }
   if (limit) params.set('limit', String(limit));
+  if (severities.length > 0) params.set('severities', severities.join(','));
+  if (q) params.set('q', q);
   const qs = params.toString();
   return `/api/events/pending${qs ? '?' + qs : ''}`;
 }
@@ -1269,20 +1277,24 @@ function categoryOfKind(kind) {
 }
 
 /**
- * True when the event passes search, severity, category and (History only) period.
+ * The filters as API parameters. The server applies them, so totals and "Show older events" cover the whole filtered set.
  */
-function eventMatchesFilters(ev, isUpcoming, nowSec = Math.floor(Date.now() / 1000)) {
-  if (filters.sev.size && !filters.sev.has(String(ev.severity || 'info').toLowerCase())) return false;
-  if (filters.cat.size && ev.kind !== 'reallocation' && !filters.cat.has(categoryOfKind(ev.kind))) return false;
-  if (!isUpcoming && filters.per !== 'any') {
-    const at = Number(ev.occurred_at ?? ev.occurredAt);
-    if (!Number.isFinite(at) || nowSec - at > PERIOD_SECONDS[filters.per]) return false;
-  }
-  const q = filters.q.trim().toLowerCase();
-  if (!q) return true;
-  const vault = deps.getVault ? deps.getVault(ev.vault_address || ev.vaultAddress || '') : null;
-  const hay = [vault?.name || ev.vault_name || ev.vaultName, vault?.curatorName, ev.title, formatEventDetails(ev.details, ev.kind), String(ev.kind || '').replace(/_/g, ' ')];
-  return hay.some(s => String(s || '').toLowerCase().includes(q));
+function requestFilters(nowSec = Math.floor(Date.now() / 1000)) {
+  const showRealloc = getShowReallocations();
+  const kinds = filters.cat.size
+    ? [...[...filters.cat].flatMap(c => CATEGORY_KINDS[c]), ...(showRealloc ? ['reallocation'] : [])]
+    : getEventKinds(showRealloc);
+  return {
+    kinds,
+    severities: [...filters.sev],
+    q: filters.q.trim(),
+    since: filters.per !== 'any' ? nowSec - PERIOD_SECONDS[filters.per] : null
+  };
+}
+
+/** True while search, severity, category or period narrow the list (the reallocations switch does not count). */
+function narrowed(isUpcoming) {
+  return Boolean(filters.q.trim()) || filters.sev.size > 0 || filters.cat.size > 0 || (!isUpcoming && filters.per !== 'any');
 }
 
 /** Number of filters in force: chips, period (History only) and the reallocations switch. */
@@ -1303,7 +1315,7 @@ function setFilterSheet(open) {
 /**
  * Brings the search box, chips, switch, counter and footer count in line with the filter state.
  */
-function syncFinderUi(shown, total) {
+function syncFinderUi(total, loaded) {
   const isUpcoming = activeTab === 'upcoming';
   const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
   const n = activeFilterCount(isUpcoming);
@@ -1312,8 +1324,8 @@ function syncFinderUi(shown, total) {
   set('activity-filters-reset', el => { el.hidden = n === 0 && !filters.q; });
   set('activity-search-clear', el => el.classList.toggle('hidden', !filters.q));
   set('activity-show-realloc', el => el.setAttribute('aria-checked', getShowReallocations() ? 'true' : 'false'));
-  set('activity-filters-done', el => { el.textContent = `Show ${shown} event${shown === 1 ? '' : 's'}`; });
-  set('activity-count', el => { el.textContent = shown === total ? `${total} event${total === 1 ? '' : 's'}` : `${shown} of ${total} events`; });
+  set('activity-filters-done', el => { el.textContent = `Show ${total} event${total === 1 ? '' : 's'}`; });
+  set('activity-count', el => { el.textContent = loaded < total ? `Showing ${loaded} of ${total} events` : `${total} event${total === 1 ? '' : 's'}`; });
   document.querySelectorAll('#activity-fsheet .activity-chip').forEach(chip => {
     const { f, v } = chip.dataset;
     const on = f === 'per' ? filters.per === v : filters[f].has(v);
@@ -1327,12 +1339,9 @@ function resetFilters() {
   filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' };
   const input = document.getElementById('activity-search-input');
   if (input) input.value = '';
-  if (getShowReallocations()) {
-    setShowReallocations(false);
-    fetchActivityData(true);
-  }
+  if (getShowReallocations()) setShowReallocations(false);
   animateRows = true;
-  renderActivityPanel();
+  fetchActivityData(true);
 }
 
 /**
@@ -1372,10 +1381,8 @@ function renderActivityPanel() {
 
   // Footer state
   const isUpcomingTab = activeTab === 'upcoming';
-  const nowSecFilter = Math.floor(Date.now() / 1000);
-  const loadedRows = groupEvents(isUpcomingTab ? cachedPendingEvents : cachedHistoryEvents, isUpcomingTab);
-  const visibleRows = groupEvents((isUpcomingTab ? cachedPendingEvents : cachedHistoryEvents).filter(ev => eventMatchesFilters(ev, isUpcomingTab, nowSecFilter)), isUpcomingTab);
-  syncFinderUi(visibleRows.length, loadedRows.length);
+  const loadedEvents = isUpcomingTab ? cachedPendingEvents : cachedHistoryEvents;
+  syncFinderUi(Math.max(isUpcomingTab ? totalPending : totalHistory, loadedEvents.length), loadedEvents.length);
   if (updatedAt) {
     updatedAt.textContent = formatUpdatedAge(lastFetchTs);
   }
@@ -1427,9 +1434,9 @@ function renderActivityPanel() {
   }
 
   // 4. Data lists
-  const currentEvents = visibleRows;
+  const currentEvents = groupEvents(loadedEvents, isUpcomingTab);
   if (currentEvents.length === 0) {
-    if (loadedRows.length > 0) {
+    if (narrowed(isUpcomingTab)) {
       list.innerHTML = '<li class="activity-state-empty"><p class="activity-empty-title">No events match these filters</p><button type="button" class="activity-switch-scope-btn activity-filters-clear">Reset filters</button></li>';
       list.querySelector('.activity-filters-clear').addEventListener('click', resetFilters);
     } else {
@@ -1561,7 +1568,8 @@ async function fetchActivityData(forceRefetch = false) {
 
   try {
     const showRealloc = getShowReallocations();
-    const kinds = getEventKinds(showRealloc);
+    const { kinds, severities, q, since } = requestFilters();
+    const narrowedNow = narrowed(false) || narrowed(true);
 
     if (activeScope === 'favorites') {
       const allPins = (deps.getPinnedAddresses ? deps.getPinnedAddresses() : []).filter(isValidAddress);
@@ -1569,6 +1577,7 @@ async function fetchActivityData(forceRefetch = false) {
         if (token !== fetchToken) return;
         cachedPendingEvents = [];
         cachedHistoryEvents = [];
+        totalPending = totalHistory = 0;
         historyCursors = [];
         isLoading = false;
         lastFetchTs = Date.now();
@@ -1582,8 +1591,8 @@ async function fetchActivityData(forceRefetch = false) {
       const historyReqs = [];
 
       for (const chunk of chunks) {
-        const pendingUrl = buildPendingEventsUrl({ addresses: chunk, kinds, limit: 200 });
-        const historyUrl = buildEventsUrl({ addresses: chunk, kinds, limit: 100 });
+        const pendingUrl = buildPendingEventsUrl({ addresses: chunk, kinds, severities, q, limit: 200 });
+        const historyUrl = buildEventsUrl({ addresses: chunk, kinds, severities, q, since, history: true, limit: 100 });
         pendingReqs.push(deps.apiFetch(pendingUrl).then(r => r.ok ? r.json() : { events: [] }));
         historyReqs.push(deps.apiFetch(historyUrl).then(r => r.ok ? r.json() : { events: [] }));
       }
@@ -1600,6 +1609,8 @@ async function fetchActivityData(forceRefetch = false) {
 
       cachedPendingEvents = mergedPending;
       cachedHistoryEvents = filterHistoryEvents(mergedHistory);
+      totalPending = pendingResList.reduce((n, r) => n + (r.total ?? (r.events || []).length), 0);
+      totalHistory = historyResList.reduce((n, r) => n + (r.total ?? (r.events || []).length), 0);
       historyCursors = chunks.map((addresses, i) => ({ addresses, before: historyResList[i].nextBefore ?? null }));
       lastFetchTs = Date.now();
       isLoading = false;
@@ -1607,14 +1618,14 @@ async function fetchActivityData(forceRefetch = false) {
       // Update badge from favorites events
       const allFavEvents = [...mergedPending, ...cachedHistoryEvents];
       const seenTs = getSeenTs();
-      const unseenInfo = countUnseenEvents(allFavEvents, seenTs, showRealloc);
-      updateActivityBadge(unseenInfo);
+      // A narrowed fetch holds only part of the events, so it must not change the bell's unseen count
+      if (!narrowedNow) updateActivityBadge(countUnseenEvents(allFavEvents, seenTs, showRealloc));
 
       if (isPanelOpen) renderActivityPanel();
     } else {
       // Scope: All
-      const pendingUrl = buildPendingEventsUrl({ kinds, limit: 200 });
-      const historyUrl = buildEventsUrl({ kinds, limit: 100 });
+      const pendingUrl = buildPendingEventsUrl({ kinds, severities, q, limit: 200 });
+      const historyUrl = buildEventsUrl({ kinds, severities, q, since, history: true, limit: 100 });
 
       const [pendingRes, historyRes] = await Promise.all([
         deps.apiFetch(pendingUrl).then(r => r.ok ? r.json() : { events: [] }),
@@ -1625,6 +1636,8 @@ async function fetchActivityData(forceRefetch = false) {
 
       cachedPendingEvents = Array.isArray(pendingRes.events) ? pendingRes.events : [];
       cachedHistoryEvents = filterHistoryEvents(historyRes.events);
+      totalPending = pendingRes.total ?? cachedPendingEvents.length;
+      totalHistory = historyRes.total ?? cachedHistoryEvents.length;
       historyCursors = [{ addresses: [], before: historyRes.nextBefore ?? null }];
       lastFetchTs = Date.now();
       isLoading = false;
@@ -1646,14 +1659,14 @@ async function fetchActivityData(forceRefetch = false) {
 async function loadMoreHistory() {
   if (isLoadingMore || !deps.apiFetch) return;
   const token = fetchToken;
-  const kinds = getEventKinds(getShowReallocations());
+  const { kinds, severities, q, since } = requestFilters();
   isLoadingMore = true;
   renderActivityPanel();
 
   const pages = await Promise.all(historyCursors.map(async (cursor) => {
     if (cursor.before === null) return cursor;
     try {
-      const res = await deps.apiFetch(buildEventsUrl({ addresses: cursor.addresses, kinds, limit: 100, before: cursor.before }));
+      const res = await deps.apiFetch(buildEventsUrl({ addresses: cursor.addresses, kinds, severities, q, since, history: true, limit: 100, before: cursor.before }));
       if (!res.ok) return cursor;
       const body = await res.json();
       return { ...cursor, before: body.nextBefore ?? null, events: body.events || [] };
@@ -1746,14 +1759,14 @@ function setupActivityEvents() {
   if (searchInput) {
     searchInput.addEventListener('input', () => {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => { filters.q = searchInput.value; renderActivityPanel(); }, 120);
+      searchTimer = setTimeout(() => { filters.q = searchInput.value; fetchActivityData(true); }, 250);
       document.getElementById('activity-search-clear')?.classList.toggle('hidden', !searchInput.value);
     });
   }
   document.getElementById('activity-search-clear')?.addEventListener('click', () => {
     if (searchInput) { searchInput.value = ''; searchInput.focus(); }
     filters.q = '';
-    renderActivityPanel();
+    fetchActivityData(true);
   });
   document.getElementById('activity-filters-btn')?.addEventListener('click', () => setFilterSheet(!sheetOpen));
   document.getElementById('activity-fscrim')?.addEventListener('click', () => setFilterSheet(false));
@@ -1767,7 +1780,7 @@ function setupActivityEvents() {
     else if (filters[f].has(v)) filters[f].delete(v);
     else filters[f].add(v);
     animateRows = true;
-    renderActivityPanel();
+    fetchActivityData(true);
   });
   document.getElementById('activity-show-realloc')?.addEventListener('click', () => {
     setShowReallocations(!getShowReallocations());
@@ -1802,7 +1815,7 @@ function setupActivityEvents() {
       else if (filters.q && document.activeElement?.id === 'activity-search-input') {
         filters.q = '';
         document.activeElement.value = '';
-        renderActivityPanel();
+        fetchActivityData(true);
       } else if (detailEvent) closeEventDetail(true);
       else closeActivityPanel();
     }

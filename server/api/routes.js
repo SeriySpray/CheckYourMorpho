@@ -843,6 +843,19 @@ export function validateEventQueryParams(searchParams, options = {}) {
     severities = SEVERITY_EXPAND.get(rawSev);
   }
 
+  // Exact severity set (unlike `severity`, which means "this level and above"), used by the activity filters
+  let severitySet = null;
+  if (searchParams.has('severities')) {
+    const parts = [...new Set(searchParams.get('severities').toLowerCase().split(',').map(x => x.trim()).filter(Boolean))];
+    if (parts.length === 0 || parts.some(x => !SEVERITY_EXPAND.has(x))) {
+      return { ok: false, error: 'Invalid severities parameter (comma-separated info, warning, critical)' };
+    }
+    severitySet = parts;
+  }
+
+  const q = (searchParams.get('q') || '').trim().slice(0, MAX_SEARCH_LENGTH).toLowerCase();
+  const historyOnly = searchParams.get('history') === '1'; // drops pending timelock rows: they belong to Upcoming, not History
+
   let status = null;
   if (searchParams.has('status')) {
     const rawStatus = searchParams.get('status').trim().toLowerCase();
@@ -859,9 +872,24 @@ export function validateEventQueryParams(searchParams, options = {}) {
     before,
     limit,
     kinds,
-    severities,
+    severities: severitySet || severities,
+    q,
+    historyOnly,
     status
   };
+}
+
+/**
+ * Adds the search text and the History-only restriction shared by /api/events and /api/events/pending.
+ * The search looks in vault name, curator, title, kind and details; LIKE wildcards in the text are escaped.
+ */
+function addEventTextFilters(parsed, conditions, params) {
+  if (parsed.historyOnly) conditions.push("ve.status != 'pending'");
+  if (!parsed.q) return;
+  const like = `%${parsed.q.replace(/[\\%_]/g, '\\$&')}%`;
+  const col = c => `${c} LIKE ? ESCAPE '\\'`;
+  conditions.push(`(${[col('LOWER(v.name)'), col('LOWER(v.curator_name)'), col('LOWER(ve.title)'), col("REPLACE(ve.kind, '_', ' ')"), col('LOWER(ve.details_json)')].join(' OR ')})`);
+  params.push(like, like, like, like, like);
 }
 
 /** Formats a vault_events database row into a response object with parsed details. */
@@ -944,6 +972,11 @@ export function handleGetEvents(req, res, url) {
       params.push(parsed.status);
     }
 
+    addEventTextFilters(parsed, conditions, params);
+    // The total ignores the page cursor and the limit: it is the size of the whole filtered set
+    const totalWhere = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM vault_events ve LEFT JOIN vaults v ON v.address = ve.vault_address ${totalWhere}`).get(...params).n;
+
     if (parsed.before !== null) {
       const cursorRow = db.prepare('SELECT id, occurred_at FROM vault_events WHERE id = ?').get(parsed.before);
       if (cursorRow) {
@@ -970,7 +1003,7 @@ export function handleGetEvents(req, res, url) {
     const events = pageRows.map(formatEventRow);
     const nextBefore = hasMore && events.length > 0 ? events[events.length - 1].id : null;
 
-    sendJson(res, 200, { events, nextBefore }, req);
+    sendJson(res, 200, { events, nextBefore, total }, req);
   } catch (err) {
     console.error('[API] Failed to fetch events:', err);
     sendJson(res, 500, { error: 'Failed to fetch events' }, req);
@@ -1011,16 +1044,19 @@ export function handleGetPendingEvents(req, res, url) {
       params.push(JSON.stringify(parsed.severities));
     }
 
+    addEventTextFilters(parsed, conditions, params);
+    const where = conditions.join(' AND ');
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM vault_events ve LEFT JOIN vaults v ON v.address = ve.vault_address WHERE ${where}`).get(...params).n;
     const rows = db.prepare(`
       SELECT ve.*, v.name AS vault_name, v.symbol AS vault_symbol
       FROM vault_events ve
       LEFT JOIN vaults v ON v.address = ve.vault_address
-      WHERE ${conditions.join(' AND ')}
+      WHERE ${where}
       ORDER BY ve.valid_at ASC, ve.id ASC
       LIMIT ?
     `).all(...params, parsed.limit);
 
-    sendJson(res, 200, { events: rows.map(formatEventRow) }, req);
+    sendJson(res, 200, { events: rows.map(formatEventRow), total }, req);
   } catch (err) {
     console.error('[API] Failed to fetch pending events:', err);
     sendJson(res, 500, { error: 'Failed to fetch pending events' }, req);

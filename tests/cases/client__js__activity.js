@@ -524,26 +524,18 @@ export default {
     }]
   ],
 
-  eventMatchesFilters: [
-    ['критичність, категорія, період і пошук звужують події', ({ eventMatchesFilters, __state: s }) => {
-      const now = 1_000_000;
-      const ev = { severity: 'critical', kind: 'bad_debt_appeared', title: 'Bad debt appeared', occurred_at: now - 3600, vault_address: '0xa' };
+  requestFilters: [
+    ['перетворює фільтри на параметри API: категорії в kinds, період у since', ({ requestFilters, __state: s }) => {
+      s.filters = { q: ' Bad ', sev: new Set(['critical']), cat: new Set(['fees']), per: '24h' };
+      const f = requestFilters(1_000_000);
+      assert.deepEqual(f.kinds, ['fee_changed', 'pending_fee_change']);
+      assert.deepEqual(f.severities, ['critical']);
+      assert.equal(f.q, 'Bad');
+      assert.equal(f.since, 1_000_000 - 86400);
       s.filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' };
-      assert.equal(eventMatchesFilters(ev, false, now), true);
-      s.filters = { q: '', sev: new Set(['warning']), cat: new Set(), per: 'any' };
-      assert.equal(eventMatchesFilters(ev, false, now), false);
-      s.filters = { q: '', sev: new Set(), cat: new Set(['fees']), per: 'any' };
-      assert.equal(eventMatchesFilters(ev, false, now), false);
-      s.filters = { q: '', sev: new Set(), cat: new Set(), per: '24h' };
-      assert.equal(eventMatchesFilters({ ...ev, occurred_at: now - 2 * 86400 }, false, now), false);
-      assert.equal(eventMatchesFilters({ ...ev, occurred_at: now - 2 * 86400 }, true, now), true, 'період не діє на Upcoming');
-      s.filters = { q: 'BAD DEBT', sev: new Set(), cat: new Set(), per: 'any' };
-      assert.equal(eventMatchesFilters(ev, false, now), true);
-      s.filters = { q: 'nothing', sev: new Set(), cat: new Set(), per: 'any' };
-      assert.equal(eventMatchesFilters(ev, false, now), false);
-      s.filters = { q: '', sev: new Set(), cat: new Set(['fees']), per: 'any' };
-      assert.equal(eventMatchesFilters({ ...ev, kind: 'reallocation', severity: 'info' }, false, now), true, 'категорія не ховає reallocation');
-      s.filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' }; // стан модуля спільний для тестів файлу
+      const plain = requestFilters(1_000_000);
+      assert.equal(plain.since, null);
+      assert.ok(plain.kinds.length > 10 && !plain.kinds.includes('reallocation'), 'без категорій усі види, reallocation вимкнено за замовчуванням');
     }]
   ],
 

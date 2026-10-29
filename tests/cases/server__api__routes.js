@@ -1083,6 +1083,29 @@ export default {
       assert.equal(filtered.status, 200);
       assert.deepEqual(filtered.body.events.map(e => e.dedupe_key), ['k2']);
     })],
+    ['total рахує всю відфільтровану множину, severities точні, q шукає з екрануванням, history=1 ховає pending', async mod => sandbox(async db => {
+      ins(db, 'vaults', V(1, { name: 'Alpha Vault' }));
+      ins(db, 'vaults', V(2, { name: 'Beta 100%' }));
+      const baseEv = { chain_id: 1, source: 'admin_event', status: 'final', details_json: '{}', valid_at: null, detected_at: 2000 };
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(1), kind: 'fee_changed', severity: 'info', title: 'Fee decreased', dedupe_key: 'a1', occurred_at: 1000 });
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(1), kind: 'cap_changed', severity: 'warning', title: 'Cap raised', dedupe_key: 'a2', occurred_at: 1100 });
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(2), kind: 'bad_debt_appeared', severity: 'critical', title: 'Bad debt', dedupe_key: 'a3', occurred_at: 1200 });
+      ins(db, 'vault_events', { ...baseEv, vault_address: addr(2), kind: 'pending_fee_change', severity: 'warning', status: 'pending', valid_at: 5000, title: 'Pending fee', dedupe_key: 'a4', occurred_at: 1300 });
+
+      const page = getJson(mod, '/api/events?limit=1');
+      assert.equal(page.body.events.length, 1);
+      assert.equal(page.body.total, 4, 'total не залежить від limit');
+      assert.equal(getJson(mod, '/api/events?history=1').body.total, 3);
+      assert.equal(getJson(mod, '/api/events?severities=warning').body.total, 2, 'warning без critical, на відміну від severity=warning');
+      assert.equal(getJson(mod, '/api/events?severities=info,critical&history=1').body.total, 2);
+      assert.equal(getJson(mod, '/api/events?q=alpha').body.total, 2);
+      assert.equal(getJson(mod, '/api/events?q=100%25').body.total, 2, 'відсоток у пошуку не є wildcard-ом');
+      assert.equal(getJson(mod, '/api/events?q=%25').body.total, 2, 'самотній % шукає лише буквальний %');
+      assert.equal(getJson(mod, '/api/events?q=fee+change').body.total, 2, 'kind шукається з пробілами замість підкреслень');
+      assert.equal(getJson(mod, '/api/events?severities=bogus').status, 400);
+      const pend = getJson(mod, '/api/events/pending?q=beta');
+      assert.equal(pend.body.total, 1);
+    })],
     ['повертає 400 при >50 адресах, невалідній адресі, невідомому kind або limit > 200', async mod => sandbox(async () => {
       const over50 = Array.from({ length: 51 }, (_, i) => addr(i + 1)).join(',');
       assert.equal(getJson(mod, `/api/events?addresses=${over50}`).status, 400);

@@ -1689,7 +1689,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .explorer-fav-filter-btn { right: 54px; }
   .explorer-activity-btn { right: 12px; }
   .explorer-header { margin-top: 0; padding: 14px 16px 8px; }
-  .explorer-countline { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .explorer-countline { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; justify-self: stretch; }
   .explorer-sync { display: block; font: 400 11px/1 var(--font-mono); letter-spacing: 0.04em; color: var(--fg-3); }
   .explorer-sync:not(:empty)::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ok); vertical-align: 1px; }
   /* the count is the page title here, as on the desktop */
@@ -1977,10 +1977,32 @@ body.audit-open .activity-tg-lead { gap: 10px; }
 .about-pill:hover .about-pill-icon { background: var(--fg); color: var(--ink-0); }
 .about-pill:active { transform: scale(0.97); }
 .about-pill:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.about-inline { display: none; }
 
 @media (max-width: 768px) {
   /* icon only: the label would cover the table */
-  .about-pill { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 12px; width: 36px; padding: 0; justify-content: center; gap: 0; font-size: 0; }
+  .about-pill { display: none; }
+  /* Phone: the link sits in the first line of the page, right of the vault count, and scrolls away with it */
+  .about-inline {
+    margin-left: auto;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 28px;
+    padding: 0 11px 0 4px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    color: var(--fg-2);
+    font: 500 12px var(--font-sans);
+    text-decoration: none;
+    transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .about-inline .about-pill-icon { width: 20px; height: 20px; }
+  .about-inline:active { transform: scale(0.97); border-color: var(--line-3); color: var(--fg); }
+  .about-inline:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .vault-explorer-widget:has(#activity-panel:not(.hidden)) .about-inline { display: none; }
 }
 
 /* The markets table on a phone: tighter cells, wrapping badge and header, no per-market APY (the vault's net APY is in the header) */
