@@ -128,7 +128,7 @@ export function withResolvedPrice(v, rawMarkets) {
   const totalUsd = Number(v.total_assets_usd) || 0;
   const totalHuman = formatUnits(v.total_assets, v.asset_decimals);
   if (totalUsd > 0) return totalHuman > 0 ? { ...v, asset_price_usd: totalUsd / totalHuman } : v;
-  const price = rawMarkets.map(m => Number(m?.loanAsset?.priceUsd)).find(p => p > 0);
+  const price = rawMarkets.map(m => Number(m?.loanAsset?.price?.usd)).find(p => p > 0);
   if (!price) return v;
   // A reported USD liquidity of 0 for an asset the API could not price is "not priced", not "nothing withdrawable"
   return {

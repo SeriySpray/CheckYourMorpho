@@ -21,13 +21,13 @@ export async function fetchMorphoAssets(chainId, addresses) {
     // Addresses are validated above, so inlining them is safe; assetByAddress is not used because one unknown token nulls its whole batch
     const batch = valid.slice(i, i + MORPHO_BATCH);
     const data = await fetchMorphoGraphQL(
-      `{ assets(first: ${MORPHO_BATCH}, where: { chainId_in: [${Number(chainId)}], address_in: ${JSON.stringify(batch)} }) { items { address tags priceUsd } } }`
+      `{ assets(first: ${MORPHO_BATCH}, where: { chainId_in: [${Number(chainId)}], address_in: ${JSON.stringify(batch)} }) { items { address tags price { usd } } } }`
     );
     const items = data?.assets?.items;
     if (!Array.isArray(items)) throw new Error('Malformed assets response');
     for (const it of items) {
-      const price = Number(it.priceUsd);
-      found.set(lower(it.address), { tags: Array.isArray(it.tags) ? it.tags : [], priceUsd: it.priceUsd != null && Number.isFinite(price) ? price : null });
+      const price = Number(it.price?.usd);
+      found.set(lower(it.address), { tags: Array.isArray(it.tags) ? it.tags : [], priceUsd: it.price?.usd != null && Number.isFinite(price) ? price : null });
     }
   }
   return found;

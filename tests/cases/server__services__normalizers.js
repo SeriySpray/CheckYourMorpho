@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 const rawVault = (over = {}) => ({
   address: '0xABC', name: 'V', symbol: 'v', listed: true, chain: { id: 8453 },
-  asset: { address: '0xUSDC', symbol: 'USDC', decimals: 6, priceUsd: 1 },
+  asset: { address: '0xUSDC', symbol: 'USDC', decimals: 6, price: { usd: 1 } },
   state: { totalAssets: '2000000000', curator: '0x0000000000000000000000000000000000000000', netApy: 0.04 },
   liquidity: { usd: 500 }, ...over
 });
@@ -70,11 +70,11 @@ export default {
       const r = f(rawVault()); assert.equal(r.address, '0xabc'); assert.equal(r.chain_id, 8453); assert.equal(r.version, 'v1');
     }],
     ['TVL = totalAssets * ціна, коли totalAssetsUsd відсутній: 2000 USDC по 2$ = 4000', ({ normalizeVault: f }) =>
-      assert.equal(f(rawVault({ asset: { decimals: 6, priceUsd: 2 } })).total_assets_usd, 4000)],
+      assert.equal(f(rawVault({ asset: { decimals: 6, price: { usd: 2 } } })).total_assets_usd, 4000)],
     ['TVL береться з totalAssetsUsd, коли він є', ({ normalizeVault: f }) =>
       assert.equal(f(rawVault({ state: { totalAssets: '2000000000', totalAssetsUsd: 1234 } })).total_assets_usd, 1234)],
     ['без asset.decimals використовується 18: 3e18 по 1$ = 3', ({ normalizeVault: f }) => {
-      const r = f(rawVault({ asset: { priceUsd: 1 }, state: { totalAssets: '3000000000000000000' } }));
+      const r = f(rawVault({ asset: { price: { usd: 1 } }, state: { totalAssets: '3000000000000000000' } }));
       assert.equal(r.asset_decimals, 18); assert.equal(r.total_assets_usd, 3);
     }],
     ['net_apy береться з netApy, apy з apy', ({ normalizeVault: f }) => {
@@ -147,7 +147,7 @@ export default {
       assert.equal(r.liquidity_usd, 250);
     }],
     ['TVL рахується з totalAssets * ціна (5 USDC по 2$ = 10) і обмежує ліквідність', ({ normalizeVaultV2: f }) => {
-      const r = f({ totalAssets: '5000000', asset: { decimals: 6, priceUsd: 2 }, liquidityUsd: 50 });
+      const r = f({ totalAssets: '5000000', asset: { decimals: 6, price: { usd: 2 } }, liquidityUsd: 50 });
       assert.equal(r.total_assets_usd, 10); assert.equal(r.liquidity_usd, 10);
     }],
     ['net_apy повертається до apy, коли netApy відсутній', ({ normalizeVaultV2: f }) =>
@@ -181,11 +181,11 @@ export default {
       assert.equal(r.loan_asset_price_usd, 0); assert.equal(r.free_liquidity_usd, 0);
     }],
     ['USD постачання/боргу не повернуті, але ціна відома -> рахуються з кількості (2 * 3 = 6, 1 * 3 = 3)', ({ normalizeMarket: f }) => {
-      const r = f({ marketId: '0xM', loanAsset: { decimals: 6, priceUsd: 3 }, state: { supplyAssets: '2000000', borrowAssets: '1000000' } });
+      const r = f({ marketId: '0xM', loanAsset: { decimals: 6, price: { usd: 3 } }, state: { supplyAssets: '2000000', borrowAssets: '1000000' } });
       assert.equal(r.total_supply_assets_usd, 6); assert.equal(r.total_borrow_assets_usd, 3);
     }],
     ['повернуті USD постачання лишаються як є, навіть 0', ({ normalizeMarket: f }) =>
-      assert.equal(f({ marketId: '0xM', loanAsset: { decimals: 6, priceUsd: 3 }, state: { supplyAssets: '2000000', supplyAssetsUsd: 0 } }).total_supply_assets_usd, 0)],
+      assert.equal(f({ marketId: '0xM', loanAsset: { decimals: 6, price: { usd: 3 } }, state: { supplyAssets: '2000000', supplyAssetsUsd: 0 } }).total_supply_assets_usd, 0)],
     ['застава з адресою, але без символу -> UNKNOWN, не NONE (інакше стала б резервом)', ({ normalizeMarket: f }) =>
       assert.equal(f({ marketId: '0xM', collateralAsset: { address: '0xABC' } }).collateral_asset_symbol, 'UNKNOWN')],
     ['ринок без застави -> NONE', ({ normalizeMarket: f }) =>
@@ -209,8 +209,8 @@ export default {
       const st = { supplyAssets: '3000000', borrowAssets: '1000000' };
       const a = f({ loanAsset: { decimals: 6 }, state: st });
       assert.equal(a.free_liquidity_usd, 0); assert.equal(a.loan_asset_price_usd, 0); assert.equal(a.utilization, 1 / 3);
-      assert.equal(f({ loanAsset: { decimals: 6, priceUsd: 2 }, state: st }).free_liquidity_usd, 4);
-      assert.equal(f({ loanAsset: { decimals: 6, priceUsd: 0 }, state: st }).free_liquidity_usd, 0);
+      assert.equal(f({ loanAsset: { decimals: 6, price: { usd: 2 } }, state: st }).free_liquidity_usd, 4);
+      assert.equal(f({ loanAsset: { decimals: 6, price: { usd: 0 } }, state: st }).free_liquidity_usd, 0);
     }],
     ['без decimals використовується 18 (для loan і collateral)', ({ normalizeMarket: f }) => {
       const r = f({ state: { supplyAssets: '5000000000000000000', borrowAssets: '0' } });
@@ -233,7 +233,7 @@ export default {
     ['ціна ринку відсутня, ціна vault 0 -> 0 USD (невідомо), не вигадана ціна', ({ normalizeAllocation: f }) =>
       assert.equal(f({ supplyAssets: '1000000', market: { loanAsset: {} } }, '0xV', 6, 1000, 0).supply_assets_usd, 0)],
     ['нульова ціна ринку замінюється ціною vault (1 * 2 = 2)', ({ normalizeAllocation: f }) =>
-      assert.equal(f({ supplyAssets: '1000000', market: { loanAsset: { priceUsd: 0 } } }, '0xV', 6, 1000, 2).supply_assets_usd, 2)],
+      assert.equal(f({ supplyAssets: '1000000', market: { loanAsset: { price: { usd: 0 } } } }, '0xV', 6, 1000, 2).supply_assets_usd, 2)],
     ['вага = частка в TVL', ({ normalizeAllocation: f }) => {
       const r = f({ supplyAssets: '250000000', supplyCap: '0', market: { marketId: '0xM' } }, '0xV', 6, 1000, 1, 1);
       assert.equal(r.weight, 0.25); assert.equal(r.vault_address, '0xv'); assert.equal(r.market_unique_key, '1:0xm'); assert.equal(r.via_vault, null);
@@ -249,9 +249,9 @@ export default {
     ['USD береться з supplyAssetsUsd, якщо > 0', ({ normalizeAllocation: f }) =>
       assert.equal(f({ supplyAssets: '1000000', supplyAssetsUsd: 42 }, '0xV', 6, 1000).supply_assets_usd, 42)],
     ['USD рахується з ціни ринку, коли supplyAssetsUsd відсутній', ({ normalizeAllocation: f }) =>
-      assert.equal(f({ supplyAssets: '2000000', market: { loanAsset: { priceUsd: 3 } } }, '0xV', 6, 1000).supply_assets_usd, 6)],
+      assert.equal(f({ supplyAssets: '2000000', market: { loanAsset: { price: { usd: 3 } } } }, '0xV', 6, 1000).supply_assets_usd, 6)],
     ['supplyAssetsUsd = 0 вважається відсутнім: 2 * ціна ринку 3 = 6', ({ normalizeAllocation: f }) =>
-      assert.equal(f({ supplyAssets: '2000000', supplyAssetsUsd: 0, market: { loanAsset: { priceUsd: 3 } } }, '0xV', 6, 1000).supply_assets_usd, 6)],
+      assert.equal(f({ supplyAssets: '2000000', supplyAssetsUsd: 0, market: { loanAsset: { price: { usd: 3 } } } }, '0xV', 6, 1000).supply_assets_usd, 6)],
     ['без ціни ринку USD = кількість * ціна активу vault (1 * 2 = 2)', ({ normalizeAllocation: f }) =>
       assert.equal(f({ supplyAssets: '1000000' }, '0xV', 6, 1000, 2).supply_assets_usd, 2)],
     ['ключ ринку містить chainId vault', ({ normalizeAllocation: f }) =>
@@ -267,9 +267,9 @@ export default {
       assert.equal(f({ allocation: '3000000000' }, '0xV', 6, 0).weight, 0);
     }],
     ['ціна ринку має пріоритет над ціною vault (1 * 3 = 3)', ({ normalizeAllocationV2: f }) =>
-      assert.equal(f({ allocation: '1000000', data: { market: { loanAsset: { priceUsd: 3 } } } }, '0xV', 6, 1000, 2).supply_assets_usd, 3)],
+      assert.equal(f({ allocation: '1000000', data: { market: { loanAsset: { price: { usd: 3 } } } } }, '0xV', 6, 1000, 2).supply_assets_usd, 3)],
     ['нульова ціна ринку замінюється ціною vault (1 * 2 = 2)', ({ normalizeAllocationV2: f }) =>
-      assert.equal(f({ allocation: '1000000', data: { market: { loanAsset: { priceUsd: 0 } } } }, '0xV', 6, 1000, 2).supply_assets_usd, 2)],
+      assert.equal(f({ allocation: '1000000', data: { market: { loanAsset: { price: { usd: 0 } } } } }, '0xV', 6, 1000, 2).supply_assets_usd, 2)],
     ['ціна береться з ціни активу vault, коли ціни ринку немає', ({ normalizeAllocationV2: f }) =>
       assert.equal(f({ allocation: '1000000' }, '0xV', 6, 1000, 2).supply_assets_usd, 2)],
     ['невідома ціна лишається невідомою: 0 USD, а не вигадана 1', ({ normalizeAllocationV2: f }) =>

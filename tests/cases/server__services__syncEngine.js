@@ -6,7 +6,7 @@ import { CONFIG } from '../../server/config.js';
 import { withFetch, jsonResponse } from '../fixtures.js';
 
 // --- Фікстури сирих відповідей Morpho GraphQL ---
-const asset = (symbol, decimals = 6) => ({ address: `0x${symbol}`, symbol, decimals, priceUsd: 1 });
+const asset = (symbol, decimals = 6) => ({ address: `0x${symbol}`, symbol, decimals, price: { usd: 1 } });
 const rawMarket = (id, over = {}) => ({
   marketId: id, lltv: '860000000000000000', listed: true, loanAsset: asset('USDC'), collateralAsset: asset('WETH', 18),
   oracle: { address: '0xoracle' }, irmAddress: '0xirm',
@@ -300,7 +300,7 @@ export default {
     })],
     ['V2 без ціни активу бере ціну з ринків і рахує нерозкрите в USD (500 * 1)', async mod => sandbox(async db => {
       const v2 = rawV2('0xbbb', '0xm9', {
-        asset: { ...asset('USDC'), priceUsd: null }, totalAssetsUsd: null, totalAssets: '1000000000',
+        asset: { ...asset('USDC'), price: null }, totalAssetsUsd: null, totalAssets: '1000000000',
         caps: { items: [{ allocation: '500000000', absoluteCap: '0', data: { market: rawMarket('0xm9') } }] },
         adapters: { items: [{ type: 'MorphoMarketV1', assets: '1000000000' }] }
       });
@@ -309,7 +309,7 @@ export default {
       assert.equal(row.p, 1); assert.equal(row.t, 1000); assert.equal(row.u, 500);
     })],
     ['V1 без жодної ціни лишається з total_assets_usd 0 (unpriced), алокації 0 USD', async mod => sandbox(async db => {
-      const noPrice = { ...asset('USDC'), priceUsd: null };
+      const noPrice = { ...asset('USDC'), price: null };
       const v = rawV1('0xaaa', { asset: noPrice, state: { totalAssets: '1000000000', curator: '0x0', allocation: [{ supplyAssets: '600000000', market: rawMarket('0xm1', { loanAsset: noPrice }) }] } });
       await sync(mod, newApi([v]));
       assert.equal(db.prepare('SELECT total_assets_usd AS t FROM vaults WHERE address = ?').get('0xaaa').t, 0);
@@ -399,15 +399,15 @@ export default {
     }],
     ['є total_assets_usd -> vault без змін', ({ withResolvedPrice: f }) => {
       const v = { total_assets: '1000000', asset_decimals: 6, total_assets_usd: 5, asset_price_usd: 5 };
-      assert.equal(f(v, [{ loanAsset: { priceUsd: 9 } }]), v);
+      assert.equal(f(v, [{ loanAsset: { price: { usd: 9 } } }]), v);
     }],
     ['ціни немає, але ринок кредитує той самий токен -> ціна й TVL з ринку (2 * 3 = 6)', ({ withResolvedPrice: f }) => {
-      const r = f({ total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 }, [null, { loanAsset: { priceUsd: 0 } }, { loanAsset: { priceUsd: 3 } }]);
+      const r = f({ total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 }, [null, { loanAsset: { price: { usd: 0 } } }, { loanAsset: { price: { usd: 3 } } }]);
       assert.equal(r.asset_price_usd, 3); assert.equal(r.total_assets_usd, 6);
     }],
     ['нульова USD-ліквідність непризначеного активу стає невідомою (null), ненульова лишається', ({ withResolvedPrice: f }) => {
       const base = { total_assets: '2000000', asset_decimals: 6, total_assets_usd: 0, asset_price_usd: 0 };
-      const markets = [{ loanAsset: { priceUsd: 3 } }];
+      const markets = [{ loanAsset: { price: { usd: 3 } } }];
       assert.equal(f({ ...base, liquidity_usd: 0 }, markets).liquidity_usd, null);
       assert.equal(f({ ...base, liquidity_usd: 4 }, markets).liquidity_usd, 4);
       assert.equal(f({ ...base, liquidity_usd: null }, markets).liquidity_usd, null);

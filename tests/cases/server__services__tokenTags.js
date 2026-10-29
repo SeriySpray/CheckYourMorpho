@@ -26,7 +26,7 @@ function mockNet({ morpho = {}, morphoFails = false } = {}) {
     calls.morpho.push({ chain, asked });
     if (morphoFails) return jsonResponse({}, 500);
     // адреси віддаються у змішаному регістрі
-    const items = asked.filter(a => morpho[chain]?.[a]).map(a => ({ address: mixed(a), ...morpho[chain][a] }));
+    const items = asked.filter(a => morpho[chain]?.[a]).map(a => { const { priceUsd, ...rest } = morpho[chain][a]; return { address: mixed(a), ...rest, price: priceUsd == null ? null : { usd: priceUsd } }; });
     return jsonResponse({ data: { assets: { items } } });
   };
   impl.calls = calls;

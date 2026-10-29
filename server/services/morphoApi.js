@@ -265,7 +265,7 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
             address
             symbol
             decimals
-            priceUsd
+            price { usd }
           }
           state {
             totalAssets
@@ -334,13 +334,13 @@ export async function fetchAllVaults(chainIds = null, options = {}) {
                   address
                   symbol
                   decimals
-                  priceUsd
+                  price { usd }
                 }
                 collateralAsset {
                   address
                   symbol
                   decimals
-                  priceUsd
+                  price { usd }
                 }
                 state {
                   supplyAssets
@@ -389,7 +389,7 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
           symbol
           listed
           chain { id network }
-          asset { address symbol decimals priceUsd }
+          asset { address symbol decimals price { usd } }
           totalAssets
           totalAssetsUsd
           liquidity
@@ -520,8 +520,8 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
                     warnings { type level }
                     badDebt { usd }
                     realizedBadDebt { usd }
-                    loanAsset { address symbol decimals priceUsd }
-                    collateralAsset { address symbol decimals priceUsd }
+                    loanAsset { address symbol decimals price { usd } }
+                    collateralAsset { address symbol decimals price { usd } }
                     state {
                       supplyAssets
                       supplyAssetsUsd

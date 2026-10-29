@@ -64,7 +64,7 @@ export function normalizeVault(raw, curatorMap = null) {
 
   const decimals = asset.decimals ?? 18;
   const totalAssetsHuman = formatUnits(state.totalAssets, decimals);
-  const assetPrice = Number(asset.priceUsd) || 0;
+  const assetPrice = Number(asset.price?.usd) || 0;
 
   const rawCuratorAddr = (state.curator || '').toLowerCase();
   let curatorName = 'Independent';
@@ -81,7 +81,7 @@ export function normalizeVault(raw, curatorMap = null) {
     asset_address: (asset.address || '').toLowerCase(),
     asset_symbol: asset.symbol || 'ASSET',
     asset_decimals: decimals,
-    asset_price_usd: asset.priceUsd ?? 0,
+    asset_price_usd: asset.price?.usd ?? 0,
     total_assets: String(state.totalAssets || '0'),
     total_assets_usd: state.totalAssetsUsd || totalAssetsHuman * assetPrice,
     // null = the API did not report it (unknown), 0 = nothing withdrawable
@@ -116,7 +116,7 @@ export function normalizeVaultV2(raw, curatorMap = null) {
 
   const decimals = asset.decimals ?? 18;
   const totalAssetsHuman = formatUnits(raw.totalAssets, decimals);
-  const assetPrice = Number(asset.priceUsd) || 0;
+  const assetPrice = Number(asset.price?.usd) || 0;
   const totalAssetsUsd = raw.totalAssetsUsd || totalAssetsHuman * assetPrice;
 
   const v2CuratorItemName = raw.curators?.items?.[0]?.name;
@@ -139,7 +139,7 @@ export function normalizeVaultV2(raw, curatorMap = null) {
     asset_address: (asset.address || '').toLowerCase(),
     asset_symbol: asset.symbol || 'ASSET',
     asset_decimals: decimals,
-    asset_price_usd: asset.priceUsd ?? 0,
+    asset_price_usd: asset.price?.usd ?? 0,
     total_assets: String(raw.totalAssets || '0'),
     total_assets_usd: totalAssetsUsd,
     // Withdrawable now: idle + liquidity-adapter liquidity at face value, plus force-deallocatable liquidity
@@ -187,7 +187,7 @@ export function normalizeMarket(raw, chainId = 1) {
   const freeLiquidityAssets = Math.max(0, supplyHuman - borrowHuman);
 
   // An unreported loan price stays 0 (unknown), never a guessed $1
-  const loanPrice = Number(loanAsset.priceUsd) > 0 ? Number(loanAsset.priceUsd) : 0;
+  const loanPrice = Number(loanAsset.price?.usd) > 0 ? Number(loanAsset.price?.usd) : 0;
   const freeLiquidityUsd = freeLiquidityAssets * loanPrice;
   // USD totals the API omitted are priced from the token amount when the loan price is known, else unknown (0)
   const usdOf = (reportedUsd, human) => reportedUsd ?? human * loanPrice;
@@ -209,7 +209,7 @@ export function normalizeMarket(raw, chainId = 1) {
     // NONE only for a market without a collateral asset; a collateral with an unreported symbol is not a reserve
     collateral_asset_symbol: collateralAsset.symbol || (collateralAsset.address ? 'UNKNOWN' : 'NONE'),
     collateral_asset_decimals: collateralAsset.decimals ?? 18,
-    collateral_asset_price_usd: collateralAsset.priceUsd ?? 0,
+    collateral_asset_price_usd: collateralAsset.price?.usd ?? 0,
     oracle_address: (oracle.address || '').toLowerCase(),
     irm_address: (raw.irmAddress || '').toLowerCase(),
     // an LLTV the API did not report stays empty (unknown); the engines do not read it as 0
@@ -254,7 +254,7 @@ export function normalizeAllocation(rawAlloc, vaultAddress, vaultDecimals, vault
 
   const calculatedUsd = (rawAlloc.supplyAssetsUsd !== null && rawAlloc.supplyAssetsUsd !== undefined && rawAlloc.supplyAssetsUsd > 0)
     ? rawAlloc.supplyAssetsUsd
-    : supplyHuman * positivePrice(rawAlloc.market?.loanAsset?.priceUsd, vaultAssetPriceUsd);
+    : supplyHuman * positivePrice(rawAlloc.market?.loanAsset?.price?.usd, vaultAssetPriceUsd);
 
   return {
     vault_address: vaultAddress.toLowerCase(),
@@ -283,7 +283,7 @@ export function normalizeAllocationV2(cap, vaultAddress, vaultDecimals, vaultTot
   }
 
   const market = cap.data?.market;
-  const loanPrice = positivePrice(market?.loanAsset?.priceUsd, vaultAssetPriceUsd);
+  const loanPrice = positivePrice(market?.loanAsset?.price?.usd, vaultAssetPriceUsd);
 
   return {
     vault_address: vaultAddress.toLowerCase(),

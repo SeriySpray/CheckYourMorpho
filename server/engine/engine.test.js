@@ -49,7 +49,7 @@ test('V2 instant exit is capped by the vault-reported instant liquidity', () => 
 
 test('V2 withdrawable liquidity counts force-deallocatable liquidity net of the adapter penalty', () => {
   const raw = {
-    address: '0x1', asset: { decimals: 6, priceUsd: 1 }, chain: { id: 1 }, totalAssets: '8000000000000',
+    address: '0x1', asset: { decimals: 6, price: { usd: 1 } }, chain: { id: 1 }, totalAssets: '8000000000000',
     totalAssetsUsd: 8e6, liquidityUsd: 2e6, forceDeallocatableLiquidityUsd: 6e6,
     adapters: { items: [{ forceDeallocatePenalty: '5000000000000000' }, { forceDeallocatePenalty: '0' }] } // 0.5% and 0%
   };
