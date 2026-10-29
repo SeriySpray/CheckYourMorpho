@@ -2169,3 +2169,13 @@ body.audit-open .activity-tg-lead { gap: 10px; }
   .activity-fsheet, .activity-fsheet-body, .activity-fscrim, .activity-chip { transition: none; }
   .activity-row.is-entering, .activity-filters-btn.has .activity-filters-count { animation: none; }
 }
+
+/* Collateral facts on a phone: the section label sits above its text, so the text uses the full width instead of a 250px column */
+@media (max-width: 560px) {
+  .cf-item > summary { grid-template-columns: 14px 72px minmax(0, 1fr); padding: 10px; }
+  .cf-body { padding: 0 10px 12px; }
+  .cf-sec { grid-template-columns: minmax(0, 1fr); gap: 3px; padding-top: 6px; }
+  .cf-sec + .cf-sec { margin-top: 6px; }
+  .cf-body p { font-size: 12.5px; line-height: 1.45; }
+  .cf-body p + p { margin-top: 3px; }
+}
