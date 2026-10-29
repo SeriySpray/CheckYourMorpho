@@ -12,7 +12,7 @@ import {
 } from '../engine/eventsEngine.js';
 import { formatUnits } from './normalizers.js';
 
-const DEFAULT_RETENTION_DAYS = 180;
+const DEFAULT_RETENTION_DAYS = Infinity; // history is kept for good; a number of days still works when a caller passes one
 const SAMPLE_RETENTION_SECONDS = 8 * 86400;
 
 const withEffectiveTotal = (vault, allocations) => {
@@ -22,10 +22,11 @@ const withEffectiveTotal = (vault, allocations) => {
 };
 
 /**
- * Deletes non-pending events older than retentionDays (default 180 days).
+ * Deletes non-pending events older than retentionDays (default: none, history is kept).
  * Pending events are never deleted by retention cleanup.
  */
 export function pruneOldEvents(db, nowSec = Math.floor(Date.now() / 1000), retentionDays = DEFAULT_RETENTION_DAYS) {
+  if (!Number.isFinite(Number(retentionDays))) return 0;
   const cutoff = nowSec - (Number(retentionDays) * 86400);
   const res = db.prepare(`
     DELETE FROM vault_events
