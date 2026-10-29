@@ -3,6 +3,7 @@ import { CONFIG } from './config.js';
 import { getDatabase, closeDatabase } from './db/database.js';
 import { handleRequest, DEFAULT_VAULTS_LIMIT } from './api/routes.js';
 import { syncAllVaults, isSyncing } from './services/syncEngine.js';
+import { backfillHistory } from './services/historyBackfill.js';
 import { startTokenDataLoop, stopTokenDataLoop } from './services/tokenCollector.js';
 import { startNotifications } from './services/telegramService.js';
 
@@ -61,6 +62,7 @@ export async function runBackgroundSync() {
     const result = await syncAllVaults({ fetchHistoryForTop: false });
     const totalVaults = (result.v1Count || 0) + (result.v2Count || 0);
     console.log(`[Scheduler] Background synchronization completed in ${result.durationSec}s: ${totalVaults} vaults (${result.v1Count} V1, ${result.v2Count} V2), ${result.marketsCount} markets, ${result.allocationsCount} allocations.`);
+    backfillHistory(db).catch(err => console.error('[History] Backfill failed:', err.message)); // runs beside the next syncs, one try per vault
   } catch (err) {
     console.error('[Scheduler] Background sync failed:', err.message);
   }

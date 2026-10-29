@@ -14,7 +14,6 @@ import { formatUnits } from './normalizers.js';
 
 const DEFAULT_RETENTION_DAYS = 180;
 const SAMPLE_RETENTION_SECONDS = 8 * 86400;
-const DAILY_RETENTION_DAYS = 400;
 
 const withEffectiveTotal = (vault, allocations) => {
   if ((Number(vault.total_assets_usd) || 0) > 0) return vault;
@@ -423,7 +422,6 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     for (const sample of samplesToWrite) upsertSampleStmt.run(...sample);
     db.prepare('DELETE FROM vault_samples WHERE sampled_at < ?').run(nowSec - SAMPLE_RETENTION_SECONDS);
     for (const row of dailyToWrite) upsertDailyStmt.run(...row);
-    db.prepare('DELETE FROM vault_daily WHERE day < ?').run(Math.floor(nowSec / 86400) - DAILY_RETENTION_DAYS);
 
     for (const delAddr of watchAddressesToDelete) {
       deleteWatchStmt.run(delAddr);
