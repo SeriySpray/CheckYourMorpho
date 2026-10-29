@@ -4,7 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261023_ledger';
-import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261028_cents';
+import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_filters';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -241,10 +241,17 @@ function showStatusNotice(text) {
 
 /** ISO time of the last successful server sync from /api/status, null until the first answer. */
 let lastSyncIso = null;
+/** True while /api/status reports the data as stale: the stale notice then carries the sync age, so "Synced ..." is hidden. */
+let dataStale = false;
 
 /** Header label next to the buttons: time since the last server sync, or the vault count before /api/status answers. */
 function renderHeaderStatus() {
   if (!DOM.headerStatusText) return;
+  if (dataStale) {
+    DOM.headerStatusText.textContent = '';
+    if (DOM.explorerSync) DOM.explorerSync.textContent = '';
+    return;
+  }
   const ms = Date.now() - Date.parse(lastSyncIso);
   DOM.headerStatusText.textContent = Number.isFinite(ms)
     ? `Synced ${ms < 60000 ? 'just now' : formatDataAge(lastSyncIso)}`
@@ -276,9 +283,10 @@ async function refreshStaleIndicator() {
     // Offline state is already reported by the vaults poll
   }
   if (typeof status?.lastSuccessAt === 'string') lastSyncIso = status.lastSuccessAt;
-  // Only the sync label is refreshed: a notice, "Reconnecting..." or "API Offline" in the header stays as it is
-  if (allVaults.length > 0 && /^(Synced|Live:)/.test(DOM.headerStatusText?.textContent ?? '')) renderHeaderStatus();
   const stale = status?.stale === true;
+  dataStale = stale;
+  // Only the sync label is refreshed: a notice, "Reconnecting..." or "API Offline" in the header stays as it is
+  if (allVaults.length > 0 && /^(Synced|Live:|$)/.test(DOM.headerStatusText?.textContent ?? '')) renderHeaderStatus();
   const age = stale ? formatDataAge(status.lastSuccessAt) : '';
   const label = age ? `Stale data · last sync ${age}` : 'Stale data';
   document.querySelectorAll('.stale-indicator').forEach(el => {

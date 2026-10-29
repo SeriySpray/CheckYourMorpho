@@ -270,7 +270,7 @@ body.audit-open .explorer-header .stale-indicator {
 }
 
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-count,
-.vault-explorer-widget:has(#activity-panel:not(.hidden)) .tiny-switch,
+.vault-explorer-widget:has(#activity-panel:not(.hidden)) #explorer-tiny-toggle,
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-search-box,
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-filters-grid,
 .vault-explorer-widget:has(#activity-panel:not(.hidden)) .active-filter-chips,
@@ -488,7 +488,7 @@ body.audit-open .pinned-viewport { display: none; }
 }
 
 body.audit-open .explorer-filters-grid,
-body.audit-open .tiny-switch { display: none; }
+body.audit-open #explorer-tiny-toggle { display: none; }
 
 /* Switch: shows vaults under $1K, which the list hides by default */
 .tiny-switch {
@@ -1999,4 +1999,151 @@ body.audit-open .activity-tg-lead { gap: 10px; }
 @media (prefers-reduced-motion: reduce) {
   .about-pill, .about-pill-icon { transition: none; }
   .about-pill:hover, .about-pill:active { transform: none; }
+}
+
+/* ---------- Activity: search and filters ---------- */
+.activity-finder { flex: none; display: flex; gap: 8px; padding: 12px var(--pad-x); }
+
+.activity-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--fg-3);
+  transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.activity-search:focus-within { border-color: var(--fg); color: var(--fg); }
+.activity-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--fg); font-size: 14px; }
+.activity-search input::placeholder { color: var(--fg-3); }
+.activity-search .search-clear-btn.hidden { display: none; }
+
+.activity-filters-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--fg-2);
+  font-size: 13px;
+  transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.activity-filters-btn:hover,
+.activity-filters-btn[aria-expanded="true"],
+.activity-filters-btn.has { border-color: var(--fg); color: var(--fg); }
+
+.activity-filters-count {
+  display: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--ink-0);
+  font: 500 11px/18px var(--font-mono);
+  text-align: center;
+}
+
+.activity-filters-btn.has .activity-filters-count { display: inline-block; animation: count-pop 240ms var(--ease-out); }
+@keyframes count-pop { from { transform: scale(0.5); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* The sheet unfolds inline: the grid row grows from 0 to its content height */
+.activity-fsheet {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows 260ms var(--ease-out), opacity 200ms var(--ease-out), visibility 0s linear 260ms;
+}
+
+.activity-fsheet.open { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s; }
+.activity-fsheet-clip { min-height: 0; overflow: hidden; }
+
+.activity-fsheet-body {
+  display: grid;
+  gap: 14px;
+  margin: 0 var(--pad-x) 12px;
+  padding: 14px 16px;
+  background: var(--ink-0);
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+}
+
+.activity-fgroup { display: grid; gap: 8px; }
+.activity-fgroup[hidden] { display: none; }
+.activity-fgroup > b { font: 400 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
+.activity-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.activity-chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--fg-2);
+  font-size: 13px;
+  transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 120ms var(--ease-out);
+}
+
+.activity-chip:hover { color: var(--fg); border-color: var(--line-3); }
+.activity-chip:active { transform: scale(0.96); }
+.activity-chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--ink-0); }
+
+.activity-ffoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.activity-ffoot .tiny-switch { margin-top: 0; }
+.activity-filters-reset { border: 0; background: none; color: var(--fg-3); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.activity-filters-reset:hover { color: var(--fg); }
+.activity-filters-reset[hidden] { display: none; }
+.activity-filters-done, .activity-fscrim, .activity-grab { display: none; }
+.activity-count { font-variant-numeric: tabular-nums; }
+
+/* Rows that replace the list after a filter change ease in, staggered by position */
+.activity-row.is-entering { animation: row-in 260ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 28ms); }
+@keyframes row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 768px) {
+  .activity-finder { padding-inline: 0; }
+  .activity-fscrim { display: block; position: fixed; inset: 0; z-index: 59; background: oklch(0 0 0 / 0.55); opacity: 0; pointer-events: none; transition: opacity 220ms var(--ease-out); }
+  .activity-fscrim.open { opacity: 1; pointer-events: auto; }
+  .activity-fsheet { position: fixed; inset: 0; z-index: 60; display: block; opacity: 1; pointer-events: none; transition: visibility 0s linear 300ms; }
+  .activity-fsheet.open { pointer-events: none; }
+  .activity-fsheet-clip { height: 100%; overflow: visible; }
+  .activity-fsheet-body {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+    gap: 16px;
+    background: var(--ink-1);
+    border: 0;
+    border-top: 1px solid var(--line-3);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -12px 40px oklch(0 0 0 / 0.5);
+    transform: translateY(100%);
+    transition: transform 300ms var(--ease-out);
+    pointer-events: auto;
+    touch-action: pan-y;
+  }
+  .activity-fsheet.open .activity-fsheet-body { transform: none; }
+  .activity-grab { display: block; width: 40px; height: 4px; margin: 0 auto; border-radius: 2px; background: var(--line-3); }
+  .activity-chip { height: 36px; padding: 0 14px; font-size: 14px; }
+  .activity-ffoot .tiny-switch { height: 40px; gap: 12px; font-size: 13px; }
+  .activity-filters-done { display: block; height: 44px; border: 0; border-radius: 999px; background: var(--fg); color: var(--ink-0); font-weight: 500; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-fsheet, .activity-fsheet-body, .activity-fscrim, .activity-chip { transition: none; }
+  .activity-row.is-entering, .activity-filters-btn.has .activity-filters-count { animation: none; }
 }

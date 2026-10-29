@@ -514,6 +514,39 @@ export default {
     }]
   ],
 
+  categoryOfKind: [
+    ['кожен вид події, крім reallocation, має категорію фільтра', ({ categoryOfKind, __state: s }) => {
+      const missing = s.EVENT_KINDS.filter(k => k !== 'reallocation' && !categoryOfKind(k));
+      assert.deepEqual(missing, []);
+      assert.equal(categoryOfKind('reallocation'), null);
+      assert.equal(categoryOfKind('fee_changed'), 'fees');
+      assert.equal(categoryOfKind('bad_debt_appeared'), 'risk');
+    }]
+  ],
+
+  eventMatchesFilters: [
+    ['критичність, категорія, період і пошук звужують події', ({ eventMatchesFilters, __state: s }) => {
+      const now = 1_000_000;
+      const ev = { severity: 'critical', kind: 'bad_debt_appeared', title: 'Bad debt appeared', occurred_at: now - 3600, vault_address: '0xa' };
+      s.filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' };
+      assert.equal(eventMatchesFilters(ev, false, now), true);
+      s.filters = { q: '', sev: new Set(['warning']), cat: new Set(), per: 'any' };
+      assert.equal(eventMatchesFilters(ev, false, now), false);
+      s.filters = { q: '', sev: new Set(), cat: new Set(['fees']), per: 'any' };
+      assert.equal(eventMatchesFilters(ev, false, now), false);
+      s.filters = { q: '', sev: new Set(), cat: new Set(), per: '24h' };
+      assert.equal(eventMatchesFilters({ ...ev, occurred_at: now - 2 * 86400 }, false, now), false);
+      assert.equal(eventMatchesFilters({ ...ev, occurred_at: now - 2 * 86400 }, true, now), true, 'період не діє на Upcoming');
+      s.filters = { q: 'BAD DEBT', sev: new Set(), cat: new Set(), per: 'any' };
+      assert.equal(eventMatchesFilters(ev, false, now), true);
+      s.filters = { q: 'nothing', sev: new Set(), cat: new Set(), per: 'any' };
+      assert.equal(eventMatchesFilters(ev, false, now), false);
+      s.filters = { q: '', sev: new Set(), cat: new Set(['fees']), per: 'any' };
+      assert.equal(eventMatchesFilters({ ...ev, kind: 'reallocation', severity: 'info' }, false, now), true, 'категорія не ховає reallocation');
+      s.filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' }; // стан модуля спільний для тестів файлу
+    }]
+  ],
+
   countUnseenEvents: [
     ['гранична умова: detected_at == seenTs не вважається unseen', ({ countUnseenEvents }) => {
       const seenTs = 1000;

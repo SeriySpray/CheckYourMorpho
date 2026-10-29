@@ -93,6 +93,20 @@ let eventsBound = false;
 let periodicTimer = null;
 let detailEvent = null; // event shown in the detail view; a snapshot, so list refreshes do not close or change it
 
+// Search and filters narrow the loaded events on the client. Reallocations are a fetch-level switch (getShowReallocations).
+const CATEGORY_KINDS = Object.freeze({
+  risk: ['verdict_worsened', 'verdict_improved', 'mqi_dropped', 'bad_debt_appeared', 'flagged_collateral_added', 'tvl_drop', 'exit_liquidity_low', 'vault_delisted', 'collateral_class_share_crossed'],
+  caps: ['cap_changed', 'cap_revoked', 'pending_cap_increase', 'pending_market_removal', 'market_removal_revoked'],
+  fees: ['fee_changed', 'pending_fee_change'],
+  gov: ['timelock_changed', 'guardian_changed', 'pending_timelock_change', 'pending_guardian_change', 'pending_gate_change', 'pending_force_deallocate_penalty', 'pending_abdicate'],
+  roles: ['curator_changed', 'owner_changed', 'allocator_changed', 'skim_recipient_changed', 'supply_queue_changed', 'withdraw_queue_changed', 'pending_allocator_change', 'pending_adapter_change', 'skim']
+});
+const PERIOD_SECONDS = Object.freeze({ '24h': 86400, '7d': 7 * 86400, '30d': 30 * 86400 });
+let filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' };
+let sheetOpen = false;
+let animateRows = false; // set by a filter change so the rows that replace the list ease in; plain refreshes stay still
+let searchTimer = null;
+
 /**
  * Formats countdown string for pending timelocked events.
  * Returns 'executable now' if valid_at <= now, otherwise 'in 1d 14h', 'in 3h 20m', 'in 12m', 'in 59s'.
@@ -1247,6 +1261,81 @@ function updateActivityBadge(unseenInfo) {
 }
 
 /**
+ * Category of an event kind for the Category filter; reallocations and unknown kinds belong to none.
+ */
+function categoryOfKind(kind) {
+  for (const [cat, kinds] of Object.entries(CATEGORY_KINDS)) if (kinds.includes(kind)) return cat;
+  return null;
+}
+
+/**
+ * True when the event passes search, severity, category and (History only) period.
+ */
+function eventMatchesFilters(ev, isUpcoming, nowSec = Math.floor(Date.now() / 1000)) {
+  if (filters.sev.size && !filters.sev.has(String(ev.severity || 'info').toLowerCase())) return false;
+  if (filters.cat.size && ev.kind !== 'reallocation' && !filters.cat.has(categoryOfKind(ev.kind))) return false;
+  if (!isUpcoming && filters.per !== 'any') {
+    const at = Number(ev.occurred_at ?? ev.occurredAt);
+    if (!Number.isFinite(at) || nowSec - at > PERIOD_SECONDS[filters.per]) return false;
+  }
+  const q = filters.q.trim().toLowerCase();
+  if (!q) return true;
+  const vault = deps.getVault ? deps.getVault(ev.vault_address || ev.vaultAddress || '') : null;
+  const hay = [vault?.name || ev.vault_name || ev.vaultName, vault?.curatorName, ev.title, formatEventDetails(ev.details, ev.kind), String(ev.kind || '').replace(/_/g, ' ')];
+  return hay.some(s => String(s || '').toLowerCase().includes(q));
+}
+
+/** Number of filters in force: chips, period (History only) and the reallocations switch. */
+function activeFilterCount(isUpcoming) {
+  return filters.sev.size + filters.cat.size + (!isUpcoming && filters.per !== 'any' ? 1 : 0) + (getShowReallocations() ? 1 : 0);
+}
+
+/**
+ * Opens or closes the filter sheet (inline on desktop, bottom sheet on a phone).
+ */
+function setFilterSheet(open) {
+  sheetOpen = open;
+  document.getElementById('activity-fsheet')?.classList.toggle('open', open);
+  document.getElementById('activity-fscrim')?.classList.toggle('open', open);
+  document.getElementById('activity-filters-btn')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+/**
+ * Brings the search box, chips, switch, counter and footer count in line with the filter state.
+ */
+function syncFinderUi(shown, total) {
+  const isUpcoming = activeTab === 'upcoming';
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  const n = activeFilterCount(isUpcoming);
+  set('activity-filters-count', el => { el.textContent = String(n); });
+  set('activity-filters-btn', el => { el.classList.toggle('has', n > 0); el.setAttribute('aria-label', n ? `Filters, ${n} active` : 'Filters'); });
+  set('activity-filters-reset', el => { el.hidden = n === 0 && !filters.q; });
+  set('activity-search-clear', el => el.classList.toggle('hidden', !filters.q));
+  set('activity-show-realloc', el => el.setAttribute('aria-checked', getShowReallocations() ? 'true' : 'false'));
+  set('activity-filters-done', el => { el.textContent = `Show ${shown} event${shown === 1 ? '' : 's'}`; });
+  set('activity-count', el => { el.textContent = shown === total ? `${total} event${total === 1 ? '' : 's'}` : `${shown} of ${total} events`; });
+  document.querySelectorAll('#activity-fsheet .activity-chip').forEach(chip => {
+    const { f, v } = chip.dataset;
+    const on = f === 'per' ? filters.per === v : filters[f].has(v);
+    chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const perGroup = document.querySelector('#activity-fsheet [data-group="per"]');
+  if (perGroup) perGroup.hidden = isUpcoming; // "last 7 days" means nothing for changes that have not happened yet
+}
+
+function resetFilters() {
+  filters = { q: '', sev: new Set(), cat: new Set(), per: 'any' };
+  const input = document.getElementById('activity-search-input');
+  if (input) input.value = '';
+  if (getShowReallocations()) {
+    setShowReallocations(false);
+    fetchActivityData(true);
+  }
+  animateRows = true;
+  renderActivityPanel();
+}
+
+/**
  * Renders the contents of the activity panel according to current state.
  */
 function renderActivityPanel() {
@@ -1258,7 +1347,6 @@ function renderActivityPanel() {
   const tabUpcoming = document.getElementById('activity-tab-upcoming');
   const tabHistory = document.getElementById('activity-tab-history');
   const updatedAt = document.getElementById('activity-updated-at');
-  const reallocCb = document.getElementById('activity-show-realloc-cb');
 
   if (upcomingCount) {
     upcomingCount.textContent = `(${groupEvents(cachedPendingEvents, true).length})`; // rows shown, not raw events: one transaction is one row
@@ -1283,9 +1371,11 @@ function renderActivityPanel() {
   }
 
   // Footer state
-  if (reallocCb) {
-    reallocCb.checked = getShowReallocations();
-  }
+  const isUpcomingTab = activeTab === 'upcoming';
+  const nowSecFilter = Math.floor(Date.now() / 1000);
+  const loadedRows = groupEvents(isUpcomingTab ? cachedPendingEvents : cachedHistoryEvents, isUpcomingTab);
+  const visibleRows = groupEvents((isUpcomingTab ? cachedPendingEvents : cachedHistoryEvents).filter(ev => eventMatchesFilters(ev, isUpcomingTab, nowSecFilter)), isUpcomingTab);
+  syncFinderUi(visibleRows.length, loadedRows.length);
   if (updatedAt) {
     updatedAt.textContent = formatUpdatedAge(lastFetchTs);
   }
@@ -1337,11 +1427,16 @@ function renderActivityPanel() {
   }
 
   // 4. Data lists
-  const rawEvents = activeTab === 'upcoming' ? cachedPendingEvents : cachedHistoryEvents;
-  const currentEvents = groupEvents(rawEvents, activeTab === 'upcoming');
+  const currentEvents = visibleRows;
   if (currentEvents.length === 0) {
-    const emptyMsg = activeTab === 'upcoming' ? 'No upcoming changes' : 'No events yet';
-    list.innerHTML = `<li class="activity-state-empty"><p class="activity-empty-title">${emptyMsg}</p></li>`;
+    if (loadedRows.length > 0) {
+      list.innerHTML = '<li class="activity-state-empty"><p class="activity-empty-title">No events match these filters</p><button type="button" class="activity-switch-scope-btn activity-filters-clear">Reset filters</button></li>';
+      list.querySelector('.activity-filters-clear').addEventListener('click', resetFilters);
+    } else {
+      const emptyMsg = activeTab === 'upcoming' ? 'No upcoming changes' : 'No events yet';
+      list.innerHTML = `<li class="activity-state-empty"><p class="activity-empty-title">${emptyMsg}</p></li>`;
+    }
+    animateRows = false;
     return;
   }
 
@@ -1349,12 +1444,17 @@ function renderActivityPanel() {
   const isUpcoming = activeTab === 'upcoming';
   const frag = document.createDocumentFragment();
 
-  for (const ev of currentEvents) {
+  currentEvents.forEach((ev, i) => {
     const vm = buildEventRowViewModel(ev, deps.getVault, nowSec, isUpcoming);
     const rowEl = renderActivityRow(vm, (rowVm) => openEventDetail(rowVm.event));
+    if (animateRows) {
+      rowEl.classList.add('is-entering');
+      rowEl.style.setProperty('--i', String(Math.min(i, 8)));
+    }
     frag.appendChild(rowEl);
     list.appendChild(rowEl);
-  }
+  });
+  animateRows = false;
   if (!isUpcoming && historyCursors.some(c => c.before !== null)) {
     const more = document.createElement('li');
     more.className = 'activity-more';
@@ -1412,6 +1512,7 @@ export function openActivityPanel() {
  */
 export function closeActivityPanel() {
   closeEventDetail();
+  setFilterSheet(false);
   isPanelOpen = false;
   const btn = deps.DOM.activityBtn || document.getElementById('explorer-activity-btn');
   const panel = deps.DOM.activityPanel || document.getElementById('activity-panel');
@@ -1615,6 +1716,7 @@ function setupActivityEvents() {
     if (activeTab === newTab) return;
     closeEventDetail();
     activeTab = newTab;
+    animateRows = true;
     renderActivityPanel();
   };
 
@@ -1639,12 +1741,56 @@ function setupActivityEvents() {
     });
   }
 
-  // Reallocations checkbox
-  const reallocCb = document.getElementById('activity-show-realloc-cb');
-  if (reallocCb) {
-    reallocCb.addEventListener('change', () => {
-      setShowReallocations(reallocCb.checked);
-      fetchActivityData(true);
+  // Search and filters
+  const searchInput = document.getElementById('activity-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { filters.q = searchInput.value; renderActivityPanel(); }, 120);
+      document.getElementById('activity-search-clear')?.classList.toggle('hidden', !searchInput.value);
+    });
+  }
+  document.getElementById('activity-search-clear')?.addEventListener('click', () => {
+    if (searchInput) { searchInput.value = ''; searchInput.focus(); }
+    filters.q = '';
+    renderActivityPanel();
+  });
+  document.getElementById('activity-filters-btn')?.addEventListener('click', () => setFilterSheet(!sheetOpen));
+  document.getElementById('activity-fscrim')?.addEventListener('click', () => setFilterSheet(false));
+  document.getElementById('activity-filters-done')?.addEventListener('click', () => setFilterSheet(false));
+  document.getElementById('activity-filters-reset')?.addEventListener('click', resetFilters);
+  document.getElementById('activity-fsheet')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.activity-chip');
+    if (!chip) return;
+    const { f, v } = chip.dataset;
+    if (f === 'per') filters.per = v;
+    else if (filters[f].has(v)) filters[f].delete(v);
+    else filters[f].add(v);
+    animateRows = true;
+    renderActivityPanel();
+  });
+  document.getElementById('activity-show-realloc')?.addEventListener('click', () => {
+    setShowReallocations(!getShowReallocations());
+    animateRows = true;
+    fetchActivityData(true);
+  });
+  // On a phone the sheet closes by dragging it down, like the dropdown sheets
+  const fBody = document.querySelector('#activity-fsheet .activity-fsheet-body');
+  if (fBody) {
+    let startY = null;
+    let dy = 0;
+    fBody.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; dy = 0; }, { passive: true });
+    fBody.addEventListener('touchmove', (e) => {
+      if (startY === null) return;
+      dy = Math.max(0, e.touches[0].clientY - startY);
+      fBody.style.transition = 'none';
+      fBody.style.transform = dy ? `translateY(${dy}px)` : '';
+    }, { passive: true });
+    fBody.addEventListener('touchend', () => {
+      fBody.style.transition = '';
+      fBody.style.transform = '';
+      if (dy > 80) setFilterSheet(false);
+      startY = null;
     });
   }
 
@@ -1652,7 +1798,12 @@ function setupActivityEvents() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && isPanelOpen) {
       e.preventDefault();
-      if (detailEvent) closeEventDetail(true);
+      if (sheetOpen) setFilterSheet(false);
+      else if (filters.q && document.activeElement?.id === 'activity-search-input') {
+        filters.q = '';
+        document.activeElement.value = '';
+        renderActivityPanel();
+      } else if (detailEvent) closeEventDetail(true);
       else closeActivityPanel();
     }
   });
