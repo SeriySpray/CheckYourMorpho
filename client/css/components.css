@@ -2181,4 +2181,6 @@ body.audit-open .activity-tg-lead { gap: 10px; }
   .cf-body p + p { margin-top: 3px; }
 }
 
-.default-market { margin-left: 6px; white-space: nowrap; }
+.default-info { display: inline-grid; width: 18px; height: 18px; margin-left: 4px; vertical-align: middle; cursor: pointer; }
+.info-popover-floating { position: fixed; right: auto; z-index: 70; }
+.info-popover-floating.show { opacity: 1; transform: none; }

@@ -4,7 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261023_ledger';
-import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_dflt';
+import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_dflti2';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -2414,7 +2414,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
           : '<span class="badge badge-listed badge-status badge-clean">NO FLAGS</span>';
 
       const defaultBadge = a.isDefault
-        ? ' <span class="vault-mini-badge default-market" title="Default allocation: it takes new deposits and is the first source for withdrawals beyond idle liquidity.">DEFAULT</span>'
+        ? ' <button type="button" class="info-circle-btn default-info" aria-label="Default allocation: what it means" aria-expanded="false"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></button>'
         : '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -2444,6 +2444,47 @@ function setupModalEvents() {
       }
     });
   }
+
+  // Default allocation (i) in the markets table: one floating popover, because the table's scroll box would clip a nested one
+  const defaultPopover = document.createElement('div');
+  defaultPopover.className = 'info-popover info-popover-floating';
+  defaultPopover.setAttribute('role', 'tooltip');
+  defaultPopover.innerHTML = '<div class="info-popover-title">Default allocation</div><div class="info-popover-body">This market takes new deposits and is the first source for withdrawals beyond idle liquidity.</div>';
+  document.body.appendChild(defaultPopover);
+  let defaultInfoBtn = null;
+  const hideDefaultInfo = () => {
+    defaultPopover.classList.remove('show');
+    defaultInfoBtn?.setAttribute('aria-expanded', 'false');
+    defaultInfoBtn = null;
+  };
+  const showDefaultInfo = (btn) => {
+    if (defaultInfoBtn && defaultInfoBtn !== btn) defaultInfoBtn.setAttribute('aria-expanded', 'false');
+    defaultInfoBtn = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    const r = btn.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - 24);
+    defaultPopover.style.width = `${width}px`;
+    defaultPopover.style.left = `${Math.max(12, Math.min(r.left - 8, window.innerWidth - width - 12))}px`;
+    defaultPopover.style.top = `${r.bottom + 8}px`;
+    defaultPopover.classList.add('show');
+  };
+  if (DOM.allocationsTbody) {
+    DOM.allocationsTbody.addEventListener('click', (e) => {
+      const btn = e.target.closest('.default-info');
+      if (!btn) return;
+      e.stopPropagation();
+      if (defaultInfoBtn === btn) hideDefaultInfo(); else showDefaultInfo(btn);
+    });
+    DOM.allocationsTbody.addEventListener('mouseover', (e) => {
+      const btn = e.target.closest('.default-info');
+      if (btn && btn !== defaultInfoBtn) showDefaultInfo(btn);
+    });
+    DOM.allocationsTbody.addEventListener('mouseout', (e) => {
+      if (e.target.closest('.default-info') && !e.relatedTarget?.closest?.('.default-info')) hideDefaultInfo();
+    });
+  }
+  document.addEventListener('click', (e) => { if (!e.target.closest('.default-info')) hideDefaultInfo(); });
+  document.addEventListener('scroll', hideDefaultInfo, true);
 
   // Idle reserve info popover
   if (DOM.idleReserveInfoBtn) {
