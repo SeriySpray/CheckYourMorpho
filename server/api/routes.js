@@ -932,6 +932,31 @@ export function formatEventRow(row) {
 }
 
 /**
+ * Handler for GET /api/vaults/:address/history: one point per day for the History tab charts.
+ */
+export function handleGetVaultHistory(req, res, address) {
+  try {
+    const rows = getDatabase().prepare(`
+      SELECT day, net_apy, tvl_usd, exit_percent, active_markets, flagged_percent
+      FROM vault_daily WHERE vault_address = ? ORDER BY day ASC
+    `).all(address);
+    sendJson(res, 200, {
+      points: rows.map(r => ({
+        day: r.day,
+        netApy: r.net_apy,
+        tvlUsd: r.tvl_usd,
+        exitPercent: r.exit_percent,
+        activeMarkets: r.active_markets,
+        flaggedPercent: r.flagged_percent
+      }))
+    }, req);
+  } catch (err) {
+    console.error('[API] Failed to fetch vault history:', err);
+    sendJson(res, 500, { error: 'Failed to fetch vault history' }, req);
+  }
+}
+
+/**
  * Handler for GET /api/events
  */
 export function handleGetEvents(req, res, url) {
@@ -1125,6 +1150,12 @@ export function handleRequest(req, res) {
   const tokenMatch = pathname.match(/^\/api\/tokens\/(\d{1,9})\/(0x[0-9a-fA-F]{40})$/);
   if (tokenMatch && isRead) {
     handleGetToken(req, res, Number(tokenMatch[1]), tokenMatch[2].toLowerCase());
+    return;
+  }
+
+  const historyMatch = pathname.match(/^\/api\/vaults\/(0x[0-9a-fA-F]{40})\/history$/);
+  if (historyMatch && isRead) {
+    handleGetVaultHistory(req, res, historyMatch[1].toLowerCase());
     return;
   }
 

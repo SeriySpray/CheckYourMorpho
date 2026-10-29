@@ -51,6 +51,15 @@ export function getDatabase() {
   // Apply schema and pragmas
   dbInstance.exec(SCHEMA_SQL);
 
+  // First start with the History tab: the 8 days of hourly samples already on disk give the charts a head start
+  dbInstance.exec(`
+    INSERT OR IGNORE INTO vault_daily (vault_address, day, net_apy, tvl_usd)
+    SELECT vault_address, hour_bucket / 24, AVG(net_apy), AVG(total_assets_usd)
+    FROM vault_samples
+    WHERE NOT EXISTS (SELECT 1 FROM vault_daily LIMIT 1)
+    GROUP BY vault_address, hour_bucket / 24;
+  `);
+
   return dbInstance;
 }
 

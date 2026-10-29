@@ -23,11 +23,11 @@ const EXPECTED_INDEXES = [
 
 export default {
   SCHEMA_SQL: [
-    ['створює всі 11 таблиць', ({ SCHEMA_SQL }) => {
+    ['створює всі 12 таблиць', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
       const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name).sort();
       db.close();
-      assert.deepEqual(names, ['markets', 'sync_state', 'tg_sent', 'tg_subscriptions', 'token_data', 'token_data_history', 'token_tags', 'vault_allocations', 'vault_events', 'vault_samples', 'vault_watch_state', 'vaults']);
+      assert.deepEqual(names, ['markets', 'sync_state', 'tg_sent', 'tg_subscriptions', 'token_data', 'token_data_history', 'token_tags', 'vault_allocations', 'vault_daily', 'vault_events', 'vault_samples', 'vault_watch_state', 'vaults']);
     }],
     ['створює всі очікувані індекси', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);
@@ -72,6 +72,14 @@ export default {
       db.prepare('INSERT OR REPLACE INTO vault_samples (vault_address, hour_bucket, sampled_at, total_assets) VALUES (?, ?, ?, ?)').run('0xa', 100, 3, 7);
       const r = db.prepare('SELECT COUNT(*) AS c, MAX(total_assets) AS a FROM vault_samples').get(); db.close();
       assert.deepEqual({ ...r }, { c: 1, a: 7 });
+    }],
+    ['vault_daily: один запис на vault і добу, повторний запис тієї ж доби замінює попередній', ({ SCHEMA_SQL }) => {
+      const db = fresh(SCHEMA_SQL);
+      ins(db, 'vault_daily', { vault_address: '0xa', day: 10, net_apy: 0.04 });
+      assert.throws(() => ins(db, 'vault_daily', { vault_address: '0xa', day: 10, net_apy: 0.05 }), /UNIQUE/);
+      db.prepare('INSERT OR REPLACE INTO vault_daily (vault_address, day, net_apy) VALUES (?, ?, ?)').run('0xa', 10, 0.06);
+      const r = db.prepare('SELECT COUNT(*) AS c, MAX(net_apy) AS a FROM vault_daily').get(); db.close();
+      assert.deepEqual({ ...r }, { c: 1, a: 0.06 });
     }],
     ['tg_sent: одне повідомлення на підписку, видалення підписки прибирає її журнал відправок', ({ SCHEMA_SQL }) => {
       const db = fresh(SCHEMA_SQL);

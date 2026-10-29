@@ -14,6 +14,7 @@ import { formatUnits } from './normalizers.js';
 
 const DEFAULT_RETENTION_DAYS = 180;
 const SAMPLE_RETENTION_SECONDS = 8 * 86400;
+const DAILY_RETENTION_DAYS = 400;
 
 const withEffectiveTotal = (vault, allocations) => {
   if ((Number(vault.total_assets_usd) || 0) > 0) return vault;
@@ -180,6 +181,7 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     ORDER BY total_assets DESC LIMIT 1
   `);
   const samplesToWrite = [];
+  const dailyToWrite = [];
   const eventsToInsert = [];
   const statusUpdates = [];
   const nextWatchStates = [];
@@ -293,6 +295,16 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
       vault.net_apy ?? null, nextState.mqi_percent, nextState.verdict_level, verdictReasons(verdict, nextState.verdict_level), nextState.fee, nextState.is_listed
     ]);
 
+    const tvlUsd = priced ? nextState.total_assets_usd : null;
+    const flaggedUsd = Object.values(nextState.flagged_markets || {}).reduce((acc, m) => acc + (Number(m.supplyUsd) || 0), 0);
+    dailyToWrite.push([
+      vault.address, Math.floor(nowSec / 86400),
+      vault.net_apy ?? null, tvlUsd,
+      nextState.instant_exit_percent,
+      allocs.filter(a => Number(a.supply_assets_usd) > 0).length,
+      tvlUsd > 0 ? Math.min(100, flaggedUsd / tvlUsd * 100) : null
+    ]);
+
     nextWatchStates.push({
       vaultAddress: vault.address,
       stateJson: JSON.stringify(nextState)
@@ -364,6 +376,11 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const upsertDailyStmt = db.prepare(`
+    INSERT OR REPLACE INTO vault_daily (vault_address, day, net_apy, tvl_usd, exit_percent, active_markets, flagged_percent)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
   const deleteWatchStmt = db.prepare(`
     DELETE FROM vault_watch_state
     WHERE vault_address = ?
@@ -405,6 +422,8 @@ export function syncVaultEvents(db, rawVaultsV1 = [], rawVaultsV2 = [], options 
 
     for (const sample of samplesToWrite) upsertSampleStmt.run(...sample);
     db.prepare('DELETE FROM vault_samples WHERE sampled_at < ?').run(nowSec - SAMPLE_RETENTION_SECONDS);
+    for (const row of dailyToWrite) upsertDailyStmt.run(...row);
+    db.prepare('DELETE FROM vault_daily WHERE day < ?').run(Math.floor(nowSec / 86400) - DAILY_RETENTION_DAYS);
 
     for (const delAddr of watchAddressesToDelete) {
       deleteWatchStmt.run(delAddr);

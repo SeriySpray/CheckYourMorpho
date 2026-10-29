@@ -594,7 +594,7 @@ const SEVERITY_RANK = Object.freeze({
  * Title has suffix ' xN', severity is highest in group, details are from worst event,
  * time is nearest validAt or newest occurred_at.
  */
-function groupEvents(events, isUpcoming = false) {
+export function groupEvents(events, isUpcoming = false) {
   if (!Array.isArray(events) || events.length === 0) return [];
 
   const groups = new Map();

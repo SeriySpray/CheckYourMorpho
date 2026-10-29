@@ -155,6 +155,18 @@ CREATE TABLE IF NOT EXISTS vault_samples (
   PRIMARY KEY (vault_address, hour_bucket)
 );
 
+-- One row per vault and UTC day (the last sample of the day wins): the charts of the History tab
+CREATE TABLE IF NOT EXISTS vault_daily (
+  vault_address TEXT NOT NULL,
+  day INTEGER NOT NULL,
+  net_apy REAL,
+  tvl_usd REAL,
+  exit_percent REAL,
+  active_markets INTEGER,
+  flagged_percent REAL,
+  PRIMARY KEY (vault_address, day)
+);
+
 -- Telegram subscriptions: sub_id is the secret the browser keeps, chat_id is set when the user presses Start in the bot
 CREATE TABLE IF NOT EXISTS tg_subscriptions (
   sub_id TEXT PRIMARY KEY,

@@ -4,6 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261023_ledger';
+import { renderHistory } from './history.js?v=20261029_hist5';
 import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_dflti2';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
@@ -2559,6 +2560,7 @@ function setupAuditNavTabs() {
       if (targetPanel) {
         targetPanel.classList.add('active');
       }
+      if (targetId === 'tab-history' && activeAuditData?.vault) renderHistory(targetPanel, activeAuditData.vault);
     });
   });
 }
