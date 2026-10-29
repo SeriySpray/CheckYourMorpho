@@ -8,15 +8,18 @@
   <link rel="preload" href="assets/fonts/hanken-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%277%27 fill=%27%23fff%27/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="css/main.css?v=20261028_risk38">
-  <link rel="stylesheet" href="css/about.css?v=20261028_risk38">
+  <link rel="stylesheet" href="css/main.css?v=20261028_risk42">
+  <link rel="stylesheet" href="css/about.css?v=20261028_risk42">
 </head>
 <body class="about-body">
   <div class="about-shell">
     <aside class="about-side">
-      <a class="about-back" href="/">Back to vaults</a>
+      <div class="about-bar">
+        <a class="about-back" href="/">Back to vaults</a>
+        <button type="button" id="about-menu-btn" class="about-menu-btn" aria-expanded="false" aria-controls="about-nav" aria-label="Topics"><span id="about-menu-label"></span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+      </div>
       <p class="about-side-title">About</p>
-      <nav class="about-nav" aria-label="Topics">
+      <nav class="about-nav" id="about-nav" aria-label="Topics">
         <a href="#overview" data-topic="overview">Overview</a>
         <a href="#data" data-topic="data">Data sources</a>
         <a href="#list" data-topic="list">Vault list</a>
@@ -136,6 +139,6 @@
     </section>
   </main>
   </div>
-  <script src="js/about.js?v=20261028_risk38"></script>
+  <script src="js/about.js?v=20261028_risk42"></script>
 </body>
 </html>

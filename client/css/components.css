@@ -1703,8 +1703,8 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .activity-tg:not(.connected) .activity-tg-note { display: none; }
   .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-heading { font-size: 22px; }
-  /* Activity: the title rides in the top bar beside the star and close buttons instead of under an empty strip */
-  .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-header { position: relative; z-index: 16; margin-top: calc(2px - var(--bar-h)); padding-bottom: 4px; pointer-events: none; }
+  /* Activity: the title and sync line are pinned in the top bar beside the star and close buttons, so they stay put while the list scrolls */
+  .vault-explorer-widget:has(#activity-panel:not(.hidden)) .explorer-header { position: fixed; z-index: 16; top: calc(10px + env(safe-area-inset-top, 0px)); left: 16px; right: 100px; margin: 0; padding: 0; pointer-events: none; }
   .vault-explorer-widget:has(#activity-panel:not(.hidden)) .activity-tg { margin-top: 10px; }
 
   .explorer-search-box {
