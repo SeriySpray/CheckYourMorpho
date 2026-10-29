@@ -4,7 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261023_ledger';
-import { renderHistory } from './history.js?v=20261029_hist5';
+import { renderHistory } from './history.js?v=20261030_anim1';
 import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_dflti2';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
@@ -303,6 +303,8 @@ async function refreshStaleIndicator() {
  * Periodically polls the server every 60 seconds to refresh vault metrics,
  * particle sphere, explorer list, and actively inspected audit modal.
  */
+let lastPolledVaults = '';
+
 function startLivePolling() {
   if (livePollingTimer) clearInterval(livePollingTimer);
 
@@ -316,8 +318,12 @@ function startLivePolling() {
       // 1. Fetch updated vaults list
       const res = await apiFetch('/api/vaults?limit=1000&sortBy=total_assets_usd&sortOrder=desc');
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.vaults) && data.vaults.length > 0) {
+        const body = await res.text();
+        // An unchanged list (most minutes) must not rebuild hundreds of rows and the sphere; nor in the middle of the panel animation
+        const changed = body !== lastPolledVaults && !isTransitioningVault;
+        const data = changed ? JSON.parse(body) : {};
+        if (changed && Array.isArray(data.vaults) && data.vaults.length > 0) {
+          lastPolledVaults = body;
           allVaults = data.vaults;
           renderHeaderStatus();
           if (sphere) {
@@ -1620,15 +1626,15 @@ function getAuditPanelRect() {
 /**
  * Puts the sphere in the free area next to the ledger (home) or next to the audit panel (audit open).
  */
-function applySphereLayout(immediate = false, open = document.body.classList.contains('audit-open'), ms) {
+function applySphereLayout(immediate = false, open = document.body.classList.contains('audit-open'), ms, measured = null) {
   if (!sphere?.setLayout || window.innerWidth <= 768) return; // phones have no sphere
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const auditOpen = open;
 
-  const left = auditOpen
+  const left = measured ?? (auditOpen
     ? (() => { const r = getAuditPanelRect(); return r.left + r.width + 12; })()
-    : measureCssWidth('--ledger-w', 760);
+    : measureCssWidth('--ledger-w', 760));
   const regionWidth = Math.max(0, vw - left);
   const radius = Math.max(60, Math.min(regionWidth * 0.43, vh * 0.42));
   sphere.setLayout(left + Math.max(regionWidth, radius * 2) / 2, vh / 2, radius, immediate, ms);
@@ -1636,8 +1642,14 @@ function applySphereLayout(immediate = false, open = document.body.classList.con
 
 /** Switches the page between home and audit layout: the ledger narrows, the sphere moves, the row is marked. */
 function setAuditLayout(open, ms) {
+  // Neither the audit panel (fixed beside the compact ledger) nor --ledger-w depends on the body class: measuring after the
+  // class change would force the whole ledger to lay out in the middle of the click, so it is measured first
+  let measured = null;
+  if (sphere?.setLayout && window.innerWidth > 768) {
+    measured = open ? (() => { const r = getAuditPanelRect(); return r.left + r.width + 12; })() : measureCssWidth('--ledger-w', 760);
+  }
   setLedgerCompact(open);
-  applySphereLayout(false, open, ms);
+  applySphereLayout(false, open, ms, measured);
 }
 
 /** Narrows or widens the ledger (CSS animates the width): the ball always lands on free space. */
@@ -2577,6 +2589,8 @@ function formatSharePercent(pct, holdsMoney = false) {
   return pct < 0.05 && (pct > 0 || holdsMoney) ? '<0.1%' : `${pct}%`;
 }
 
+const MONEY_FORMAT = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function formatCurrency(val, fallback = '—') {
   if (val === null || val === undefined || val === '') return fallback;
   const num = Number(val);
@@ -2589,7 +2603,7 @@ function formatCurrency(val, fallback = '—') {
   if (abs >= 999.95e3) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 999.95) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
   if (abs > 0 && abs < 0.01) return isNegative ? '> -$0.01' : '< $0.01';
-  return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${prefix}${MONEY_FORMAT.format(abs)}`;
 }
 
 function formatNumber(val, fallback = '—') {
@@ -2603,7 +2617,7 @@ function formatNumber(val, fallback = '—') {
   if (abs >= 999.95e6) return `${prefix}${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 999.95e3) return `${prefix}${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 999.95) return `${prefix}${(abs / 1e3).toFixed(1)}K`;
-  return `${prefix}${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${prefix}${MONEY_FORMAT.format(abs)}`;
 }
 
 function formatPercent(val, decimals = 2, fallback = '—') {

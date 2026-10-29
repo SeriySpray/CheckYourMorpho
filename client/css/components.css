@@ -21,7 +21,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  transition: width var(--layout-ms) var(--ease-out);
+  /* no width transition: animating it re-lays out and repaints all rows on every frame (open and close both snap) */
 }
 
 /* Blocks sit inside the side padding; hoverable rows and the table head bleed to the card edge */
@@ -1293,6 +1293,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   opacity: 0;
   pointer-events: none;
   transition: none;
+  content-visibility: hidden; /* filled while the ball flies: skip its layout and paint until shown; the box itself stays measurable */
 }
 
 /* One scroll area for the whole panel: the header scrolls away, the tabs stick */

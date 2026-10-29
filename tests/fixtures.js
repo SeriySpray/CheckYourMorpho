@@ -39,5 +39,5 @@ export async function withFetch(impl, fn) {
   try { return await fn(); } finally { globalThis.fetch = orig; }
 }
 export const jsonResponse = (body, status = 200, headers = {}) => ({
-  ok: status < 400, status, statusText: String(status), headers: new Headers(headers), json: async () => body
+  ok: status < 400, status, statusText: String(status), headers: new Headers(headers), json: async () => body, text: async () => JSON.stringify(body)
 });
