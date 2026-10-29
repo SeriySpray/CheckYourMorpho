@@ -713,6 +713,8 @@ export function handleGetVaultByAddress(req, res, address, chainId = null) {
           borrowApy: a.borrow_apy,
           isListed: a.is_listed !== 0,
           isIdle: isIdleReserveMarket(a),
+          // V2 liquidity market: gets new deposits and is the first source for withdrawals beyond idle cash
+          isDefault: Boolean(vault.liquidity_market_key) && a.market_unique_key === vault.liquidity_market_key,
           isClean: !isFlagged && !isUnverified,
           isFlagged,
           isUnverified,

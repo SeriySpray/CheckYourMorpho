@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS vaults (
   fee REAL,
   management_fee REAL DEFAULT 0,
   description TEXT DEFAULT '',
+  liquidity_market_key TEXT DEFAULT '',
   owner TEXT,
   pending_owner TEXT,
   version TEXT DEFAULT 'v1',

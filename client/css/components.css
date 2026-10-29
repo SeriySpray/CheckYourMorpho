@@ -2180,3 +2180,5 @@ body.audit-open .activity-tg-lead { gap: 10px; }
   .cf-body p { font-size: 12.5px; line-height: 1.45; }
   .cf-body p + p { margin-top: 3px; }
 }
+
+.default-market { margin-left: 6px; white-space: nowrap; }

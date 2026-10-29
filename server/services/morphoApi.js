@@ -394,6 +394,7 @@ export async function fetchAllVaultV2s(chainIds = null, options = {}) {
           totalAssetsUsd
           liquidity
           liquidityUsd
+          liquidityData { ... on MarketV1LiquidityData { market { marketId } } }
           forceDeallocatableLiquidity
           forceDeallocatableLiquidityUsd
           apy

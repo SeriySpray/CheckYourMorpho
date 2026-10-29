@@ -120,6 +120,13 @@ export default {
       assert.equal(f({ metadata: { description: ' Lends USDC. ' } }).description, 'Lends USDC.'); assert.equal(f({}).description, '');
       assert.equal(g({ metadata: { description: 'V1 text' }, state: {} }).description, 'V1 text');
     }],
+    ['liquidity_market_key: ринок ліквідності V2 з chain_id, порожньо без ринку і для V1', ({ normalizeVaultV2: f, normalizeVault: g }) => {
+      const raw = { chain: { id: 4663 }, liquidityData: { market: { marketId: '0xABC' } } };
+      assert.equal(f(raw).liquidity_market_key, '4663:0xabc');
+      assert.equal(f({ chain: { id: 1 }, liquidityData: {} }).liquidity_market_key, '');
+      assert.equal(f({ chain: { id: 1 } }).liquidity_market_key, '');
+      assert.equal(g({ state: {} }).liquidity_market_key, '');
+    }],
     ['version = v2', ({ normalizeVaultV2: f }) => assert.equal(f({ address: '0xA' }).version, 'v2')],
     ['ім\'я куратора з curators.items', ({ normalizeVaultV2: f }) =>
       assert.equal(f({ curators: { items: [{ name: 'Steakhouse' }] } }).curator_name, 'Steakhouse')],

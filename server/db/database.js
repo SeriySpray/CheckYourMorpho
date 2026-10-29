@@ -30,6 +30,7 @@ export function getDatabase() {
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN unresolved_exposure_usd REAL DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN management_fee REAL DEFAULT 0;"); } catch {}
   try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN description TEXT DEFAULT '';"); } catch {}
+  try { dbInstance.exec("ALTER TABLE vaults ADD COLUMN liquidity_market_key TEXT DEFAULT '';"); } catch {}
   try { dbInstance.exec("ALTER TABLE vault_allocations ADD COLUMN via_vault TEXT;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN is_listed INTEGER DEFAULT 1;"); } catch {}
   try { dbInstance.exec("ALTER TABLE markets ADD COLUMN oracle_type TEXT DEFAULT 'ChainlinkOracleV2';"); } catch {}

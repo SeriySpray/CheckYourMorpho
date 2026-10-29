@@ -90,6 +90,7 @@ export function normalizeVault(raw, curatorMap = null) {
     net_apy: state.netApy ?? 0,
     fee: state.fee ?? 0,
     management_fee: 0,
+    liquidity_market_key: '',
     description: cleanDescription(raw.metadata?.description),
     owner: (state.owner || '').toLowerCase(),
     pending_owner: (state.pendingOwner || '').toLowerCase(),
@@ -153,6 +154,8 @@ export function normalizeVaultV2(raw, curatorMap = null) {
     net_apy: raw.netApy ?? raw.apy ?? 0,
     fee: raw.performanceFee ?? 0,
     management_fee: raw.managementFee ?? 0,
+    // The market that takes new deposits and serves withdrawals beyond idle cash (empty when the liquidity adapter is not a single market)
+    liquidity_market_key: raw.liquidityData?.market?.marketId ? marketKey(chain.id || 1, raw.liquidityData.market.marketId) : '',
     description: cleanDescription(raw.metadata?.description),
     owner: (raw.owner?.address || '').toLowerCase(),
     pending_owner: '',

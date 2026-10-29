@@ -4,7 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261023_ledger';
-import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_mlink';
+import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_dflt';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -2413,9 +2413,12 @@ function populateAuditModal(data, isQuietRefresh = false) {
           ? '<span class="badge badge-status badge-unverified">UNVERIFIED</span>'
           : '<span class="badge badge-listed badge-status badge-clean">NO FLAGS</span>';
 
+      const defaultBadge = a.isDefault
+        ? ' <span class="vault-mini-badge default-market" title="Default allocation: it takes new deposits and is the first source for withdrawals beyond idle liquidity.">DEFAULT</span>'
+        : '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong></td>
+        <td><strong>${escapeHtml(a.collateralSymbol || 'None')}</strong>${defaultBadge}</td>
         <td>${a.lltvPercent == null ? 'n/a' : a.lltvPercent + '%'}</td>
         <td>${formatWeightPercent(a.weight)}</td>
         <td>${formatCurrency(a.supplyAssetsUsd)}</td>
