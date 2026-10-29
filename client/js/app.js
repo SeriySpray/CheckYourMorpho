@@ -4,7 +4,7 @@
  */
 
 import { ParticleSphere } from './sphere.js?v=20261023_ledger';
-import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_cf';
+import { initActivity, onFavoritesChanged, closeActivityPanel } from './activity.js?v=20261029_mlink';
 
 // Read live (.matches) so toggling the OS setting applies without a reload
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -42,6 +42,7 @@ const DOM = {
   auditPanelBody: document.getElementById('audit-panel-body'),
   closeBtn: document.getElementById('modal-close-btn'),
   modalFavBtn: document.getElementById('modal-fav-btn'),
+  modalMorphoLink: document.getElementById('modal-morpho-link'),
 
   // Left-side Pinned Rich Informational Pills Container
   pinnedRichPills: document.getElementById('pinned-rich-pills'),
@@ -399,6 +400,27 @@ function formatChainName(chainId) {
     case 5042: return 'ARC';
     default: return `CHAIN ${chainId}`;
   }
+}
+
+// Path segment of app.morpho.org per chain; checked against the live site. Optimism and World Chain are left out: not confirmed.
+const MORPHO_APP_CHAINS = Object.freeze({
+  1: 'ethereum', 8453: 'base', 42161: 'arbitrum', 137: 'polygon', 130: 'unichain', 143: 'monad', 988: 'stable',
+  999: 'hyperevm', 747474: 'katana', 4217: 'tempo', 5042: 'arc', 4663: 'robinhood-chain'
+});
+
+/** Vault page on app.morpho.org (the site adds the name part of the path itself), or null for a chain not confirmed. */
+function morphoVaultUrl(chainId, address) {
+  const slug = MORPHO_APP_CHAINS[chainId];
+  return slug && /^0x[0-9a-fA-F]{40}$/.test(address || '') ? `https://app.morpho.org/${slug}/vault/${address}` : null;
+}
+
+/** Shows the "Open on Morpho" link in the audit header, or hides it when the chain's page is not known. */
+function updateMorphoLink(v) {
+  const link = DOM.modalMorphoLink;
+  if (!link) return;
+  const url = v ? morphoVaultUrl(v.chainId, v.address) : null;
+  link.hidden = !url;
+  if (url) link.href = url;
 }
 
 function getChainClass(chainId) {
@@ -1634,6 +1656,7 @@ function populateBasicVaultInfo(v) {
   const chainName = formatChainName(v.chainId);
   const chainClass = getChainClass(v.chainId);
 
+  updateMorphoLink(v);
   if (DOM.modalChainBadge) {
     DOM.modalChainBadge.textContent = chainName;
     DOM.modalChainBadge.className = `badge badge-chain ${chainClass}`;
@@ -2223,6 +2246,7 @@ function populateAuditModal(data, isQuietRefresh = false) {
   // --- PANEL 1: MAIN ---
   const chainName = formatChainName(v.chainId);
   const chainClass = getChainClass(v.chainId);
+  updateMorphoLink(v);
   DOM.modalChainBadge.textContent = chainName;
   DOM.modalChainBadge.className = `badge badge-chain ${chainClass}`;
   DOM.modalVersionBadge.textContent = (v.version || 'V1').toUpperCase();

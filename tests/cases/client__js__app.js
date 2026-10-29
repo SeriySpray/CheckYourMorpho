@@ -478,6 +478,21 @@ const base = {
   ],
 
   // ---------- Форматування ----------
+  morphoVaultUrl: [
+    ['будує адресу сторінки vault на app.morpho.org для підтверджених мереж', ({ morphoVaultUrl: f }) => {
+      const a = '0x' + 'ab'.repeat(20);
+      assert.equal(f(1, a), `https://app.morpho.org/ethereum/vault/${a}`);
+      assert.equal(f(4663, a), `https://app.morpho.org/robinhood-chain/vault/${a}`);
+    }],
+    ['невідома мережа (Optimism, World Chain) або погана адреса дають null', ({ morphoVaultUrl: f }) => {
+      const a = '0x' + 'ab'.repeat(20);
+      assert.equal(f(10, a), null);
+      assert.equal(f(480, a), null);
+      assert.equal(f(1, '0x123'), null);
+      assert.equal(f(1, undefined), null);
+    }]
+  ],
+
   formatChainName: [
     ['усі відомі мережі', ({ formatChainName: f }) => {
       const map = { 1: 'ETH', 8453: 'BASE', 4663: 'ROBINHOOD', 42161: 'ARB', 137: 'POLYGON', 10: 'OP', 747474: 'KATANA',

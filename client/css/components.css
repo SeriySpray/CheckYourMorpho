@@ -1337,6 +1337,7 @@ body.audit-open .activity-tg-btn { padding: 5px 12px; font-size: 11px; }
   transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
+.audit-fav-btn[hidden] { display: none; }
 .audit-fav-btn:hover,
 .audit-close-btn:hover { background: var(--ink-3); color: var(--fg); }
 .audit-fav-btn.active { color: var(--fg); }
